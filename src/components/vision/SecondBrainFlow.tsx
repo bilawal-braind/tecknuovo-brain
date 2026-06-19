@@ -7,27 +7,29 @@ import { TnMark } from '../common/Brand'
 
 // ── Layout (normalised 0..1; shared by the canvas geometry AND the HTML labels) ──
 const HEAD_X = 0.055
-const DAM_X = 0.6
+const DAM_X = 0.66
 const BASE_Y = 0.5
 const AMP = 0.02
 
-type Trib = { label: string; sub: string; side: 'top' | 'bottom'; mx: number; icon: LucideIcon }
+// 3 sources feed from the top, 4 from the bottom - all merge well before the dam, so the
+// labels never crowd the classifier (which sits alone above the dam).
+type Trib = { label: string; sub: string; side: 'top' | 'bottom'; mx: number; icon: LucideIcon; desc: string }
 const TRIBUTARIES: Trib[] = [
-  { label: 'Monday.com', sub: 'status & cadence', side: 'top', mx: 0.15, icon: Kanban },
-  { label: 'Statement of Work', sub: 'scope & value', side: 'bottom', mx: 0.225, icon: FileSignature },
-  { label: 'Call cadences', sub: 'standups & check-ins', side: 'top', mx: 0.3, icon: Repeat },
-  { label: 'Call one-liners', sub: 'quick summaries', side: 'bottom', mx: 0.375, icon: MessageSquareText },
-  { label: 'SharePoint weekly reports', sub: 'delivery docs', side: 'top', mx: 0.45, icon: FileText },
-  { label: 'Client Partner calls', sub: 'internal & external', side: 'bottom', mx: 0.525, icon: PhoneCall },
-  { label: 'Monthly governance', sub: 'board & sponsors', side: 'top', mx: 0.585, icon: Landmark },
+  { label: 'Monday.com', sub: 'status & cadence', side: 'top', mx: 0.13, icon: Kanban, desc: 'Project status, RAG and cadence from Monday - so the call is read against where delivery actually is.' },
+  { label: 'Call cadences', sub: 'standups & check-ins', side: 'top', mx: 0.26, icon: Repeat, desc: 'Which standups, weekly reports and governance calls are expected - so a missed one stands out.' },
+  { label: 'SharePoint reports', sub: 'delivery docs', side: 'top', mx: 0.39, icon: FileText, desc: "The account's weekly delivery reports and docs, pulled in as context." },
+  { label: 'Call one-liners', sub: 'quick summaries', side: 'top', mx: 0.52, icon: MessageSquareText, desc: 'Short summaries of recent calls, for quick context the AI can lean on.' },
+  { label: 'Statement of Work', sub: 'scope & value', side: 'bottom', mx: 0.2, icon: FileSignature, desc: 'The agreed scope and commercial value of the engagement.' },
+  { label: 'Client Partner calls', sub: 'internal & external', side: 'bottom', mx: 0.38, icon: PhoneCall, desc: 'Internal and external relationship calls on the account.' },
+  { label: 'Monthly governance', sub: 'board & sponsors', side: 'bottom', mx: 0.56, icon: Landmark, desc: 'Board and sponsor-level steering conversations.' },
 ]
 
-type Out = { label: string; color: string; to: string; y: number; emoji: string }
+type Out = { label: string; color: string; to: string; y: number; emoji: string; desc: string }
 const OUTPUTS: Out[] = [
-  { label: 'Opportunity', color: '#22c55e', to: 'Client Partner · Leadership', y: 0.17, emoji: '🟢' },
-  { label: 'Risk', color: '#f0464d', to: 'Client Partner · Delivery', y: 0.39, emoji: '🔴' },
-  { label: 'Update', color: '#3b82f6', to: 'Delivery dashboard', y: 0.61, emoji: '🔵' },
-  { label: 'People', color: '#f59e0b', to: 'Talent · Delivery', y: 0.83, emoji: '🟡' },
+  { label: 'Opportunity', color: '#22c55e', to: 'Client Partner · Leadership', y: 0.17, emoji: '🟢', desc: 'A chance to grow the account. Routed to the Client Partner and surfaced to Leadership.' },
+  { label: 'Risk', color: '#f0464d', to: 'Client Partner · Delivery', y: 0.39, emoji: '🔴', desc: 'A delivery issue, slip or escalation. Routed to the Client Partner and Delivery.' },
+  { label: 'Update', color: '#3b82f6', to: 'Delivery dashboard', y: 0.61, emoji: '🔵', desc: 'A routine delivery status change. Shown on the Delivery dashboard, not over-flagged.' },
+  { label: 'People', color: '#f59e0b', to: 'Talent · Delivery', y: 0.83, emoji: '🟡', desc: 'A team or resourcing signal - flight risk, over-stretch, stakeholder change. Routed to Talent and Delivery.' },
 ]
 
 const TRUNK_COLOR = '#23d6c0'
@@ -170,17 +172,17 @@ export function SecondBrainFlow() {
 
     function drawDam() {
       const d = px({ x: DAM_X, y: BASE_Y })
-      const h = H * 0.2
+      const h = H * 0.16
       ctx!.globalCompositeOperation = 'lighter'
       const grd = ctx!.createLinearGradient(d.x, d.y - h, d.x, d.y + h)
       grd.addColorStop(0, 'rgba(176,123,255,0)')
-      grd.addColorStop(0.5, DAM_COLOR)
+      grd.addColorStop(0.5, 'rgba(176,123,255,0.6)')
       grd.addColorStop(1, 'rgba(176,123,255,0)')
       ctx!.fillStyle = grd
-      const w = 7
+      const w = 4
       ctx!.fillRect(d.x - w / 2, d.y - h, w, h * 2)
-      const hs = h * 1.7
-      ctx!.globalAlpha = 0.45 + 0.18 * Math.sin(performance.now() / 360)
+      const hs = h * 1.3
+      ctx!.globalAlpha = 0.26 + 0.1 * Math.sin(performance.now() / 360)
       ctx!.drawImage(sprite(DAM_COLOR), d.x - hs / 2, d.y - hs / 2, hs, hs)
       ctx!.globalAlpha = 1
       ctx!.globalCompositeOperation = 'source-over'
@@ -214,8 +216,9 @@ export function SecondBrainFlow() {
         const off = perp((t) => trunkNorm(t), p.t)
         const spread = H * 0.018 * p.lane
         const pt = { x: n.x * W + off.x * spread, y: n.y * H + off.y * spread }
-        const a = 0.35 + 0.55 * p.t
-        glowDot(pt, p.r, TRUNK_COLOR, a, 9)
+        // bright mid-river, easing off as it nears the dam so the centre doesn't blow out
+        const a = 0.3 + 0.5 * Math.sin(Math.min(p.t, 1) * Math.PI)
+        glowDot(pt, p.r, TRUNK_COLOR, a, 8)
         if (!reduce) {
           p.t += p.speed
           if (p.t >= 1) p.t = 0
@@ -226,7 +229,8 @@ export function SecondBrainFlow() {
       outs.forEach((p) => {
         const n = outNorm(p.lane, p.t)
         const pt = px(n)
-        const a = 0.85 - 0.35 * p.t
+        // dimmer at the dam, brightening toward the destination label
+        const a = 0.35 + 0.45 * p.t
         glowDot(pt, p.r, OUTPUTS[p.lane].color, a, 9)
         if (!reduce) {
           p.t += p.speed
@@ -236,20 +240,32 @@ export function SecondBrainFlow() {
 
       drawDam()
 
-      // hero packet
+      // hero "molecule" - a call travelling the river, gathering atoms (context) as it goes,
+      // then leaving via the Risk stream. Grows + gains atoms the further it has travelled.
       ctx!.globalCompositeOperation = 'lighter'
-      let cp: P, ccol: string
+      let cp: P, ccol: string, prog: number
       if (comet < 1) {
         cp = px(trunkNorm(comet))
-        ccol = '#ffffff'
+        ccol = TRUNK_COLOR
+        prog = comet
       } else {
         cp = px(outNorm(1, comet - 1))
         ccol = OUTPUTS[1].color
+        prog = 1
       }
-      glowDot(cp, 4.5, ccol, 1, 22)
-      glowDot(cp, 2, '#ffffff', 1, 10)
+      // core
+      glowDot(cp, 4 + prog * 1.5, ccol, 0.7, 16)
+      glowDot(cp, 2.6, '#ffffff', 0.95, 9)
+      // orbiting atoms - more of them, wider, as it accumulates context
+      const atomCount = 2 + Math.round(prog * 2)
+      const orbit = (8 + prog * 11) * (H / 760)
+      const rot = performance.now() / 620
+      for (let k = 0; k < atomCount; k++) {
+        const ang = rot + (k * Math.PI * 2) / atomCount
+        glowDot({ x: cp.x + Math.cos(ang) * orbit, y: cp.y + Math.sin(ang) * orbit }, 1.5, ccol, 0.85, 6)
+      }
       if (!reduce) {
-        comet += 0.0016
+        comet += 0.0013
         if (comet >= 2) comet = 0
       }
 
@@ -301,40 +317,44 @@ export function SecondBrainFlow() {
         <div className="text-right">
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--brain-teal)]">How it works</div>
           <div className="text-[13px] text-white/70">One call, enriched and routed - in a single flow</div>
+          <div className="mt-1 text-[11px] text-white/40">Hover any node for detail</div>
         </div>
       </div>
 
       {/* title */}
-      <div className="pointer-events-none absolute left-1/2 top-[13%] z-10 -translate-x-1/2 text-center">
-        <h1 className="text-[26px] font-bold tracking-tight">How a single call becomes intelligence</h1>
+      <div className="pointer-events-none absolute left-1/2 top-[8%] z-10 -translate-x-1/2 text-center">
+        <h1 className="text-[24px] font-bold tracking-tight">How a single call becomes intelligence</h1>
       </div>
 
       {/* river head */}
       <Node x={2} y={50} anchor="left">
-        <Chip icon={Video} title="Client call transcript" sub="the river starts here" tone="head" />
+        <Chip icon={Video} title="Client call transcript" sub="the river starts here" tone="head" tip="below" desc="A Teams call, recorded and transcribed - the raw material the Second Brain reads." />
       </Node>
 
       {/* tributaries */}
       {TRIBUTARIES.map((t) => (
         <Node key={t.label} x={t.mx * 100} y={t.side === 'top' ? 20.5 : 79.5}>
-          <Chip icon={t.icon} title={t.label} sub={t.sub} tone="ctx" />
+          <Chip icon={t.icon} title={t.label} sub={t.sub} tone="ctx" tip={t.side === 'top' ? 'below' : 'above'} desc={t.desc} />
         </Node>
       ))}
 
       {/* classifier */}
       <Node x={DAM_X * 100} y={29}>
-        <Chip icon={BrainCircuit} title="AI Classifier" sub="reads it with full account context" tone="ai" />
+        <Chip icon={BrainCircuit} title="AI Classifier" sub="reads it with full account context" tone="ai" tip="below" desc="Reads the enriched call with the full account context, then classifies each moment into one of the four signals - with a confidence score and a suggested action." />
       </Node>
 
       {/* outputs */}
       {OUTPUTS.map((o) => (
-        <div key={o.label} className="absolute z-10 -translate-y-1/2" style={{ right: '2.5%', top: `${o.y * 100}%` }}>
-          <div className="flex items-center gap-2.5 rounded-2xl border border-white/12 bg-white/[0.06] px-3.5 py-2.5 backdrop-blur-md" style={{ boxShadow: `0 0 0 1px ${o.color}22, 0 10px 30px -12px ${o.color}66` }}>
+        <div key={o.label} className="group absolute z-10 -translate-y-1/2" style={{ right: '2.5%', top: `${o.y * 100}%` }}>
+          <div className="flex cursor-default items-center gap-2.5 rounded-2xl border border-white/12 bg-white/[0.06] px-3.5 py-2.5 backdrop-blur-md transition-colors group-hover:border-white/30" style={{ boxShadow: `0 0 0 1px ${o.color}22, 0 10px 30px -12px ${o.color}66` }}>
             <span className="grid h-7 w-7 place-items-center rounded-full text-[13px]" style={{ background: `${o.color}22`, boxShadow: `0 0 12px ${o.color}88` }}>{o.emoji}</span>
             <div className="leading-tight">
               <div className="text-[13px] font-semibold" style={{ color: o.color }}>{o.label}</div>
               <div className="text-[10.5px] text-white/60">{o.to}</div>
             </div>
+          </div>
+          <div className="pointer-events-none absolute right-full top-1/2 z-30 mr-2 w-[220px] -translate-y-1/2 whitespace-normal rounded-xl border border-white/12 bg-[#0b1513]/95 px-3 py-2 text-[11.5px] leading-snug text-white/80 opacity-0 shadow-xl backdrop-blur transition-opacity duration-150 group-hover:opacity-100">
+            {o.desc}
           </div>
         </div>
       ))}
@@ -365,20 +385,28 @@ const TONE: Record<string, { ring: string; glow: string; iconBg: string }> = {
   ctx: { ring: 'rgba(86,182,255,0.35)', glow: 'rgba(86,182,255,0.3)', iconBg: 'rgba(86,182,255,0.16)' },
   ai: { ring: 'rgba(176,123,255,0.5)', glow: 'rgba(176,123,255,0.5)', iconBg: 'rgba(176,123,255,0.18)' },
 }
-function Chip({ icon: Icon, title, sub, tone }: { icon: LucideIcon; title: string; sub: string; tone: 'head' | 'ctx' | 'ai' }) {
+function Chip({ icon: Icon, title, sub, tone, desc, tip = 'below' }: { icon: LucideIcon; title: string; sub: string; tone: 'head' | 'ctx' | 'ai'; desc?: string; tip?: 'below' | 'above' }) {
   const t = TONE[tone]
+  const pos = tip === 'above' ? 'bottom-full mb-2 left-1/2 -translate-x-1/2' : 'top-full mt-2 left-1/2 -translate-x-1/2'
   return (
-    <div
-      className="flex items-center gap-2.5 whitespace-nowrap rounded-2xl border border-white/10 bg-white/[0.055] px-3.5 py-2.5 backdrop-blur-md"
-      style={{ boxShadow: `0 0 0 1px ${t.ring}, 0 12px 34px -16px ${t.glow}` }}
-    >
-      <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: t.iconBg, boxShadow: `0 0 16px ${t.glow}` }}>
-        <Icon size={16} className="text-white" />
-      </span>
-      <div className="leading-tight">
-        <div className="text-[13px] font-semibold">{title}</div>
-        <div className="text-[10.5px] text-white/55">{sub}</div>
+    <div className="group relative">
+      <div
+        className="flex cursor-default items-center gap-2.5 whitespace-nowrap rounded-2xl border border-white/10 bg-white/[0.055] px-3.5 py-2.5 backdrop-blur-md transition-colors group-hover:border-white/25"
+        style={{ boxShadow: `0 0 0 1px ${t.ring}, 0 12px 34px -16px ${t.glow}` }}
+      >
+        <span className="grid h-8 w-8 place-items-center rounded-xl" style={{ background: t.iconBg, boxShadow: `0 0 16px ${t.glow}` }}>
+          <Icon size={16} className="text-white" />
+        </span>
+        <div className="leading-tight">
+          <div className="text-[13px] font-semibold">{title}</div>
+          <div className="text-[10.5px] text-white/55">{sub}</div>
+        </div>
       </div>
+      {desc && (
+        <div className={`pointer-events-none absolute z-30 w-[230px] whitespace-normal rounded-xl border border-white/12 bg-[#0b1513]/95 px-3 py-2 text-[11.5px] leading-snug text-white/80 opacity-0 shadow-xl backdrop-blur transition-opacity duration-150 group-hover:opacity-100 ${pos}`}>
+          {desc}
+        </div>
+      )}
     </div>
   )
 }

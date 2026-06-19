@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { LayoutDashboard, Building2, Radio, ArrowRight, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Building2, Radio, FileText, ArrowRight, ChevronRight } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
 import { projects, accounts, accountName, personName, podName, projectsForAccount } from '../../data/org'
+import { weeklyReports } from '../../data/delivery'
 import { signals, rankByImpact } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
 import { TriageCard } from '../common/TriageCard'
@@ -11,7 +12,7 @@ import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 
-type View = 'overview' | 'signals' | 'deliveries'
+type View = 'overview' | 'signals' | 'deliveries' | 'weekly'
 
 export function Delivery() {
   const [view, setView] = useState<View>('overview')
@@ -33,6 +34,7 @@ export function Delivery() {
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
         { id: 'deliveries', label: 'Accounts & projects', icon: Building2, count: accounts.length },
+        { id: 'weekly', label: 'Weekly reports', icon: FileText },
       ]}
     >
       <div className="px-7 py-6">
@@ -127,10 +129,53 @@ export function Delivery() {
                 </div>
               </>
             )}
+
+            {view === 'weekly' && (
+              <>
+                <div className="flex items-center gap-2"><FileText size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[15px] font-semibold">Weekly reports</h3></div>
+                <p className="mt-0.5 text-[13px] text-muted">Each project's latest weekly report, shown here in one place - read from SharePoint, so you can scan every delivery without opening them one by one.</p>
+                <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {weeklyReports.map((w) => {
+                    const p = projects.find((x) => x.id === w.projectId)!
+                    return (
+                      <div key={w.projectId} className="rounded-2xl border border-line bg-surface p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2"><RagDot health={p.rag} /><span className="text-[14px] font-semibold">{p.name}</span></div>
+                          <span className="text-[11px] text-muted">{accountName(p.accountId)}</span>
+                        </div>
+                        <ReportBlock title="Delivered this week" items={w.delivered} color="var(--opp)" />
+                        <ReportBlock title="Focus next week" items={w.focusNext} color="var(--update)" />
+                        <ReportBlock title="Key risks" items={w.risks} color="var(--risk)" />
+                        <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
+                          <span className="text-[11px] text-muted-2">Source: SharePoint</span>
+                          <button className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-muted hover:text-text">Open in SharePoint <ArrowRight size={11} /></button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-line bg-surface p-3 text-[12px] text-muted">
+                  <ArrowRight size={14} className="text-[var(--people)]" />
+                  Resource-only accounts (MaPS, NHS) have no Delivery Manager, so there's no weekly report to show - their updates arrive by email and coverage is limited.
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
     </DashboardShell>
+  )
+}
+
+function ReportBlock({ title, items, color }: { title: string; items: string[]; color: string }) {
+  if (items.length === 0) return null
+  return (
+    <div className="mt-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color }}>{title}</div>
+      <ul className="mt-1 space-y-0.5">
+        {items.map((it, i) => <li key={i} className="flex gap-1.5 text-[12px] leading-snug text-text"><span style={{ color }}>·</span>{it}</li>)}
+      </ul>
+    </div>
   )
 }
 

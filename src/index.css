@@ -86,6 +86,20 @@ body {
   color: var(--muted-2);
 }
 
+/* AI summary "live" sheen - a teal light sweeping across the top edge */
+@keyframes ai-sheen {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.ai-sheen {
+  background: linear-gradient(90deg, transparent 18%, color-mix(in srgb, var(--accent) 75%, transparent) 50%, transparent 82%);
+  background-size: 200% 100%;
+  animation: ai-sheen 2.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-sheen { animation: none; }
+}
+
 /* Content cards: crisp near-solid panels that pick up a faint aurora tint at the edges.
    No backdrop-blur here on purpose - keeps dense text razor-sharp. */
 .main-scroll [class*='border-line'][class*='bg-surface'] {
