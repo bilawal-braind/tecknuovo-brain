@@ -1,0 +1,34 @@
+{
+  "name": "tecknuovo-brain",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:delivery": "VITE_DASH=delivery vite --port 3030 --host",
+    "dev:partner": "VITE_DASH=partner vite --port 3031 --host",
+    "dev:leadership": "VITE_DASH=leadership vite --port 3032 --host",
+    "dev:observability": "VITE_DASH=observability vite --port 3033 --host",
+    "dev:flow": "VITE_DASH=flow vite --port 3034 --host",
+    "dev:all": "VITE_DASH=delivery vite --port 3030 --host & VITE_DASH=partner vite --port 3031 --host & VITE_DASH=leadership vite --port 3032 --host & VITE_DASH=observability vite --port 3033 --host & wait",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "framer-motion": "^11.11.0",
+    "lucide-react": "^0.451.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.13.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

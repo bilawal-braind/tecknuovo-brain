@@ -1,0 +1,145 @@
+import { useMemo, useState } from 'react'
+import { LayoutDashboard, Building2, Radio, ArrowRight, ChevronRight } from 'lucide-react'
+import { DashboardShell } from '../shell/DashboardShell'
+import { projects, accounts, accountName, personName, podName, projectsForAccount } from '../../data/org'
+import { signals, rankByImpact } from '../../data/signals'
+import { RagDot, CoverageBadge } from '../common/primitives'
+import { TriageCard } from '../common/TriageCard'
+import { ExecSummary } from '../common/ExecSummary'
+import { SignalsDonut } from '../common/SignalsDonut'
+import { SignalsFeed } from '../common/SignalsFeed'
+import { AccountView } from '../common/AccountView'
+import { ProjectView } from '../common/ProjectView'
+
+type View = 'overview' | 'signals' | 'deliveries'
+
+export function Delivery() {
+  const [view, setView] = useState<View>('overview')
+  const [sel, setSel] = useState<string | null>(null)
+  const [selProject, setSelProject] = useState<string | null>(null)
+  const [dm, setDm] = useState<string>('all')
+
+  const offTrack = useMemo(() => projects.filter((p) => p.rag !== 'green').length, [])
+  const toAction = useMemo(() => signals.filter((s) => s.status === 'new').length, [])
+  const keySignals = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')).slice(0, 5), [])
+  const dms = useMemo(() => Array.from(new Set(projects.map((p) => p.deliveryManager).filter(Boolean))) as string[], [])
+
+  const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null) }
+
+  return (
+    <DashboardShell
+      role="Delivery" persona="Kiera Battersby · Client Delivery Director" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      sections={[
+        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+        { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
+        { id: 'deliveries', label: 'Accounts & projects', icon: Building2, count: accounts.length },
+      ]}
+    >
+      <div className="px-7 py-6">
+        {selProject ? (
+          <ProjectView projectId={selProject} onBack={() => setSelProject(null)} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back to deliveries'} />
+        ) : sel ? (
+          <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back to deliveries" />
+        ) : (
+          <>
+            {view === 'overview' && (
+              <>
+                <h3 className="text-[15px] font-semibold">Delivery, live</h3>
+                <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across every delivery today.</p>
+
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+                  <ExecSummary items={keySignals} onOpen={(id) => setSel(id)} />
+                  <SignalsDonut signals={signals} />
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <Kpi label="Active deliveries" value={`${projects.length}`} sub="across the team" />
+                  <Kpi label="Off track" value={`${offTrack}`} sub="amber or red" color="var(--risk)" />
+                  <Kpi label="Signals to action" value={`${toAction}`} sub="new this week" color="var(--people)" />
+                  <Kpi label="Call capture" value="96%" sub="of calls captured" color="var(--accent)" />
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 className="text-[15px] font-semibold">Key signals</h3><p className="mt-0.5 text-[13px] text-muted">The highest-priority risks and opportunities across your deliveries. Click any to open the call and transcript.</p></div>
+                  <button onClick={() => setView('signals')} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white transition-transform hover:scale-[1.02]" style={{ background: 'var(--accent)' }}>See all signals <ArrowRight size={14} /></button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {keySignals.map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={(id) => setSel(id)} />)}
+                </div>
+              </>
+            )}
+
+            {view === 'signals' && (
+              <>
+                <h3 className="text-[15px] font-semibold">Signals</h3>
+                <p className="mt-0.5 text-[13px] text-muted">Every signal the Second Brain has pulled from your delivery calls. Filter and sort, then open any to see the call and transcript.</p>
+                <SignalsFeed signals={signals} onOpenAccount={(id) => setSel(id)} />
+              </>
+            )}
+
+            {view === 'deliveries' && (
+              <>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h3 className="text-[15px] font-semibold">Accounts and their projects</h3>
+                    <p className="mt-0.5 text-[13px] text-muted">Every account under delivery and the projects inside it. Open an account for the full picture, or jump straight into a project.</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-[12px] text-muted">
+                    Delivery Manager
+                    <select value={dm} onChange={(e) => setDm(e.target.value)} className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-text">
+                      <option value="all">All managers</option>
+                      {dms.map((id) => <option key={id} value={id}>{personName(id)}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {accounts.map((a) => {
+                    const ps = projectsForAccount(a.id).filter((p) => dm === 'all' || p.deliveryManager === dm)
+                    if (ps.length === 0) return null
+                    return (
+                      <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <button onClick={() => setSel(a.id)} className="group flex items-center gap-2 text-left">
+                            <RagDot health={a.health} withLabel />
+                            <span className="text-[14px] font-semibold group-hover:underline">{a.name}</span>
+                            {a.coverage === 'limited' && <CoverageBadge coverage="limited" />}
+                          </button>
+                          <div className="flex items-center gap-x-3 text-[11px] text-muted">
+                            <span>{podName(a.pod)} pod</span>
+                            <span>CP: {personName(a.clientPartner)}</span>
+                            <button onClick={() => setSel(a.id)} className="inline-flex items-center gap-1 font-semibold text-[var(--accent-d)] hover:underline">Open account <ChevronRight size={12} /></button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {ps.map((p) => (
+                            <button key={p.id} onClick={() => setSelProject(p.id)} className="flex items-center justify-between gap-2 rounded-lg bg-bg-2 p-3 text-left transition-colors hover:bg-[var(--line)]">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-[13px] font-semibold"><RagDot health={p.rag} /><span className="truncate">{p.name}</span></div>
+                                <div className="mt-0.5 text-[11px] text-muted">{p.phase} · {p.sprint} · {p.deliveryManager ? personName(p.deliveryManager) : 'resource-only'}</div>
+                              </div>
+                              <ChevronRight size={15} className="shrink-0 text-muted-2" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </DashboardShell>
+  )
+}
+
+function Kpi({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <div className="eyebrow">{label}</div>
+      <div className="mt-2 text-3xl font-bold" style={color ? { color } : undefined}>{value}</div>
+      <div className="mt-0.5 text-[12px] text-muted">{sub}</div>
+    </div>
+  )
+}

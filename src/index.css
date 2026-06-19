@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Tecknuovo × BraindAI "Second Brain" - liquid-glass enterprise UI.
+  Tecknuovo-brand teal, a soft ambient canvas, frosted translucent panels.
+  Glass is used for panels only; inner tiles and text stay solid + high-contrast.
+*/
+:root {
+  --bg: #eef2f6;
+  --bg-2: #e8edf2; /* solid inner tiles / pills - kept opaque for contrast */
+  --surface: rgba(255, 255, 255, 0.9); /* content cards - near-opaque so text stays razor-crisp */
+  --surface-2: rgba(255, 255, 255, 0.8);
+  --line: rgba(18, 24, 38, 0.09);
+  --line-2: rgba(18, 24, 38, 0.16);
+
+  --text: #101521;
+  --muted: #515a68;
+  --muted-2: #8a92a0;
+
+  --accent: #0e9f93; /* Tecknuovo teal */
+  --accent-d: #0a7c72;
+  --accent-l: rgba(14, 159, 147, 0.12);
+  --accent-ink: #ffffff;
+
+  /* four signals */
+  --opp: #15a34a; /* opportunity - green */
+  --risk: #dc2626; /* risk - red */
+  --update: #2563eb; /* update - blue */
+  --people: #d97706; /* people - amber */
+
+  /* RAG health */
+  --rag-green: #15a34a;
+  --rag-amber: #e0a400;
+  --rag-red: #dc2626;
+
+  --glass-blur: 22px;
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Branded ambient canvas - one clean, smooth Tecknuovo-teal wash. No grid, no lines. */
+.app-bg {
+  position: relative;
+  background:
+    radial-gradient(1100px 820px at 0% -10%, rgba(14, 159, 147, 0.26), transparent 60%),
+    radial-gradient(1000px 760px at 108% 0%, rgba(37, 99, 235, 0.13), transparent 58%),
+    radial-gradient(1200px 1000px at 50% 128%, rgba(14, 159, 147, 0.16), transparent 62%),
+    linear-gradient(180deg, #eef3f7 0%, #e6edf3 100%);
+}
+
+/* Second Brain vision map - deep, futuristic canvas the glowing river flows over */
+.brain-canvas {
+  --brain-teal: #2fe0c8;
+  background:
+    radial-gradient(900px 700px at 8% 6%, rgba(35, 214, 192, 0.1), transparent 60%),
+    radial-gradient(900px 700px at 92% 94%, rgba(176, 123, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, #07110f 0%, #050b0d 100%);
+  font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted-2);
+}
+
+/* Content cards: crisp near-solid panels that pick up a faint aurora tint at the edges.
+   No backdrop-blur here on purpose - keeps dense text razor-sharp. */
+.main-scroll [class*='border-line'][class*='bg-surface'] {
+  box-shadow: var(--glass-highlight), 0 14px 34px -16px rgba(16, 24, 40, 0.22), 0 2px 6px -2px rgba(16, 24, 40, 0.06);
+}
+
+/* Chrome (sidebar + topbar): true frosted glass - translucent + blur so the aurora refracts through */
+aside[class*='bg-surface'],
+header[class*='bg-surface'] {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  box-shadow: var(--glass-highlight), 0 8px 30px -20px rgba(16, 24, 40, 0.4);
+}
+
+/* Stronger glass for the slide-over drawer and the source modal */
+.glass-strong {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(30px) saturate(160%);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  box-shadow: var(--glass-highlight), 0 24px 70px -20px rgba(16, 24, 40, 0.4);
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
