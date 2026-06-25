@@ -38,6 +38,30 @@ export const observabilityChecks: ObservabilityCheck[] = [
     whatItTests: 'What share of calls are actually captured and transcribed?',
     suggestion: 'On target. The 4% gap is mostly resource-only accounts with no DM.',
   },
+  {
+    id: 'account-risk', check: 'Account-risk detection', input: 'Calls + commercials', output: 'Account-level risks', score: 88, target: 85, trend: 'improving',
+    lastRun: '2026-06-16', samples: 22, overrides: 2,
+    whatItTests: 'Are relationship / commercial / contract risks caught at account level, not just delivery?',
+    suggestion: 'Improving since splitting account vs delivery risk. Watch renewal-language recall.',
+  },
+  {
+    id: 'resourcing', check: 'Resourcing data accuracy', input: 'Monday.com', output: 'Consultants + spend', score: 94, target: 90, trend: 'steady',
+    lastRun: '2026-06-16', samples: 17, overrides: 1,
+    whatItTests: 'Do consultant counts and spend per project match the source system?',
+    suggestion: 'On target. One stale headcount corrected at the 7am reconcile.',
+  },
+  {
+    id: 'extension', check: 'Extension detection', input: 'Call quotes', output: 'Extension context', score: 86, target: 85, trend: 'improving',
+    lastRun: '2026-06-16', samples: 12, overrides: 2,
+    whatItTests: 'Are project extension / renewal cues captured with the right context?',
+    suggestion: 'Just above target. Add more "in discussion" phrasings to the golden set.',
+  },
+  {
+    id: 'sales', check: 'Sales reporting', input: 'Transcripts + HubSpot', output: 'Pipeline + deal signals', score: 83, target: 85, trend: 'improving',
+    lastRun: '2026-06-16', samples: 19, overrides: 4,
+    whatItTests: 'Does sales reporting from calls reconcile with HubSpot deal stages?',
+    suggestion: 'Just below target while the HubSpot mapping is tuned. Review with the sales team.',
+  },
 ]
 
 // ── Layer 2: the human-in-the-loop review queue ──

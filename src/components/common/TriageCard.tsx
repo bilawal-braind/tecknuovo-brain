@@ -3,6 +3,7 @@ import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight } from 'lucide-reac
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName } from '../../data/org'
+import { riskScope } from '../../data/signals'
 import { callForSignal } from '../../data/calls'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { CallTranscript } from './CallsView'
@@ -17,15 +18,17 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   const status = statusOf(signal)
   const done = status === 'actioned' || status === 'dismissed'
   const call = callForSignal(signal)
+  const scope = riskScope(signal)
 
   return (
     <div className={`overflow-hidden rounded-xl border border-line bg-surface transition-opacity ${done ? 'opacity-60' : ''}`} style={{ borderLeft: `3px solid ${m.color}` }}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-bg-2">
-        <SignalBadge type={signal.type} size="sm" />
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-bg-2">
+        <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-text">{signal.summary}</div>
+          <div className="text-[13px] font-medium leading-snug text-text">{signal.summary}</div>
           <div className="truncate text-[11px] text-muted-2">{showAccount && <span className="font-medium text-muted">{accountName(signal.accountId)} · </span>}{signal.projectId ? projectById(signal.projectId)?.name : 'Account-level'} · {fmt(signal.sourceCall.date)}</div>
         </div>
+        {scope && <span className="hidden shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:inline" style={{ color: scope === 'account' ? 'var(--accent-d)' : 'var(--muted)', borderColor: 'var(--line)' }}>{scope === 'account' ? 'Account' : 'Delivery'}</span>}
         <SeverityTag severity={signal.severity} />
         {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
         <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>

@@ -3,6 +3,7 @@ import { projectById, accountById, personName, podName } from '../../data/org'
 import { callsForProject } from '../../data/calls'
 import { RagDot, SignalBadge } from './primitives'
 import { CallsView } from './CallsView'
+import { money } from './AccountView'
 import { fmt } from './SignalLayer'
 
 const PHASES = ['Discovery', 'Design', 'Build', 'Test', 'Go-live', 'Run'] as const
@@ -36,9 +37,19 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{project.name}</h2>
             <div className="mt-1 text-[13px] text-muted">{podName(account.pod)} pod · {project.sprint} · last activity {project.lastActivity}</div>
+            {project.advisors.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="eyebrow mr-1">Advisors</span>
+                {project.advisors.map((a) => (
+                  <span key={a} className="inline-flex items-center rounded-full border border-line bg-bg-2 px-2 py-0.5 text-[11px] font-medium text-muted">{personName(a)}</span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-1.5 text-[12px]">
             <span className="text-muted">Delivery Manager <b className="font-semibold text-text">{project.deliveryManager ? personName(project.deliveryManager) : 'None (resource-only)'}</b></span>
+            <span className="text-muted">Consultants <b className="font-semibold text-text">{project.advisors.length}</b></span>
+            <span className="text-muted">Spend <b className="font-semibold text-text">{money(project.spend)}</b></span>
             <span className="text-muted">Client Partner <b className="font-semibold text-text">{personName(account.clientPartner)}</b></span>
             <span className="text-muted">Client Director <b className="font-semibold text-text">{personName(account.clientDirector)}</b></span>
           </div>
@@ -64,6 +75,17 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
           </div>
         </div>
       </div>
+
+      {/* project extension context */}
+      {project.extension && (
+        <div className="mt-4 rounded-2xl border border-line bg-surface p-4" style={{ borderLeft: '3px solid var(--opp)' }}>
+          <div className="flex items-center gap-2">
+            <span className="eyebrow">Project extension</span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)' }}>{project.extension.status}</span>
+          </div>
+          <p className="mt-1.5 text-[13px] leading-snug text-text">{project.extension.detail}</p>
+        </div>
+      )}
 
       {/* latest call + latest signal */}
       {latestCall && latestSignal && (

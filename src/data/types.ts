@@ -36,6 +36,9 @@ export type Project = {
   deliveryManager?: string
   sprint: string // e.g. "Sprint 6 of 10"
   lastActivity: string // ISO date
+  advisors: string[] // person ids of consultants staffed on the project
+  spend: number // spend-to-date, GBP
+  extension?: { status: 'In discussion' | 'Likely' | 'Agreed'; detail: string } // context on an extension/renewal
 }
 
 export type SourceCall = {

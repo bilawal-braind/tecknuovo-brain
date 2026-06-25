@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { LayoutDashboard, Radio, Building2, PoundSterling, ArrowRight, Search } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts } from '../../data/org'
-import { signals, rankByImpact } from '../../data/signals'
+import { signals, rankByImpact, riskScope } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
 import { TriageCard } from '../common/TriageCard'
 import { ExecSummary } from '../common/ExecSummary'
@@ -22,6 +22,7 @@ export function ClientPartner() {
   const actionable = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')), [])
   const opps = actionable.filter((s) => s.type === 'opportunity')
   const risks = actionable.filter((s) => s.type === 'risk')
+  const acctRiskN = risks.filter((r) => riskScope(r) === 'account').length
   const keySignals = actionable.slice(0, 5)
   const underMgmt = useMemo(() => accounts.reduce((s, a) => s + a.sowValue, 0), [])
 
@@ -33,7 +34,7 @@ export function ClientPartner() {
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
-        { id: 'accounts', label: 'My accounts', icon: Building2, count: accounts.length },
+        { id: 'accounts', label: 'Portfolio', icon: Building2, count: accounts.length },
         { id: 'commercials', label: 'Commercials', icon: PoundSterling },
       ]}
     >
@@ -57,7 +58,7 @@ export function ClientPartner() {
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <Kpi label="Accounts" value={`${accounts.length}`} sub="in portfolio" />
                   <Kpi label="Open opportunities" value={`${opps.length}`} sub="ranked by value" color="var(--opp)" />
-                  <Kpi label="Open risks" value={`${risks.length}`} sub="ranked by impact" color="var(--risk)" />
+                  <Kpi label="Open risks" value={`${risks.length}`} sub={`${acctRiskN} account · ${risks.length - acctRiskN} delivery`} color="var(--risk)" />
                   <Kpi label="Under management" value={money(underMgmt)} sub="total SOW value" color="var(--accent)" />
                 </div>
 
@@ -81,8 +82,8 @@ export function ClientPartner() {
 
             {view === 'accounts' && (
               <>
-                <h3 className="text-[15px] font-semibold">My accounts</h3>
-                <p className="mt-0.5 text-[13px] text-muted">Health, relationship and a commercial snapshot. Click any account to open its full page.</p>
+                <h3 className="text-[15px] font-semibold">Portfolio</h3>
+                <p className="mt-0.5 text-[13px] text-muted">Every account in your portfolio - health, relationship and a commercial snapshot. Click any account to open its full page.</p>
                 <div className="relative mt-3 max-w-[340px]">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-2" />
                   <input value={acctQ} onChange={(e) => setAcctQ(e.target.value)} placeholder="Search accounts…" className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-[13px] outline-none placeholder:text-muted-2 focus:border-[var(--accent)]" />

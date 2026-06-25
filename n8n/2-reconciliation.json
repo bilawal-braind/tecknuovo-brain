@@ -1,0 +1,68 @@
+{
+  "name": "TN Brain · 2 · Reconciliation (07:00 Mon-Fri)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "0 7 * * 1-5" } ] } },
+      "id": "sched2",
+      "name": "Every weekday 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- only accounts already in the brain get refreshed\nSELECT id, name, last_verified FROM accounts;",
+        "options": {}
+      },
+      "id": "pg_get",
+      "name": "Get accounts in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://PLACEHOLDER-source/api/account/{{ $json.name }}",
+        "options": {}
+      },
+      "id": "http_src",
+      "name": "Fetch source snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// FAIL-SAFE: if the source failed, do nothing (keep existing data)\nif ($json.error || !$json) { return []; }\nconst changed = true; // wire real comparison later\nreturn [{ json: { name: $('Get accounts in DB').item.json.name, changed } }];"
+      },
+      "id": "code_diff",
+      "name": "Diff vs stored (fail-safe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- update drift + stamp freshness + log\nUPDATE accounts SET last_verified = now() WHERE name = $1;\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('reconcile', $1, true, now());",
+        "options": {}
+      },
+      "id": "pg_upd",
+      "name": "Update + stamp last_verified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "Every weekday 07:00": { "main": [[{ "node": "Get accounts in DB", "type": "main", "index": 0 }]] },
+    "Get accounts in DB": { "main": [[{ "node": "Fetch source snapshot", "type": "main", "index": 0 }]] },
+    "Fetch source snapshot": { "main": [[{ "node": "Diff vs stored (fail-safe)", "type": "main", "index": 0 }]] },
+    "Diff vs stored (fail-safe)": { "main": [[{ "node": "Update + stamp last_verified", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}

@@ -31,8 +31,25 @@ export const people: Person[] = [
   { id: 'ellie', name: 'Ellie Benson', role: 'Delivery Coordinator' },
   { id: 'liam', name: 'Liam Perkins', role: 'Commercial Finance Partner' },
   { id: 'talent', name: 'Talent team', role: 'Talent' },
+  // Advisors / Consultants (staffed on project delivery)
+  { id: 'raj', name: 'Raj Patel', role: 'Principal Consultant' },
+  { id: 'omar', name: 'Omar Farouk', role: 'Principal Consultant' },
+  { id: 'james', name: 'James Okafor', role: 'Senior Consultant' },
+  { id: 'tom', name: 'Tom Hayes', role: 'Senior Consultant' },
+  { id: 'ben', name: 'Ben Carter', role: 'Senior Consultant' },
+  { id: 'grace', name: 'Grace Liu', role: 'Senior Consultant' },
+  { id: 'marcus', name: 'Marcus Reed', role: 'Senior Consultant' },
+  { id: 'priya', name: 'Priya Nair', role: 'Consultant' },
+  { id: 'mei', name: 'Mei Lin', role: 'Consultant' },
+  { id: 'sofia', name: 'Sofia Romano', role: 'Consultant' },
+  { id: 'dan', name: 'Dan Murphy', role: 'Consultant' },
+  { id: 'aisha', name: 'Aisha Khan', role: 'Consultant' },
+  { id: 'ella', name: 'Ella Thompson', role: 'Consultant' },
+  { id: 'leo', name: 'Leo Walsh', role: 'Consultant' },
+  { id: 'nina', name: 'Nina Patel', role: 'Consultant' },
+  { id: 'yuki', name: 'Yuki Tanaka', role: 'Consultant' },
 ]
-export const personName = (id?: string) => people.find((p) => p.id === id)?.name ?? '—'
+export const personName = (id?: string) => people.find((p) => p.id === id)?.name ?? '-'
 export const personRole = (id?: string) => people.find((p) => p.id === id)?.role ?? ''
 
 // ── Pods (real, from the pod board) - each led by a Client/Portfolio Director ──
@@ -78,29 +95,37 @@ export const accountName = (id: string) => accountById(id)?.name ?? id
 // ── Projects (one delivery per account; resource-only accounts have no DM) ──
 export const projects: Project[] = [
   // Central Gov 1
-  { id: 'dwp-ucdp', name: 'Universal Credit Data Platform', accountId: 'dwp', phase: 'Build', rag: 'amber', deliveryManager: 'pippa', sprint: 'Sprint 7 of 12', lastActivity: '2026-06-15' },
-  { id: 'moj-courts', name: 'Courts Digital Service', accountId: 'moj', phase: 'Build', rag: 'green', deliveryManager: 'louis', sprint: 'Sprint 5 of 9', lastActivity: '2026-06-13' },
-  { id: 'mod-coe', name: 'Salesforce Centre of Excellence', accountId: 'mod', phase: 'Run', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 12 of 16', lastActivity: '2026-06-12' },
-  { id: 'maps-moneyhelper', name: 'MoneyHelper Platform (resource only)', accountId: 'maps', phase: 'Build', rag: 'amber', deliveryManager: undefined, sprint: 'Ongoing', lastActivity: '2026-06-04' },
+  { id: 'dwp-ucdp', name: 'Universal Credit Data Platform', accountId: 'dwp', phase: 'Build', rag: 'amber', deliveryManager: 'pippa', sprint: 'Sprint 7 of 12', lastActivity: '2026-06-15', advisors: ['raj', 'james'], spend: 820_000, extension: { status: 'In discussion', detail: 'SOW renewal stalled in procurement; the current SOW expires in ~3 weeks.' } },
+  { id: 'moj-courts', name: 'Courts Digital Service', accountId: 'moj', phase: 'Build', rag: 'green', deliveryManager: 'louis', sprint: 'Sprint 5 of 9', lastActivity: '2026-06-13', advisors: ['tom', 'priya'], spend: 540_000 },
+  { id: 'mod-coe', name: 'Salesforce Centre of Excellence', accountId: 'mod', phase: 'Run', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 12 of 16', lastActivity: '2026-06-12', advisors: ['ben', 'grace'], spend: 980_000, extension: { status: 'Likely', detail: 'Interest in rolling the CoE model out to two more directorates (~£500k).' } },
+  { id: 'maps-moneyhelper', name: 'MoneyHelper Platform (resource only)', accountId: 'maps', phase: 'Build', rag: 'amber', deliveryManager: undefined, sprint: 'Ongoing', lastActivity: '2026-06-04', advisors: ['mei'], spend: 180_000 },
 
   // Central Gov 2
-  { id: 'cabo-govuk', name: 'GOV.UK ICT Modernisation', accountId: 'cabo', phase: 'Build', rag: 'red', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 10', lastActivity: '2026-06-16' },
-  { id: 'defra-eds', name: 'Environmental Data Service', accountId: 'defra', phase: 'Build', rag: 'green', deliveryManager: 'sarah', sprint: 'Sprint 4 of 8', lastActivity: '2026-06-14' },
-  { id: 'dvsa-vehicle', name: 'Vehicle Testing Digital', accountId: 'dvsa', phase: 'Design', rag: 'amber', deliveryManager: 'pippa', sprint: 'Sprint 3 of 9', lastActivity: '2026-06-11' },
+  { id: 'cabo-govuk', name: 'GOV.UK ICT Modernisation', accountId: 'cabo', phase: 'Build', rag: 'red', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 10', lastActivity: '2026-06-16', advisors: ['raj', 'dan', 'sofia'], spend: 690_000 },
+  { id: 'defra-eds', name: 'Environmental Data Service', accountId: 'defra', phase: 'Build', rag: 'green', deliveryManager: 'sarah', sprint: 'Sprint 4 of 8', lastActivity: '2026-06-14', advisors: ['james', 'aisha'], spend: 560_000 },
+  { id: 'dvsa-vehicle', name: 'Vehicle Testing Digital', accountId: 'dvsa', phase: 'Design', rag: 'amber', deliveryManager: 'pippa', sprint: 'Sprint 3 of 9', lastActivity: '2026-06-11', advisors: ['mei', 'leo'], spend: 300_000 },
 
   // HMRC
-  { id: 'gvms-platform', name: 'GVMS Platform', accountId: 'gvms', phase: 'Build', rag: 'amber', deliveryManager: 'nick', sprint: 'Sprint 7 of 12', lastActivity: '2026-06-16' },
-  { id: 'hawk-risk', name: 'HAWK Risk Engine', accountId: 'hawk', phase: 'Test', rag: 'amber', deliveryManager: 'louis', sprint: 'Sprint 9 of 11', lastActivity: '2026-06-15' },
-  { id: 'kms-svc', name: 'Knowledge Management Service', accountId: 'kms', phase: 'Build', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 4 of 8', lastActivity: '2026-06-13' },
-  { id: 'kainos-delivery', name: 'Kainos Partner Delivery', accountId: 'kainos', phase: 'Run', rag: 'green', deliveryManager: 'sarah', sprint: 'Sprint 10 of 14', lastActivity: '2026-06-12' },
-  { id: 'netcompany-int', name: 'Netcompany Integration', accountId: 'netcompany', phase: 'Build', rag: 'green', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 9', lastActivity: '2026-06-10' },
+  { id: 'gvms-platform', name: 'GVMS Platform', accountId: 'gvms', phase: 'Build', rag: 'amber', deliveryManager: 'nick', sprint: 'Sprint 7 of 12', lastActivity: '2026-06-16', advisors: ['raj', 'ben', 'ella'], spend: 1_300_000, extension: { status: 'Likely', detail: 'Client hinted at a second data workstream next quarter (~£400k).' } },
+  { id: 'hawk-risk', name: 'HAWK Risk Engine', accountId: 'hawk', phase: 'Test', rag: 'amber', deliveryManager: 'louis', sprint: 'Sprint 9 of 11', lastActivity: '2026-06-15', advisors: ['grace', 'dan'], spend: 870_000 },
+  { id: 'kms-svc', name: 'Knowledge Management Service', accountId: 'kms', phase: 'Build', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 4 of 8', lastActivity: '2026-06-13', advisors: ['tom', 'aisha'], spend: 470_000, extension: { status: 'Likely', detail: 'Managed-service wrap discussed for post go-live (~£350k/yr).' } },
+  { id: 'kainos-delivery', name: 'Kainos Partner Delivery', accountId: 'kainos', phase: 'Run', rag: 'green', deliveryManager: 'sarah', sprint: 'Sprint 10 of 14', lastActivity: '2026-06-12', advisors: ['sofia'], spend: 380_000 },
+  { id: 'netcompany-int', name: 'Netcompany Integration', accountId: 'netcompany', phase: 'Build', rag: 'green', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 9', lastActivity: '2026-06-10', advisors: ['marcus', 'ella'], spend: 290_000 },
 
   // UHE
-  { id: 'thames-asset', name: 'Asset Data & Analytics', accountId: 'thames', phase: 'Build', rag: 'amber', deliveryManager: 'nick', sprint: 'Sprint 5 of 10', lastActivity: '2026-06-16' },
-  { id: 'neso-grid', name: 'Grid Data Platform', accountId: 'neso', phase: 'Build', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 4 of 7', lastActivity: '2026-06-14' },
-  { id: 'nhs-data', name: 'NHS Data Infrastructure (resource only)', accountId: 'nhs', phase: 'Build', rag: 'red', deliveryManager: undefined, sprint: 'Ongoing', lastActivity: '2026-06-06' },
-  { id: 'dfe-skills', name: 'Skills Digital Service', accountId: 'dfe', phase: 'Discovery', rag: 'green', deliveryManager: 'louis', sprint: 'Sprint 2 of 6', lastActivity: '2026-06-11' },
-  { id: 'voda3-network', name: 'Network Analytics', accountId: 'voda3', phase: 'Build', rag: 'amber', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 11', lastActivity: '2026-06-13' },
+  { id: 'thames-asset', name: 'Asset Data & Analytics', accountId: 'thames', phase: 'Build', rag: 'amber', deliveryManager: 'nick', sprint: 'Sprint 5 of 10', lastActivity: '2026-06-16', advisors: ['james', 'priya'], spend: 520_000, extension: { status: 'In discussion', detail: 'Client wants to extend the analytics work into a reporting layer (~£300k).' } },
+  { id: 'neso-grid', name: 'Grid Data Platform', accountId: 'neso', phase: 'Build', rag: 'green', deliveryManager: 'emily', sprint: 'Sprint 4 of 7', lastActivity: '2026-06-14', advisors: ['yuki'], spend: 240_000 },
+  { id: 'nhs-data', name: 'NHS Data Infrastructure (resource only)', accountId: 'nhs', phase: 'Build', rag: 'red', deliveryManager: undefined, sprint: 'Ongoing', lastActivity: '2026-06-06', advisors: ['dan'], spend: 360_000 },
+  { id: 'dfe-skills', name: 'Skills Digital Service', accountId: 'dfe', phase: 'Discovery', rag: 'green', deliveryManager: 'louis', sprint: 'Sprint 2 of 6', lastActivity: '2026-06-11', advisors: ['aisha', 'nina'], spend: 210_000 },
+  { id: 'voda3-network', name: 'Network Analytics', accountId: 'voda3', phase: 'Build', rag: 'amber', deliveryManager: 'jasmin', sprint: 'Sprint 6 of 11', lastActivity: '2026-06-13', advisors: ['omar', 'grace'], spend: 480_000 },
 ]
 export const projectById = (id?: string) => projects.find((p) => p.id === id)
 export const projectsForAccount = (accountId: string) => projects.filter((p) => p.accountId === accountId)
+
+// ── Advisors / capacity ──
+export const advisors = people.filter((p) => p.role.toLowerCase().includes('consultant'))
+export const projectsForAdvisor = (advisorId: string) => projects.filter((p) => p.advisors.includes(advisorId))
+export const advisorLoad = (advisorId: string): 'light' | 'balanced' | 'stretched' => {
+  const n = projectsForAdvisor(advisorId).length
+  return n >= 3 ? 'stretched' : n === 2 ? 'balanced' : 'light'
+}

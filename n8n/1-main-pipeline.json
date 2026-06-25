@@ -1,0 +1,253 @@
+{
+  "name": "TN Brain · 1 · Main Pipeline (production)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "new-call", "responseMode": "onReceived", "options": {} },
+      "id": "wh1",
+      "name": "New Call (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Source posts: { account, callId, transcript, source, callDate }\nconst b = $json.body || $json;\nconst account = b.account || 'UNKNOWN';\nconst callId = b.callId || ('call_' + Date.now());\nconst transcript = b.transcript || '';\nconst source = b.source || 'unknown';\nconst callDate = b.callDate || new Date().toISOString();\nconst dedupKey = `${source}:${account}:${callId}`;\nreturn [{ json: { account, callId, transcript, source, callDate, dedupKey } }];"
+      },
+      "id": "norm1",
+      "name": "Normalize + Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- PLACEHOLDER (parameterise before go-live): durable inbox\nINSERT INTO inbox (payload, status, dedup_key, received_at)\nVALUES ('{{ JSON.stringify($json) }}', 'pending', '{{ $json.dedupKey }}', now())\nON CONFLICT (dedup_key) DO NOTHING;",
+        "options": {}
+      },
+      "id": "pg_inbox",
+      "name": "Inbox: insert pending",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [580, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- read-through cache: existing context for this account\nSELECT id, name, last_verified, feedback_summary\nFROM accounts WHERE name = '{{ $json.account }}';",
+        "options": {}
+      },
+      "id": "pg_ctx",
+      "name": "Get Account Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [780, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Freshness check: enrich if missing OR stale (>24h since last_verified)\nconst row = $input.first().json || {};\nconst account = $('Normalize + Dedup').item.json.account;\nconst exists = !!row.id;\nlet stale = true;\nif (exists && row.last_verified) {\n  const ageMs = Date.now() - new Date(row.last_verified).getTime();\n  stale = ageMs > 24 * 60 * 60 * 1000;\n}\nconst needsEnrichment = !exists || stale;\nreturn [{ json: { ...row, account, needsEnrichment } }];"
+      },
+      "id": "code_fresh",
+      "name": "Assess Freshness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            { "id": "cond1", "leftValue": "={{ $json.needsEnrichment }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if_enr",
+      "name": "Needs enrichment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-monday/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
+      "id": "http_monday",
+      "name": "Get Monday.com",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1380, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-sharepoint/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
+      "id": "http_sp",
+      "name": "Get SharePoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-org/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
+      "id": "http_org",
+      "name": "Get Org & SOW",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FAIL-SAFE merge: only include sources that returned data; never wipe with empties\nconst account = $('Assess Freshness').item.json.account;\nconst safe = (name) => { try { const v = $(name).item.json; return (v && !v.error) ? v : null; } catch (e) { return null; } };\nconst context = {\n  account,\n  monday: safe('Get Monday.com'),\n  sharepoint: safe('Get SharePoint'),\n  org: safe('Get Org & SOW')\n};\nreturn [{ json: { account, context } }];"
+      },
+      "id": "code_ctx",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- cache the freshly fetched context + stamp freshness\nINSERT INTO accounts (name, context, last_verified)\nVALUES ('{{ $json.account }}', '{{ JSON.stringify($json.context) }}', now())\nON CONFLICT (name) DO UPDATE SET context = EXCLUDED.context, last_verified = now();",
+        "options": {}
+      },
+      "id": "pg_savectx",
+      "name": "Save Account Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2180, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- linked feedback for this account (no vectors yet)\nSELECT verdict, correct_type, reason FROM feedback\nWHERE account_id = (SELECT id FROM accounts WHERE name = '{{ $('Normalize + Dedup').item.json.account }}')\nORDER BY created_at DESC LIMIT 20;",
+        "options": {}
+      },
+      "id": "pg_fb",
+      "name": "Get Feedback (by account)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2380, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- store the call on the tree (account -> project -> CALL -> signal), return its id\nINSERT INTO calls (account_id, title, transcript, source, call_date, dedup_key)\nVALUES ((SELECT id FROM accounts WHERE name = '{{ $('Normalize + Dedup').item.json.account }}'),\n        'Call {{ $('Normalize + Dedup').item.json.callId }}',\n        '{{ $('Normalize + Dedup').item.json.transcript }}',\n        '{{ $('Normalize + Dedup').item.json.source }}',\n        '{{ $('Normalize + Dedup').item.json.callDate }}',\n        '{{ $('Normalize + Dedup').item.json.dedupKey }}')\nON CONFLICT (dedup_key) DO UPDATE SET transcript = EXCLUDED.transcript\nRETURNING id;",
+        "options": {}
+      },
+      "id": "pg_call",
+      "name": "Store Call",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2580, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble the USER message (system message lives on the AI Agent node)\nconst account = $('Normalize + Dedup').item.json.account;\nconst transcript = $('Normalize + Dedup').item.json.transcript;\nlet callId = null; try { callId = $('Store Call').item.json.id; } catch (e) {}\nlet ctxRow = {}; try { ctxRow = $('Get Account Context').first().json || {}; } catch (e) {}\nconst summary = ctxRow.feedback_summary || 'None yet.';\nconst fbRows = $('Get Feedback (by account)').all().map(i => i.json).filter(r => r && r.verdict);\nconst fbText = fbRows.length ? fbRows.map(f => `- was '${f.verdict}', correct '${f.correct_type || ''}': ${f.reason || ''}`).join('\\n') : 'None.';\nconst context = ctxRow.context ? JSON.stringify(ctxRow.context) : 'No stored context.';\nconst userMessage = `Account: ${account}\\n\\nKnown context:\\n${context}\\n\\nFeedback summary for this account:\\n${summary}\\n\\nRecent corrections:\\n${fbText}\\n\\nTranscript:\\n${transcript}`;\nreturn [{ json: { account, callId, userMessage } }];"
+      },
+      "id": "code_input",
+      "name": "Build Agent Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2780, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "options": {
+          "systemMessage": "You are Tecknuovo's delivery intelligence analyst. Read the call transcript and extract ONLY the signals that matter to delivery, using the known context and prior corrections to classify accurately. Return ONLY valid JSON, no prose, in exactly this shape: {\"signals\":[{\"type\":\"risk|opportunity|update|people\",\"summary\":\"one line\",\"quote\":\"exact words from the transcript\",\"suggested_action\":\"one line\",\"confidence\":0.0}]}. Use only those four types. If nothing is material, return {\"signals\":[]}."
+        }
+      },
+      "id": "agent1",
+      "name": "AI Agent: Extract Signals",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [2980, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": { "model": "YOUR-DEPLOYMENT-NAME", "options": {} },
+      "id": "model1",
+      "name": "Azure OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+      "typeVersion": 1,
+      "position": [2980, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the agent output, validate, set status by confidence floor\nconst out = ($input.first().json.output ?? '').toString().trim();\nconst cleaned = out.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(cleaned); } catch (e) { throw new Error('Model did not return valid JSON: ' + out.slice(0, 200)); }\nconst allowed = ['risk', 'opportunity', 'update', 'people'];\nconst account = $('Build Agent Input').item.json.account;\nconst callId = $('Build Agent Input').item.json.callId;\nconst signals = (parsed.signals || [])\n  .filter(s => allowed.includes(s.type))\n  .map(s => ({ ...s, account, callId, status: Number(s.confidence) >= 0.6 ? 'new' : 'review' }));\nif (!signals.length) return [{ json: { account, callId, note: 'no material signals' } }];\nreturn signals.map(s => ({ json: s }));"
+      },
+      "id": "code_parse",
+      "name": "Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3200, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- file each signal (status 'review' = low confidence, routed to human in Observability)\nINSERT INTO signals (account_id, call_id, type, summary, quote, suggested_action, confidence, status)\nVALUES ((SELECT id FROM accounts WHERE name = '{{ $json.account }}'),\n        {{ $json.callId ? \"'\" + $json.callId + \"'\" : 'NULL' }},\n        '{{ $json.type }}', '{{ $json.summary }}', '{{ $json.quote }}',\n        '{{ $json.suggested_action }}', {{ $json.confidence || 0 }}, '{{ $json.status }}');",
+        "options": {}
+      },
+      "id": "pg_sig",
+      "name": "Insert Signals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [3400, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- success: mark processed + log\nUPDATE inbox SET status = 'done' WHERE dedup_key = '{{ $('Normalize + Dedup').item.json.dedupKey }}';\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('main_pipeline', '{{ $('Normalize + Dedup').item.json.dedupKey }}', true, now());",
+        "options": {}
+      },
+      "id": "pg_done",
+      "name": "Inbox: mark done + log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [3620, 220]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- failure: mark failed so it can be retried, never lost\nUPDATE inbox SET status = 'failed', attempts = COALESCE(attempts,0) + 1 WHERE dedup_key = '{{ $('Normalize + Dedup').item.json.dedupKey }}';\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('main_pipeline', '{{ $('Normalize + Dedup').item.json.dedupKey }}', false, now());",
+        "options": {}
+      },
+      "id": "pg_failed",
+      "name": "Inbox: mark FAILED + log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [3620, 400]
+    }
+  ],
+  "connections": {
+    "New Call (Webhook)": { "main": [[{ "node": "Normalize + Dedup", "type": "main", "index": 0 }]] },
+    "Normalize + Dedup": { "main": [[{ "node": "Inbox: insert pending", "type": "main", "index": 0 }]] },
+    "Inbox: insert pending": { "main": [[{ "node": "Get Account Context", "type": "main", "index": 0 }]] },
+    "Get Account Context": { "main": [[{ "node": "Assess Freshness", "type": "main", "index": 0 }]] },
+    "Assess Freshness": { "main": [[{ "node": "Needs enrichment?", "type": "main", "index": 0 }]] },
+    "Needs enrichment?": { "main": [ [ { "node": "Get Monday.com", "type": "main", "index": 0 } ], [ { "node": "Get Feedback (by account)", "type": "main", "index": 0 } ] ] },
+    "Get Monday.com": { "main": [[{ "node": "Get SharePoint", "type": "main", "index": 0 }]] },
+    "Get SharePoint": { "main": [[{ "node": "Get Org & SOW", "type": "main", "index": 0 }]] },
+    "Get Org & SOW": { "main": [[{ "node": "Build Context", "type": "main", "index": 0 }]] },
+    "Build Context": { "main": [[{ "node": "Save Account Context", "type": "main", "index": 0 }]] },
+    "Save Account Context": { "main": [[{ "node": "Get Feedback (by account)", "type": "main", "index": 0 }]] },
+    "Get Feedback (by account)": { "main": [[{ "node": "Store Call", "type": "main", "index": 0 }]] },
+    "Store Call": { "main": [[{ "node": "Build Agent Input", "type": "main", "index": 0 }]] },
+    "Build Agent Input": { "main": [[{ "node": "AI Agent: Extract Signals", "type": "main", "index": 0 }]] },
+    "Azure OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Agent: Extract Signals", "type": "ai_languageModel", "index": 0 }]] },
+    "AI Agent: Extract Signals": { "main": [ [ { "node": "Parse & Validate", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] },
+    "Parse & Validate": { "main": [ [ { "node": "Insert Signals", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] },
+    "Insert Signals": { "main": [ [ { "node": "Inbox: mark done + log", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": {},
+  "active": false
+}

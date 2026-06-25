@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 import type { Signal, SignalType } from '../../data/types'
-import { rankByImpact } from '../../data/signals'
+import { rankByImpact, riskScope } from '../../data/signals'
 import { accountById, podName } from '../../data/org'
 import { SignalBadge, RagDot } from './primitives'
 import { TriageCard } from './TriageCard'
@@ -16,6 +16,7 @@ type GroupBy = 'account' | 'type' | 'none'
 // or flat). Each row opens to the call + transcript. Used by every role dashboard.
 export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onOpenAccount: (id: string) => void }) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [riskLevel, setRiskLevel] = useState<'all' | 'account' | 'delivery'>('all')
   const [callType, setCallType] = useState('all')
   const [sort, setSort] = useState<Sort>('urgent')
   const [groupBy, setGroupBy] = useState<GroupBy>('account')
@@ -23,9 +24,10 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
 
   const feed = useMemo(() => {
     let list = filter === 'all' ? signals : signals.filter((s) => s.type === filter)
+    if (filter === 'risk' && riskLevel !== 'all') list = list.filter((s) => riskScope(s) === riskLevel)
     if (callType !== 'all') list = list.filter((s) => s.sourceCall.type === callType)
     return sort === 'newest' ? [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : rankByImpact(list)
-  }, [filter, callType, sort, signals])
+  }, [filter, riskLevel, callType, sort, signals])
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
@@ -49,6 +51,14 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         <Chip active={filter === 'update'} onClick={() => setFilter('update')} type="update" label={`Updates (${count('update')})`} />
         <Chip active={filter === 'people'} onClick={() => setFilter('people')} type="people" label={`People (${count('people')})`} />
       </div>
+      {filter === 'risk' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-muted-2">Risk level</span>
+          <Chip active={riskLevel === 'all'} onClick={() => setRiskLevel('all')} label="All risks" />
+          <Chip active={riskLevel === 'account'} onClick={() => setRiskLevel('account')} label="Account" />
+          <Chip active={riskLevel === 'delivery'} onClick={() => setRiskLevel('delivery')} label="Delivery" />
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Select label="Group by" value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={[['account', 'Account'], ['type', 'Signal type'], ['none', 'No grouping']]} />
         <Select label="Call type" value={callType} onChange={setCallType} options={[['all', 'All call types'], ...CALL_TYPES.map((c) => [c, c] as [string, string])]} />

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { LayoutDashboard, Layers, Radio, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight } from 'lucide-react'
+import { LayoutDashboard, Layers, Radio, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight, PoundSterling, BarChart3, Percent } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts, pods, podName, personName, accountById, accountName } from '../../data/org'
 import { signals, signalsByType, rankByImpact } from '../../data/signals'
@@ -12,8 +12,28 @@ import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView, money } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 
-type View = 'overview' | 'signals' | 'pods'
+type View = 'overview' | 'signals' | 'pods' | 'sales'
 const TREND_ORDER = ['opportunity', 'risk', 'update', 'people'] as const
+
+// Sales reporting - illustrative demo data (real version draws from HubSpot + call transcripts)
+const SALES = {
+  pipeline: 3_650_000,
+  weighted: 1_980_000,
+  winRate: 38,
+  inFlight: 11,
+  stages: [
+    { stage: 'Discovery', value: 1_200_000, deals: 4 },
+    { stage: 'Proposal', value: 980_000, deals: 3 },
+    { stage: 'Negotiation', value: 870_000, deals: 2 },
+    { stage: 'Closing', value: 600_000, deals: 2 },
+  ],
+  fromCalls: [
+    { account: 'MOD', note: 'CoE rollout to two more directorates', value: '~£500k', stage: 'Discovery' },
+    { account: 'GVMS', note: 'Second data workstream flagged in governance', value: '~£400k', stage: 'Proposal' },
+    { account: 'KMS', note: 'Managed-service wrap post go-live', value: '~£350k/yr', stage: 'Negotiation' },
+    { account: 'Thames Water', note: 'Reporting-layer extension requested', value: '~£300k', stage: 'Discovery' },
+  ],
+}
 
 export function Leadership() {
   const [view, setView] = useState<View>('overview')
@@ -42,6 +62,7 @@ export function Leadership() {
         sections={[
           { id: 'overview', label: 'Portfolio health', icon: LayoutDashboard },
           { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
+          { id: 'sales', label: 'Sales', icon: PoundSterling },
           { id: 'pods', label: 'Pods', icon: Layers, count: pods.length },
         ]}
       >
@@ -152,6 +173,52 @@ export function Leadership() {
               <h3 className="text-[15px] font-semibold">Signals</h3>
               <p className="mt-0.5 text-[13px] text-muted">Every signal across the portfolio. Filter and sort, then open any to see the call and transcript behind it.</p>
               <SignalsFeed signals={signals} onOpenAccount={(id) => setSel(id)} />
+            </>
+          )}
+
+          {view === 'sales' && (
+            <>
+              <div className="flex items-center gap-2">
+                <PoundSterling size={16} style={{ color: 'var(--accent)' }} />
+                <h3 className="text-[15px] font-semibold">Sales reporting</h3>
+              </div>
+              <p className="mt-0.5 text-[13px] text-muted">Pipeline and deal movement, drawn from call transcripts and HubSpot. <span className="text-muted-2">Source: HubSpot + call transcripts · illustrative for the demo.</span></p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Kpi icon={TrendingUp} label="Total pipeline" value={money(SALES.pipeline)} sub="open opportunities" color="var(--opp)" />
+                <Kpi icon={BarChart3} label="Weighted forecast" value={money(SALES.weighted)} sub="probability-adjusted" color="var(--accent)" />
+                <Kpi icon={Percent} label="Win rate" value={`${SALES.winRate}%`} sub="last 12 months" />
+                <Kpi icon={Layers} label="Deals in flight" value={`${SALES.inFlight}`} sub="across the portfolio" color="var(--people)" />
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-line bg-surface p-5">
+                  <div className="eyebrow">Pipeline by stage</div>
+                  <div className="mt-3 space-y-3">
+                    {SALES.stages.map((s) => (
+                      <div key={s.stage}>
+                        <div className="flex items-center justify-between text-[12px]"><span className="font-medium">{s.stage}</span><span className="text-muted">{money(s.value)} · {s.deals} deals</span></div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-bg-2"><div className="h-full rounded-full" style={{ width: `${Math.round((s.value / SALES.pipeline) * 100)}%`, background: 'var(--accent)' }} /></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-line bg-surface p-5">
+                  <div className="eyebrow">Surfaced from calls</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">Opportunities the Second Brain heard on calls, matched to HubSpot deals.</p>
+                  <div className="mt-3 space-y-2">
+                    {SALES.fromCalls.map((d, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 rounded-lg bg-bg-2 p-2.5">
+                        <div className="min-w-0">
+                          <div className="truncate text-[12px] font-semibold">{d.account} <span className="font-normal text-muted-2">· {d.stage}</span></div>
+                          <div className="truncate text-[11px] text-muted">{d.note}</div>
+                        </div>
+                        <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--opp)' }}>{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </>
           )}
           </>

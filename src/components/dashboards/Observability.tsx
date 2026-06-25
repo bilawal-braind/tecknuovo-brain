@@ -40,7 +40,7 @@ export function Observability() {
         {view === 'checks' && (
           <>
             <h3 className="text-[15px] font-semibold">Quality checks</h3>
-            <p className="mt-0.5 text-[13px] text-muted">How accurate the AI is against the agreed standard. Overall <b className="text-text">{avg}%</b> · {below} check below the 85% target. Click a row to open its card.</p>
+            <p className="mt-0.5 text-[13px] text-muted">How accurate the AI is across every area it covers - signals, account risk, routing, resourcing, extensions and sales. Overall <b className="text-text">{avg}%</b> · {below} below target. Click a row to open its card.</p>
             <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="overflow-hidden rounded-2xl border border-line bg-surface lg:col-span-2">
                 <table className="w-full text-[13px]">
