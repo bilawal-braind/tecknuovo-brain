@@ -14,7 +14,11 @@ router.get('/accounts', async (_req, res, next) => {
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END AS health,
-              (SELECT count(*) FROM signals s WHERE s.account_id = a.id AND s.status = 'new') AS open_signals
+              (SELECT count(*) FROM signals s WHERE s.account_id = a.id AND s.status = 'new') AS open_signals,
+              -- commercial rollup, derived from project budget_remaining vs sow_value
+              COALESCE((SELECT round(100.0 * (sum(p.sow_value) - sum(p.budget_remaining)) / NULLIF(sum(p.sow_value), 0))
+                        FROM projects p WHERE p.account_id = a.id AND p.budget_remaining IS NOT NULL), 0) AS budget_burn_pct,
+              COALESCE((SELECT sum(p.budget_remaining) FROM projects p WHERE p.account_id = a.id), 0) AS headroom
        FROM accounts a ORDER BY a.name`
     );
     res.json(r.rows);
@@ -28,6 +32,7 @@ router.get('/accounts/:id', async (req, res, next) => {
     if (!acc.rows.length) return res.status(404).json({ error: 'not found' });
     const projects = await q(
       `SELECT p.id, p.name, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
+              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend,
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
@@ -61,6 +66,7 @@ router.get('/projects', async (_req, res, next) => {
   try {
     const r = await q(
       `SELECT p.id, p.name, p.account_id, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
+              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend,
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'

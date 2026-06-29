@@ -63,8 +63,8 @@ export const mapAccount = (a: ApiAccount): Account => ({
   health: asHealth(a.health),
   trend: 'steady',
   sowValue: 0, // aggregated from projects in bootstrap
-  budgetBurnPct: 0,
-  headroom: 0,
+  budgetBurnPct: num(a.budget_burn_pct),
+  headroom: num(a.headroom),
   lastContact: TODAY,
   relationship: 'stable',
   valueAdds: 0,
@@ -79,7 +79,7 @@ export const mapProject = (p: ApiProject): Project => ({
   sprint: '',
   lastActivity: toDate(p.end_date),
   advisors: [],
-  spend: 0,
+  spend: num(p.spend),
 })
 
 export const mapSignal = (s: ApiSignal): Signal => {

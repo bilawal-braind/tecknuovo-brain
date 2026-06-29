@@ -20,6 +20,8 @@ export type ApiAccount = {
   pod: string | null
   health: string | null
   open_signals: number
+  budget_burn_pct: number | string | null
+  headroom: number | string | null
 }
 
 export type ApiProject = {
@@ -31,6 +33,8 @@ export type ApiProject = {
   rag: string | null
   start_date: string | null
   end_date: string | null
+  budget_remaining: number | string | null
+  spend: number | string | null
 }
 
 export type ApiSignal = {
