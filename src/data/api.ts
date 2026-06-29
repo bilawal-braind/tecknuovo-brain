@@ -35,6 +35,7 @@ export type ApiProject = {
   end_date: string | null
   budget_remaining: number | string | null
   spend: number | string | null
+  delivery_manager_name: string | null
 }
 
 export type ApiSignal = {

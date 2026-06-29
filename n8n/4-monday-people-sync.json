@@ -1,0 +1,77 @@
+{
+  "name": "TN Brain · 4 · Monday People Sync (pod + DM)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "psrun",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.id AS account_id, a.name AS account_name, COALESCE(json_agg(json_build_object('id',p.id,'name',p.name)) FILTER (WHERE p.id IS NOT NULL),'[]'::json) AS projects FROM accounts a LEFT JOIN projects p ON p.account_id=a.id GROUP BY a.id, a.name;",
+        "options": {}
+      },
+      "id": "psorg",
+      "name": "Read org",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [600, 300],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "API-Version", "value": "2026-04" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1692810780]){ items_page(limit:200){ items { group{ title } column_values(ids:[\\\"dropdown8__1\\\",\\\"people__1\\\"]){ id text } } } } }\"}",
+        "options": {}
+      },
+      "id": "pscad",
+      "name": "Monday cadence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 300],
+      "credentials": { "httpHeaderAuth": { "id": "yDd9RQMyxouZTh46", "name": "Monday API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const org=$('Read org').all().map(r=>r.json);const boards=(($('Monday cadence').first().json||{}).data||{}).boards||[];const items=(boards[0]&&boards[0].items_page&&boards[0].items_page.items)?boards[0].items_page.items:[];const SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};const groups={};for(const it of items){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}const gkeys=Object.keys(groups);const stmts=[];for(const acc of org){const an=(acc.account_name||'').toLowerCase();let projs=acc.projects;if(typeof projs==='string'){try{projs=JSON.parse(projs);}catch(e){projs=[];}}if(!Array.isArray(projs))projs=[];const gpod=gkeys.find(k=>an&&k.toLowerCase().includes(an)&&groups[k].pod);if(gpod){stmts.push('UPDATE accounts SET pod='+qq(groups[gpod].pod)+' WHERE id='+qq(acc.account_id)+';');}for(const p of projs){const toks=(p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);let gk=gkeys.find(k=>{const kl=k.toLowerCase();return an&&kl.includes(an)&&toks.some(t=>kl.includes(t));});if(!gk)gk=gkeys.find(k=>{const kl=k.toLowerCase();return toks.some(t=>kl.includes(t));});if(gk&&groups[gk].dm){stmts.push('UPDATE projects SET delivery_manager_name='+qq(groups[gk].dm)+', last_verified=now() WHERE id='+qq(p.id)+';');}}}const sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';return [{json:{sql,matched:stmts.length}}];"
+      },
+      "id": "psbuild",
+      "name": "Build SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.sql }}",
+        "options": {}
+      },
+      "id": "psapply",
+      "name": "Apply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1260, 300],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+    }
+  ],
+  "connections": {
+    "Run": { "main": [[{ "node": "Read org", "type": "main", "index": 0 }]] },
+    "Read org": { "main": [[{ "node": "Monday cadence", "type": "main", "index": 0 }]] },
+    "Monday cadence": { "main": [[{ "node": "Build SQL", "type": "main", "index": 0 }]] },
+    "Build SQL": { "main": [[{ "node": "Apply", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "c079bda3b47b252bbd53b0a9a784b7bc49f99b65cb844d664842ae1763345827" }
+}

@@ -8,11 +8,12 @@
 import { isLive } from './source'
 import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls } from './api'
 import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
-import { accounts, projects } from './org'
+import { accounts, projects, people } from './org'
 import { signals } from './signals'
 import { calls } from './calls'
 import type { Call } from './calls'
 import type { ApiCall } from './api'
+import type { Person } from './types'
 
 // Replace an array's contents while keeping the same reference (live ESM binding).
 function replace<T>(target: T[], next: T[]) {
@@ -46,6 +47,18 @@ export async function bootstrap(): Promise<BootResult> {
         .filter((p) => p.account_id === acc.id)
         .reduce((sum, p) => sum + (typeof p.sow_value === 'string' ? Number(p.sow_value) || 0 : p.sow_value ?? 0), 0)
     }
+
+    // People: synthesise a person per Delivery Manager name (from Monday) so the UI,
+    // which looks names up by person-id, can display them.
+    const dmPeople = new Map<string, Person>()
+    pRows.forEach((p, i) => {
+      const nm = p.delivery_manager_name
+      if (nm) {
+        const id = 'dm-' + nm.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        if (!dmPeople.has(id)) dmPeople.set(id, { id, name: nm, role: 'Delivery Manager' })
+        liveProjects[i].deliveryManager = id
+      }
+    })
 
     // Real call metadata, keyed by id, so signals carry the true call title/date/type.
     const callMeta = new Map<string, ApiCall>(cRows.map((c) => [c.id, c] as [string, ApiCall]))
@@ -99,6 +112,7 @@ export async function bootstrap(): Promise<BootResult> {
     replace(projects, liveProjects)
     replace(signals, liveSignals)
     replace(calls, liveCalls)
+    if (dmPeople.size) replace(people, [...dmPeople.values()])
 
     return {
       source: 'live',

@@ -32,7 +32,7 @@ router.get('/accounts/:id', async (req, res, next) => {
     if (!acc.rows.length) return res.status(404).json({ error: 'not found' });
     const projects = await q(
       `SELECT p.id, p.name, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
-              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend,
+              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend, p.delivery_manager_name,
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
@@ -66,7 +66,7 @@ router.get('/projects', async (_req, res, next) => {
   try {
     const r = await q(
       `SELECT p.id, p.name, p.account_id, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
-              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend,
+              p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend, p.delivery_manager_name,
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
