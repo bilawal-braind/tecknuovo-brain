@@ -1,253 +1,205 @@
 {
-  "name": "TN Brain · 1 · Main Pipeline (production)",
+  "name": "TN Brain · 1 · Main Pipeline",
   "nodes": [
     {
-      "parameters": { "httpMethod": "POST", "path": "new-call", "responseMode": "onReceived", "options": {} },
-      "id": "wh1",
-      "name": "New Call (Webhook)",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [180, 300]
+      "parameters": {},
+      "id": "817c7c19-3051-4b59-b38d-917b6ea71944",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [5760, 2704]
     },
     {
       "parameters": {
-        "jsCode": "// Source posts: { account, callId, transcript, source, callDate }\nconst b = $json.body || $json;\nconst account = b.account || 'UNKNOWN';\nconst callId = b.callId || ('call_' + Date.now());\nconst transcript = b.transcript || '';\nconst source = b.source || 'unknown';\nconst callDate = b.callDate || new Date().toISOString();\nconst dedupKey = `${source}:${account}:${callId}`;\nreturn [{ json: { account, callId, transcript, source, callDate, dedupKey } }];"
+        "jsCode": "const account='HMRC';const title='HMRC GVMS New Work Orders — Monthly Governance (MOCK)';const dedup_key='mock-'+Date.now();const transcript='Client: Delivery is on track this sprint; the integration milestone is in good shape.\\nClient: We are likely to extend into Q2 and may need two more developers given new scope from the platform-team merger.\\nTecknuovo DM: Understood, we will draft a change request.\\nClient: The data migration will slip ~2 weeks due to a dependency on your side we are awaiting.\\nClient: Also, your consultant Priya has been brilliant — the team values her.';const e=s=>String(s).replace(/'/g,\"''\");const ensureSql=\"WITH a AS (INSERT INTO accounts (name,last_verified) VALUES ('\"+e(account)+\"',now()) ON CONFLICT (name) DO UPDATE SET last_verified=now() RETURNING id) SELECT a.id AS account_id,(SELECT count(*) FROM projects p WHERE p.account_id=a.id) AS project_count FROM a;\";const ctxSql=\"SELECT a.id AS account_id, a.name AS account, COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'value',p.sow_value,'status',p.sow_status)) FROM projects p WHERE p.account_id=a.id),'[]'::json) AS projects FROM accounts a WHERE lower(a.name)=lower('\"+e(account)+\"');\";return [{json:{account,title,dedup_key,transcript,ensureSql,ctxSql}}];"
       },
-      "id": "norm1",
-      "name": "Normalize + Dedup",
+      "id": "6d90f8ab-13c0-45b4-b77b-32b84c1d16c8",
+      "name": "Prep",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [380, 300]
+      "position": [5936, 2704]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- PLACEHOLDER (parameterise before go-live): durable inbox\nINSERT INTO inbox (payload, status, dedup_key, received_at)\nVALUES ('{{ JSON.stringify($json) }}', 'pending', '{{ $json.dedupKey }}', now())\nON CONFLICT (dedup_key) DO NOTHING;",
+        "query": "{{ $json.ensureSql }}",
         "options": {}
       },
-      "id": "pg_inbox",
-      "name": "Inbox: insert pending",
+      "id": "c4d56c34-3764-42db-89eb-800217a7a977",
+      "name": "Ensure account & check",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [580, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=-- read-through cache: existing context for this account\nSELECT id, name, last_verified, feedback_summary\nFROM accounts WHERE name = '{{ $json.account }}';",
-        "options": {}
-      },
-      "id": "pg_ctx",
-      "name": "Get Account Context",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [780, 300],
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Freshness check: enrich if missing OR stale (>24h since last_verified)\nconst row = $input.first().json || {};\nconst account = $('Normalize + Dedup').item.json.account;\nconst exists = !!row.id;\nlet stale = true;\nif (exists && row.last_verified) {\n  const ageMs = Date.now() - new Date(row.last_verified).getTime();\n  stale = ageMs > 24 * 60 * 60 * 1000;\n}\nconst needsEnrichment = !exists || stale;\nreturn [{ json: { ...row, account, needsEnrichment } }];"
-      },
-      "id": "code_fresh",
-      "name": "Assess Freshness",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [980, 300]
+      "typeVersion": 2.5,
+      "position": [6128, 2704],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "combinator": "and",
           "conditions": [
-            { "id": "cond1", "leftValue": "={{ $json.needsEnrichment }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
-          ],
-          "combinator": "and"
+            { "leftValue": "={{ $json.project_count }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }
+          ]
         },
         "options": {}
       },
-      "id": "if_enr",
-      "name": "Needs enrichment?",
+      "id": "c731608b-95eb-4fd5-956f-93f5722be895",
+      "name": "Cache miss?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [1180, 300]
-    },
-    {
-      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-monday/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
-      "id": "http_monday",
-      "name": "Get Monday.com",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1380, 160],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-sharepoint/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
-      "id": "http_sp",
-      "name": "Get SharePoint",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1580, 160],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": { "method": "GET", "url": "https://PLACEHOLDER-org/api/account/{{ $('Normalize + Dedup').item.json.account }}", "options": {} },
-      "id": "http_org",
-      "name": "Get Org & SOW",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1780, 160],
-      "onError": "continueRegularOutput"
+      "typeVersion": 2,
+      "position": [6304, 2704]
     },
     {
       "parameters": {
-        "jsCode": "// FAIL-SAFE merge: only include sources that returned data; never wipe with empties\nconst account = $('Assess Freshness').item.json.account;\nconst safe = (name) => { try { const v = $(name).item.json; return (v && !v.error) ? v : null; } catch (e) { return null; } };\nconst context = {\n  account,\n  monday: safe('Get Monday.com'),\n  sharepoint: safe('Get SharePoint'),\n  org: safe('Get Org & SOW')\n};\nreturn [{ json: { account, context } }];"
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "API-Version", "value": "2026-04" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1126338886]){ items_page(limit:200){ items { id name group{ title } column_values(ids:[\\\"date\\\",\\\"date6\\\",\\\"sow_status\\\",\\\"status\\\"]){ id text } subitems { column_values(ids:[\\\"numbers\\\"]){ id text } } } } } }\"}",
+        "options": {}
       },
-      "id": "code_ctx",
-      "name": "Build Context",
+      "id": "37523e70-f6a5-4a34-a707-db082fb08808",
+      "name": "Monday: SOWs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6496, 2576],
+      "credentials": { "httpHeaderAuth": { "id": "yDd9RQMyxouZTh46", "name": "Monday API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const account=$('Prep').first().json.account;\nconst accId=$('Ensure account & check').first().json.account_id;\nconst items=$json.data.boards[0].items_page.items;\nconst al=account.toLowerCase();\nconst g=(cv,id)=>{const c=cv.find(x=>x.id===id);return c&&c.text!=null&&c.text!==''?c.text:null;};\nconst q=s=>(s===null||s===undefined||s==='')?'NULL':\"'\"+String(s).replace(/'/g,\"''\")+\"'\";\nconst num=s=>{if(s===null||s===undefined||s==='')return null;const v=parseFloat(String(s).replace(/[^0-9.\\-]/g,''));return isNaN(v)?null:v;};\nconst match=it=>{const gt=(it.group&&it.group.title?it.group.title:'').toLowerCase();return gt&&(gt.includes(al)||al.includes(gt));};\nconst sowVal=it=>{let sum=0,any=false;(it.subitems||[]).forEach(su=>{const v=num(g(su.column_values,'numbers'));if(v!==null){sum+=v;any=true;}});return any?Math.round(sum*100)/100:null;};\nconst rows=items.filter(match).map(it=>{const c=it.column_values;const val=sowVal(it);return '('+q(it.id)+','+q(it.name)+','+q(account)+','+\"'\"+accId+\"'\"+','+(val===null?'NULL':val)+','+q(g(c,'date'))+'::date,'+q(g(c,'date6'))+'::date,'+q(g(c,'sow_status'))+','+q(g(c,'status'))+',now())';});\nconst sql=rows.length?'INSERT INTO projects (monday_item_id,name,account_name,account_id,sow_value,start_date,end_date,sow_status,commercial_model,last_verified) VALUES '+rows.join(',')+' ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,sow_value=EXCLUDED.sow_value,sow_status=EXCLUDED.sow_status,last_verified=now();':\"SELECT 'no sows matched' AS note;\";\nreturn [{json:{sql,matched:rows.length}}];"
+      },
+      "id": "cea6a31e-6be1-40ef-8bf0-af895df0a08e",
+      "name": "Build enrich SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1980, 160]
+      "position": [6704, 2576]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=-- cache the freshly fetched context + stamp freshness\nINSERT INTO accounts (name, context, last_verified)\nVALUES ('{{ $json.account }}', '{{ JSON.stringify($json.context) }}', now())\nON CONFLICT (name) DO UPDATE SET context = EXCLUDED.context, last_verified = now();",
+        "query": "{{ $json.sql }}",
         "options": {}
       },
-      "id": "pg_savectx",
-      "name": "Save Account Context",
+      "id": "bfbe1b30-bfef-45ba-b792-07a2ffd59b28",
+      "name": "Upsert enrich",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [2180, 160]
+      "typeVersion": 2.5,
+      "position": [6896, 2576],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=-- linked feedback for this account (no vectors yet)\nSELECT verdict, correct_type, reason FROM feedback\nWHERE account_id = (SELECT id FROM accounts WHERE name = '{{ $('Normalize + Dedup').item.json.account }}')\nORDER BY created_at DESC LIMIT 20;",
+        "query": "{{ $('Prep').first().json.ctxSql }}",
         "options": {}
       },
-      "id": "pg_fb",
-      "name": "Get Feedback (by account)",
+      "id": "02440c2f-8125-4559-91bb-7cb3385e8d86",
+      "name": "Read context",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [2380, 300],
-      "alwaysOutputData": true
+      "typeVersion": 2.5,
+      "position": [7104, 2704],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=-- store the call on the tree (account -> project -> CALL -> signal), return its id\nINSERT INTO calls (account_id, title, transcript, source, call_date, dedup_key)\nVALUES ((SELECT id FROM accounts WHERE name = '{{ $('Normalize + Dedup').item.json.account }}'),\n        'Call {{ $('Normalize + Dedup').item.json.callId }}',\n        '{{ $('Normalize + Dedup').item.json.transcript }}',\n        '{{ $('Normalize + Dedup').item.json.source }}',\n        '{{ $('Normalize + Dedup').item.json.callDate }}',\n        '{{ $('Normalize + Dedup').item.json.dedupKey }}')\nON CONFLICT (dedup_key) DO UPDATE SET transcript = EXCLUDED.transcript\nRETURNING id;",
+        "query": "SELECT key, content FROM tn_knowledge WHERE key IN ('signal_definitions','risk_framework','opportunity_framework','tone_of_voice');",
         "options": {}
       },
-      "id": "pg_call",
-      "name": "Store Call",
+      "id": "d7f60b3f-0904-4d42-8f3b-b1d5d6de77b8",
+      "name": "Load TN knowledge",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [2580, 300],
-      "alwaysOutputData": true
+      "typeVersion": 2.5,
+      "position": [7280, 2704],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     },
     {
       "parameters": {
-        "jsCode": "// Assemble the USER message (system message lives on the AI Agent node)\nconst account = $('Normalize + Dedup').item.json.account;\nconst transcript = $('Normalize + Dedup').item.json.transcript;\nlet callId = null; try { callId = $('Store Call').item.json.id; } catch (e) {}\nlet ctxRow = {}; try { ctxRow = $('Get Account Context').first().json || {}; } catch (e) {}\nconst summary = ctxRow.feedback_summary || 'None yet.';\nconst fbRows = $('Get Feedback (by account)').all().map(i => i.json).filter(r => r && r.verdict);\nconst fbText = fbRows.length ? fbRows.map(f => `- was '${f.verdict}', correct '${f.correct_type || ''}': ${f.reason || ''}`).join('\\n') : 'None.';\nconst context = ctxRow.context ? JSON.stringify(ctxRow.context) : 'No stored context.';\nconst userMessage = `Account: ${account}\\n\\nKnown context:\\n${context}\\n\\nFeedback summary for this account:\\n${summary}\\n\\nRecent corrections:\\n${fbText}\\n\\nTranscript:\\n${transcript}`;\nreturn [{ json: { account, callId, userMessage } }];"
+        "jsCode": "const prep=$('Prep').first().json;const ctx=$('Read context').first().json;let projects=ctx.projects;if(typeof projects==='string'){try{projects=JSON.parse(projects);}catch(e){projects=[];}}projects=Array.isArray(projects)?projects:[];const titleL=(prep.title||'').toLowerCase();let proj=projects.find(p=>{const nm=(p.name||'').toLowerCase();if(!nm)return false;const tok=nm.split(/[^a-z0-9]+/).filter(w=>w.length>=3);return tok.some(w=>titleL.includes(w));})||null;const project_id=proj?proj.id:null;const projLine=proj?('IDENTIFIED PROJECT: '+proj.name):'IDENTIFIED PROJECT: (none matched - leave project null)';const lines=projects.length?projects.map(p=>'- '+p.name+(p.value?(' (GBP '+p.value+')'):'')+(p.status?(' ['+p.status+']'):'')).join('\\n'):'(no known projects yet)';const kn={};for(const it of $('Load TN knowledge').all()){kn[it.json.key]=it.json.content;}const systemMessage='You are the signal classifier for the Tecknuovo second brain. Apply the frameworks below.\\n\\n[SIGNAL DEFINITIONS]\\n'+(kn.signal_definitions||'')+'\\n\\n[RISK FRAMEWORK]\\n'+(kn.risk_framework||'')+'\\n\\n[OPPORTUNITY FRAMEWORK]\\n'+(kn.opportunity_framework||'')+'\\n\\n[TONE OF VOICE]\\n'+(kn.tone_of_voice||'')+'\\n\\nReturn ONLY JSON with a top-level signals array. Each signal has these fields: type (one of risk, opportunity, update, people), subtype, summary, quote, suggested_action, details. Score STRICTLY using the frameworks above. For a RISK, details has risk_category (one of the 14), likelihood (1 to 5) and impact (1 to 5). For an OPPORTUNITY, details has networks_total (the NETWORKS score out of 40). Otherwise details is empty. Do NOT include a confidence field; it is computed from your scores. A call may contain several signals; ground each in an exact transcript quote.';const user='ACCOUNT: '+prep.account+'\\n'+projLine+'\\nKNOWN PROJECTS / SOWs:\\n'+lines+'\\n\\nCALL: '+prep.title+'\\nTRANSCRIPT:\\n'+prep.transcript;return [{json:{systemMessage,user,account:prep.account,title:prep.title,dedup_key:prep.dedup_key,transcript:prep.transcript,account_id:ctx.account_id,project_id}}];"
       },
-      "id": "code_input",
-      "name": "Build Agent Input",
+      "id": "70edab1c-95eb-470f-ad52-8623144fc603",
+      "name": "Assemble context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2780, 300]
+      "position": [7456, 2704]
+    },
+    {
+      "parameters": { "model": "gpt-4o-mini", "options": {} },
+      "id": "0533ab00-37fa-4c3c-8732-d85864206c9c",
+      "name": "Azure OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+      "typeVersion": 1,
+      "position": [7584, 2896],
+      "credentials": { "azureOpenAiApi": { "id": "W7KKkeJLvjngHgZA", "name": "Azure Open AI account" } }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"signals\":[{\"type\":\"risk\",\"subtype\":\"delivery slip\",\"summary\":\"...\",\"quote\":\"...\",\"suggested_action\":\"...\",\"details\":{\"risk_category\":\"Operational Delivery\",\"likelihood\":3,\"impact\":3}}]}"
+      },
+      "id": "648facc7-fe2c-49de-a6fa-4aa06288ca38",
+      "name": "Signals Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [7776, 2896]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.userMessage }}",
-        "options": {
-          "systemMessage": "You are Tecknuovo's delivery intelligence analyst. Read the call transcript and extract ONLY the signals that matter to delivery, using the known context and prior corrections to classify accurately. Return ONLY valid JSON, no prose, in exactly this shape: {\"signals\":[{\"type\":\"risk|opportunity|update|people\",\"summary\":\"one line\",\"quote\":\"exact words from the transcript\",\"suggested_action\":\"one line\",\"confidence\":0.0}]}. Use only those four types. If nothing is material, return {\"signals\":[]}."
-        }
+        "text": "={{ $json.user }}",
+        "hasOutputParser": true,
+        "options": { "systemMessage": "={{ $json.systemMessage }}" }
       },
-      "id": "agent1",
-      "name": "AI Agent: Extract Signals",
+      "id": "67c9e23a-768f-4af4-9475-c4a568c2a115",
+      "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [2980, 300],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": { "model": "YOUR-DEPLOYMENT-NAME", "options": {} },
-      "id": "model1",
-      "name": "Azure OpenAI Chat Model",
-      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
-      "typeVersion": 1,
-      "position": [2980, 500]
+      "typeVersion": 1.9,
+      "position": [7680, 2704]
     },
     {
       "parameters": {
-        "jsCode": "// Parse the agent output, validate, set status by confidence floor\nconst out = ($input.first().json.output ?? '').toString().trim();\nconst cleaned = out.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(cleaned); } catch (e) { throw new Error('Model did not return valid JSON: ' + out.slice(0, 200)); }\nconst allowed = ['risk', 'opportunity', 'update', 'people'];\nconst account = $('Build Agent Input').item.json.account;\nconst callId = $('Build Agent Input').item.json.callId;\nconst signals = (parsed.signals || [])\n  .filter(s => allowed.includes(s.type))\n  .map(s => ({ ...s, account, callId, status: Number(s.confidence) >= 0.6 ? 'new' : 'review' }));\nif (!signals.length) return [{ json: { account, callId, note: 'no material signals' } }];\nreturn signals.map(s => ({ json: s }));"
+        "jsCode": "const a=$('Assemble context').first().json;let parsed=$json.output;if(typeof parsed==='string'){parsed=parsed.replace(/```json/gi,'').replace(/```/g,'').trim();try{parsed=JSON.parse(parsed);}catch(e){parsed={signals:[]};}}if(!parsed||typeof parsed!=='object')parsed={signals:[]};if(!Array.isArray(parsed.signals))parsed.signals=[];const types=['opportunity','risk','update','people'];const SQ=String.fromCharCode(39);const q=s=>(s===null||s===undefined||s==='')?'NULL':SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const sigs=parsed.signals.filter(s=>s&&types.includes(String(s.type||'').toLowerCase()));const rows=sigs.map(s=>{const t=String(s.type).toLowerCase();const d=(s.details&&typeof s.details==='object')?s.details:{};let conf='NULL';if(t==='risk'){const L=Number(d.likelihood)||0,I=Number(d.impact)||0,score=L*I;d.likelihood=L;d.impact=I;d.score=score;d.band=score>=20?'Critical':score>=12?'High':score>=8?'Medium':score>=4?'Low-Medium':'Low';if(score>0)conf=Math.round(score/25*100);}else if(t==='opportunity'){const nw=(d.networks&&typeof d.networks==='object')?d.networks:{};let total=0,any=false;['n','e','t','w','o','r','k','s'].forEach(k=>{const v=Number(nw[k]);if(nw[k]!==undefined&&!isNaN(v)){total+=v;any=true;}});if(!any&&d.networks_total!=null&&d.networks_total!==''){total=Number(d.networks_total)||0;any=true;}d.networks_total=total;d.band=total>=28?'High':total>=16?'Moderate':'Low';if(any)conf=Math.round(total/40*100);}return '('+q(t)+','+q(s.subtype)+','+q(s.summary)+','+q(s.quote)+','+q(s.suggested_action)+','+conf+','+q(JSON.stringify(d))+'::jsonb)';});const acctId=a.account_id?q(a.account_id):'NULL';const projId=a.project_id?q(a.project_id):'NULL';let sql;if(!rows.length){sql='SELECT '+SQ+'no signals'+SQ+' AS note;';}else{sql='WITH c AS (INSERT INTO calls (title,account_id,project_id,source,dedup_key,transcript) VALUES ('+q(a.title)+','+acctId+','+projId+','+q('mock')+','+q(a.dedup_key)+','+q(a.transcript)+') RETURNING id) INSERT INTO signals (call_id,account_id,project_id,type,subtype,summary,quote,suggested_action,confidence,details) SELECT c.id,'+acctId+','+projId+',v.type,v.subtype,v.summary,v.quote,v.action,v.conf::numeric,v.details FROM c,(VALUES '+rows.join(',')+') AS v(type,subtype,summary,quote,action,conf,details);';}return [{json:{sql,signal_count:rows.length}}];"
       },
-      "id": "code_parse",
-      "name": "Parse & Validate",
+      "id": "5c91f75f-fcab-422c-8045-89fa130729e2",
+      "name": "Build store SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3200, 300],
-      "onError": "continueErrorOutput"
+      "position": [7888, 2704]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=-- file each signal (status 'review' = low confidence, routed to human in Observability)\nINSERT INTO signals (account_id, call_id, type, summary, quote, suggested_action, confidence, status)\nVALUES ((SELECT id FROM accounts WHERE name = '{{ $json.account }}'),\n        {{ $json.callId ? \"'\" + $json.callId + \"'\" : 'NULL' }},\n        '{{ $json.type }}', '{{ $json.summary }}', '{{ $json.quote }}',\n        '{{ $json.suggested_action }}', {{ $json.confidence || 0 }}, '{{ $json.status }}');",
+        "query": "{{ $json.sql }}",
         "options": {}
       },
-      "id": "pg_sig",
-      "name": "Insert Signals",
+      "id": "ca42fc77-7f2d-4b94-9183-75c58246e4aa",
+      "name": "Store",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [3400, 300],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=-- success: mark processed + log\nUPDATE inbox SET status = 'done' WHERE dedup_key = '{{ $('Normalize + Dedup').item.json.dedupKey }}';\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('main_pipeline', '{{ $('Normalize + Dedup').item.json.dedupKey }}', true, now());",
-        "options": {}
-      },
-      "id": "pg_done",
-      "name": "Inbox: mark done + log",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [3620, 220]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=-- failure: mark failed so it can be retried, never lost\nUPDATE inbox SET status = 'failed', attempts = COALESCE(attempts,0) + 1 WHERE dedup_key = '{{ $('Normalize + Dedup').item.json.dedupKey }}';\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('main_pipeline', '{{ $('Normalize + Dedup').item.json.dedupKey }}', false, now());",
-        "options": {}
-      },
-      "id": "pg_failed",
-      "name": "Inbox: mark FAILED + log",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [3620, 400]
+      "typeVersion": 2.5,
+      "position": [8080, 2704],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     }
   ],
   "connections": {
-    "New Call (Webhook)": { "main": [[{ "node": "Normalize + Dedup", "type": "main", "index": 0 }]] },
-    "Normalize + Dedup": { "main": [[{ "node": "Inbox: insert pending", "type": "main", "index": 0 }]] },
-    "Inbox: insert pending": { "main": [[{ "node": "Get Account Context", "type": "main", "index": 0 }]] },
-    "Get Account Context": { "main": [[{ "node": "Assess Freshness", "type": "main", "index": 0 }]] },
-    "Assess Freshness": { "main": [[{ "node": "Needs enrichment?", "type": "main", "index": 0 }]] },
-    "Needs enrichment?": { "main": [ [ { "node": "Get Monday.com", "type": "main", "index": 0 } ], [ { "node": "Get Feedback (by account)", "type": "main", "index": 0 } ] ] },
-    "Get Monday.com": { "main": [[{ "node": "Get SharePoint", "type": "main", "index": 0 }]] },
-    "Get SharePoint": { "main": [[{ "node": "Get Org & SOW", "type": "main", "index": 0 }]] },
-    "Get Org & SOW": { "main": [[{ "node": "Build Context", "type": "main", "index": 0 }]] },
-    "Build Context": { "main": [[{ "node": "Save Account Context", "type": "main", "index": 0 }]] },
-    "Save Account Context": { "main": [[{ "node": "Get Feedback (by account)", "type": "main", "index": 0 }]] },
-    "Get Feedback (by account)": { "main": [[{ "node": "Store Call", "type": "main", "index": 0 }]] },
-    "Store Call": { "main": [[{ "node": "Build Agent Input", "type": "main", "index": 0 }]] },
-    "Build Agent Input": { "main": [[{ "node": "AI Agent: Extract Signals", "type": "main", "index": 0 }]] },
-    "Azure OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Agent: Extract Signals", "type": "ai_languageModel", "index": 0 }]] },
-    "AI Agent: Extract Signals": { "main": [ [ { "node": "Parse & Validate", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] },
-    "Parse & Validate": { "main": [ [ { "node": "Insert Signals", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] },
-    "Insert Signals": { "main": [ [ { "node": "Inbox: mark done + log", "type": "main", "index": 0 } ], [ { "node": "Inbox: mark FAILED + log", "type": "main", "index": 0 } ] ] }
+    "Run": { "main": [[{ "node": "Prep", "type": "main", "index": 0 }]] },
+    "Prep": { "main": [[{ "node": "Ensure account & check", "type": "main", "index": 0 }]] },
+    "Ensure account & check": { "main": [[{ "node": "Cache miss?", "type": "main", "index": 0 }]] },
+    "Cache miss?": { "main": [ [ { "node": "Monday: SOWs", "type": "main", "index": 0 } ], [ { "node": "Read context", "type": "main", "index": 0 } ] ] },
+    "Monday: SOWs": { "main": [[{ "node": "Build enrich SQL", "type": "main", "index": 0 }]] },
+    "Build enrich SQL": { "main": [[{ "node": "Upsert enrich", "type": "main", "index": 0 }]] },
+    "Upsert enrich": { "main": [[{ "node": "Read context", "type": "main", "index": 0 }]] },
+    "Read context": { "main": [[{ "node": "Load TN knowledge", "type": "main", "index": 0 }]] },
+    "Load TN knowledge": { "main": [[{ "node": "Assemble context", "type": "main", "index": 0 }]] },
+    "Assemble context": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "Azure OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Signals Output Parser": { "ai_outputParser": [[{ "node": "AI Agent", "type": "ai_outputParser", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Build store SQL", "type": "main", "index": 0 }]] },
+    "Build store SQL": { "main": [[{ "node": "Store", "type": "main", "index": 0 }]] }
   },
-  "settings": {},
-  "active": false
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "c079bda3b47b252bbd53b0a9a784b7bc49f99b65cb844d664842ae1763345827" }
 }
