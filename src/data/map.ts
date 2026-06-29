@@ -1,8 +1,18 @@
 // Maps API rows -> the dashboard's existing domain types. The DB is sparser than
 // the demo model, so fields the pipeline doesn't (yet) produce get safe defaults.
 // As the pipeline grows richer, fill these in here only - the UI never changes.
-import type { Account, Project, Signal, SignalType, SignalStatus, Severity, Health } from './types'
+import type { Account, Project, Signal, SignalType, SignalStatus, Severity, Health, SourceCall } from './types'
 import type { ApiAccount, ApiProject, ApiSignal } from './api'
+
+// Infer the call type from its title (governance / standup / weekly / kickoff).
+export function inferCallType(title: string | null): SourceCall['type'] {
+  const t = (title || '').toLowerCase()
+  if (t.includes('governance')) return 'Monthly governance'
+  if (t.includes('standup') || t.includes('stand-up')) return 'Daily standup'
+  if (t.includes('weekly')) return 'Weekly report'
+  if (t.includes('kick')) return 'Client kickoff'
+  return 'Check-in'
+}
 
 const TODAY = new Date().toISOString().slice(0, 10)
 const toDate = (ts: string | null) => (ts || '').slice(0, 10) || TODAY

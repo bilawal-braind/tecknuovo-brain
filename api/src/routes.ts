@@ -45,6 +45,17 @@ router.get('/accounts/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Calls (the source Teams calls). The dashboard groups signals under these.
+router.get('/calls', async (_req, res, next) => {
+  try {
+    const r = await q(
+      `SELECT id, account_id, project_id, title, call_date, source
+       FROM calls ORDER BY call_date DESC NULLS LAST LIMIT 500`
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
 // Flat projects list (the dashboard hydrates its org tree from this + /accounts).
 router.get('/projects', async (_req, res, next) => {
   try {
@@ -75,7 +86,7 @@ router.get('/signals', async (req, res, next) => {
     params.push(offset); const op = params.length;
     const r = await q(
       `SELECT s.id, s.type, s.subtype, s.summary, s.quote, s.suggested_action, s.confidence, s.status, s.details, s.created_at,
-              s.account_id, s.project_id,
+              s.account_id, s.project_id, s.call_id,
               a.name AS account, p.name AS project
        FROM signals s
        LEFT JOIN accounts a ON a.id = s.account_id

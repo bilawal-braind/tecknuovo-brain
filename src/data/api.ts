@@ -48,8 +48,19 @@ export type ApiSignal = {
   project: string | null
   account_id: string | null
   project_id: string | null
+  call_id: string | null
+}
+
+export type ApiCall = {
+  id: string
+  account_id: string | null
+  project_id: string | null
+  title: string | null
+  call_date: string | null
+  source: string | null
 }
 
 export const fetchAccounts = () => get<ApiAccount[]>('/api/accounts')
 export const fetchProjects = () => get<ApiProject[]>('/api/projects')
 export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
+export const fetchCalls = () => get<ApiCall[]>('/api/calls')
