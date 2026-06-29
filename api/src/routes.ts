@@ -7,7 +7,13 @@ export const router = Router();
 router.get('/accounts', async (_req, res, next) => {
   try {
     const r = await q(
-      `SELECT a.id, a.name, a.pod, a.health,
+      `SELECT a.id, a.name, a.pod,
+              -- health is DERIVED from open risk signals (Monday has no client RAG)
+              CASE
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
+                ELSE 'green'
+              END AS health,
               (SELECT count(*) FROM signals s WHERE s.account_id = a.id AND s.status = 'new') AS open_signals
        FROM accounts a ORDER BY a.name`
     );
@@ -21,8 +27,13 @@ router.get('/accounts/:id', async (req, res, next) => {
     const acc = await q('SELECT * FROM accounts WHERE id = $1', [req.params.id]);
     if (!acc.rows.length) return res.status(404).json({ error: 'not found' });
     const projects = await q(
-      `SELECT id, name, sow_value, sow_status, rag, start_date, end_date
-       FROM projects WHERE account_id = $1 ORDER BY sow_value DESC NULLS LAST`,
+      `SELECT p.id, p.name, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
+              CASE
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
+                ELSE 'green'
+              END AS rag
+       FROM projects p WHERE p.account_id = $1 ORDER BY p.sow_value DESC NULLS LAST`,
       [req.params.id]
     );
     const signals = await q(
@@ -38,8 +49,13 @@ router.get('/accounts/:id', async (req, res, next) => {
 router.get('/projects', async (_req, res, next) => {
   try {
     const r = await q(
-      `SELECT id, name, account_id, sow_value, sow_status, rag, start_date, end_date
-       FROM projects ORDER BY sow_value DESC NULLS LAST`
+      `SELECT p.id, p.name, p.account_id, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
+              CASE
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
+                ELSE 'green'
+              END AS rag
+       FROM projects p ORDER BY p.sow_value DESC NULLS LAST`
     );
     res.json(r.rows);
   } catch (e) { next(e); }
