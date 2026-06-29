@@ -78,6 +78,17 @@ router.get('/projects', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Associates (consultants on the ground). No PII (no email/phone).
+router.get('/associates', async (_req, res, next) => {
+  try {
+    const r = await q(
+      `SELECT id, name, account_id, project_or_programme, placement_status
+       FROM associates ORDER BY name`
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
 // Signals feed — filterable by type/status/account, paginated.
 router.get('/signals', async (req, res, next) => {
   try {

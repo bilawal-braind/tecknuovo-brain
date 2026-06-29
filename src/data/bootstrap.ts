@@ -6,9 +6,9 @@
 // Note: compliance, weekly reports, trends and observability are not produced by the
 // pipeline yet, so they stay as demo data in both modes.
 import { isLive } from './source'
-import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls } from './api'
+import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates } from './api'
 import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
-import { accounts, projects, people } from './org'
+import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
 import { calls } from './calls'
 import type { Call } from './calls'
@@ -30,11 +30,12 @@ export async function bootstrap(): Promise<BootResult> {
   if (!isLive) return { source: 'mock' }
 
   try {
-    const [aRows, pRows, sRows, cRows] = await Promise.all([
+    const [aRows, pRows, sRows, cRows, asRows] = await Promise.all([
       fetchAccounts(),
       fetchProjects(),
       fetchSignals(),
       fetchCalls(),
+      fetchAssociates(),
     ])
 
     const liveAccounts = aRows.map(mapAccount)
@@ -58,6 +59,18 @@ export async function bootstrap(): Promise<BootResult> {
         if (!dmPeople.has(id)) dmPeople.set(id, { id, name: nm, role: 'Delivery Manager' })
         liveProjects[i].deliveryManager = id
       }
+    })
+
+    // Consultants (associates) -> people + project.advisors.
+    const consultantPeople: Person[] = asRows.map((as) => ({ id: 'as-' + as.id, name: as.name, role: 'Associate' }))
+    asRows.forEach((as) => {
+      const pop = (as.project_or_programme || '').toLowerCase()
+      const proj = liveProjects.find((p) => {
+        if (p.accountId !== as.account_id) return false
+        const toks = p.name.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3)
+        return toks.some((t) => pop.includes(t))
+      })
+      if (proj) proj.advisors.push('as-' + as.id)
     })
 
     // Real call metadata, keyed by id, so signals carry the true call title/date/type.
@@ -112,7 +125,8 @@ export async function bootstrap(): Promise<BootResult> {
     replace(projects, liveProjects)
     replace(signals, liveSignals)
     replace(calls, liveCalls)
-    if (dmPeople.size) replace(people, [...dmPeople.values()])
+    if (dmPeople.size || consultantPeople.length) replace(people, [...dmPeople.values(), ...consultantPeople])
+    if (consultantPeople.length) replace(advisors, consultantPeople)
 
     return {
       source: 'live',

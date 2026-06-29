@@ -1,5 +1,5 @@
 {
-  "name": "TN Brain · 4 · Monday People Sync (pod + DM)",
+  "name": "TN Brain · 4 · Monday Org Sync (pod + DM + consultants)",
   "nodes": [
     {
       "parameters": {},
@@ -44,13 +44,33 @@
     },
     {
       "parameters": {
-        "jsCode": "const org=$('Read org').all().map(r=>r.json);const boards=(($('Monday cadence').first().json||{}).data||{}).boards||[];const items=(boards[0]&&boards[0].items_page&&boards[0].items_page.items)?boards[0].items_page.items:[];const SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};const groups={};for(const it of items){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}const gkeys=Object.keys(groups);const stmts=[];for(const acc of org){const an=(acc.account_name||'').toLowerCase();let projs=acc.projects;if(typeof projs==='string'){try{projs=JSON.parse(projs);}catch(e){projs=[];}}if(!Array.isArray(projs))projs=[];const gpod=gkeys.find(k=>an&&k.toLowerCase().includes(an)&&groups[k].pod);if(gpod){stmts.push('UPDATE accounts SET pod='+qq(groups[gpod].pod)+' WHERE id='+qq(acc.account_id)+';');}for(const p of projs){const toks=(p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);let gk=gkeys.find(k=>{const kl=k.toLowerCase();return an&&kl.includes(an)&&toks.some(t=>kl.includes(t));});if(!gk)gk=gkeys.find(k=>{const kl=k.toLowerCase();return toks.some(t=>kl.includes(t));});if(gk&&groups[gk].dm){stmts.push('UPDATE projects SET delivery_manager_name='+qq(groups[gk].dm)+', last_verified=now() WHERE id='+qq(p.id)+';');}}}const sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';return [{json:{sql,matched:stmts.length}}];"
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "API-Version", "value": "2026-04" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1118885420]){ items_page(limit:200){ items { id name column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } } }\"}",
+        "options": {}
+      },
+      "id": "psassoc",
+      "name": "Monday associates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 300],
+      "credentials": { "httpHeaderAuth": { "id": "yDd9RQMyxouZTh46", "name": "Monday API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const org=$('Read org').all().map(r=>r.json);const cadB=(($('Monday cadence').first().json||{}).data||{}).boards||[];const cadItems=(cadB[0]&&cadB[0].items_page&&cadB[0].items_page.items)?cadB[0].items_page.items:[];const asB=(($('Monday associates').first().json||{}).data||{}).boards||[];const asItems=(asB[0]&&asB[0].items_page&&asB[0].items_page.items)?asB[0].items_page.items:[];const SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};const groups={};for(const it of cadItems){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}const gkeys=Object.keys(groups);const stmts=[];for(const acc of org){const an=(acc.account_name||'').toLowerCase();let projs=acc.projects;if(typeof projs==='string'){try{projs=JSON.parse(projs);}catch(e){projs=[];}}if(!Array.isArray(projs))projs=[];const gpod=gkeys.find(k=>an&&k.toLowerCase().includes(an)&&groups[k].pod);if(gpod){stmts.push('UPDATE accounts SET pod='+qq(groups[gpod].pod)+' WHERE id='+qq(acc.account_id)+';');}for(const p of projs){const toks=(p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);let gk=gkeys.find(k=>{const kl=k.toLowerCase();return an&&kl.includes(an)&&toks.some(t=>kl.includes(t));});if(!gk)gk=gkeys.find(k=>{const kl=k.toLowerCase();return toks.some(t=>kl.includes(t));});if(gk&&groups[gk].dm){stmts.push('UPDATE projects SET delivery_manager_name='+qq(groups[gk].dm)+', last_verified=now() WHERE id='+qq(p.id)+';');}}}for(const it of asItems){const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const team=col(cv,'team');const placement=col(cv,'status0');const acc=org.find(a=>a.account_name&&cname.toLowerCase().includes(String(a.account_name).toLowerCase()));const accId=acc?acc.account_id:null;stmts.push('INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES ('+qq(it.id)+','+qq(it.name)+','+(accId?qq(accId):'NULL')+','+qq(cname)+','+(team?qq(team):'NULL')+','+(placement?qq(placement):'NULL')+',now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now();');}const sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';return [{json:{sql,statements:stmts.length}}];"
       },
       "id": "psbuild",
       "name": "Build SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1040, 300]
+      "position": [1260, 300]
     },
     {
       "parameters": {
@@ -62,14 +82,15 @@
       "name": "Apply",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1260, 300],
+      "position": [1480, 300],
       "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
     }
   ],
   "connections": {
     "Run": { "main": [[{ "node": "Read org", "type": "main", "index": 0 }]] },
     "Read org": { "main": [[{ "node": "Monday cadence", "type": "main", "index": 0 }]] },
-    "Monday cadence": { "main": [[{ "node": "Build SQL", "type": "main", "index": 0 }]] },
+    "Monday cadence": { "main": [[{ "node": "Monday associates", "type": "main", "index": 0 }]] },
+    "Monday associates": { "main": [[{ "node": "Build SQL", "type": "main", "index": 0 }]] },
     "Build SQL": { "main": [[{ "node": "Apply", "type": "main", "index": 0 }]] }
   },
   "pinData": {},

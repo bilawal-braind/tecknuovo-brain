@@ -65,7 +65,16 @@ export type ApiCall = {
   source: string | null
 }
 
+export type ApiAssociate = {
+  id: string
+  name: string
+  account_id: string | null
+  project_or_programme: string | null
+  placement_status: string | null
+}
+
 export const fetchAccounts = () => get<ApiAccount[]>('/api/accounts')
 export const fetchProjects = () => get<ApiProject[]>('/api/projects')
 export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
 export const fetchCalls = () => get<ApiCall[]>('/api/calls')
+export const fetchAssociates = () => get<ApiAssociate[]>('/api/associates')
