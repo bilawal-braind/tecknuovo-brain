@@ -1,0 +1,55 @@
+// Thin typed client for the Read API. One place that knows about HTTP, the base
+// URL and the auth header; everything above this layer works in domain types.
+import { API_URL, API_TOKEN } from './source'
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {},
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`GET ${path} -> ${res.status} ${res.statusText}${body ? ` (${body.slice(0, 200)})` : ''}`)
+  }
+  return (await res.json()) as T
+}
+
+// ── Shapes the API actually returns (snake_case, nullable as the DB allows) ──
+export type ApiAccount = {
+  id: string
+  name: string
+  pod: string | null
+  health: string | null
+  open_signals: number
+}
+
+export type ApiProject = {
+  id: string
+  name: string
+  account_id: string
+  sow_value: number | string | null
+  sow_status: string | null
+  rag: string | null
+  start_date: string | null
+  end_date: string | null
+}
+
+export type ApiSignal = {
+  id: string
+  type: string
+  subtype: string | null
+  summary: string | null
+  quote: string | null
+  suggested_action: string | null
+  confidence: number | string | null
+  status: string | null
+  details: unknown
+  created_at: string
+  account: string | null
+  project: string | null
+  account_id: string | null
+  project_id: string | null
+}
+
+export const fetchAccounts = () => get<ApiAccount[]>('/api/accounts')
+export const fetchProjects = () => get<ApiProject[]>('/api/projects')
+export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
