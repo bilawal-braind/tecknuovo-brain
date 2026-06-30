@@ -5,6 +5,7 @@ import { ClientPartner } from './components/dashboards/ClientPartner'
 import { Leadership } from './components/dashboards/Leadership'
 import { Observability } from './components/dashboards/Observability'
 import { SecondBrainFlow } from './components/vision/SecondBrainFlow'
+import { QA } from './components/qa/QA'
 import { Landing } from './components/Landing'
 
 // Local dev serves one dashboard per port via VITE_DASH (npm run dev:delivery, etc.).
@@ -25,6 +26,7 @@ export default function App() {
   }, [])
 
   if (route === 'flow') return <SecondBrainFlow />
+  if (route === 'qa') return <QA />
 
   const dash =
     route === 'partner' ? <ClientPartner /> :

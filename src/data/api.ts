@@ -13,6 +13,16 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}) },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`)
+  return (await res.json()) as T
+}
+
 // ── Shapes the API actually returns (snake_case, nullable as the DB allows) ──
 export type ApiAccount = {
   id: string
@@ -78,3 +88,26 @@ export const fetchProjects = () => get<ApiProject[]>('/api/projects')
 export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
 export const fetchCalls = () => get<ApiCall[]>('/api/calls')
 export const fetchAssociates = () => get<ApiAssociate[]>('/api/associates')
+
+// ── QA & Evaluation ──
+export type QaAuditRow = {
+  id: string
+  type: string
+  summary: string | null
+  quote: string | null
+  confidence: number | string | null
+  details: unknown
+  account: string | null
+  project: string | null
+  call_title: string | null
+  created_at: string
+  verdict: string | null
+}
+export type QaData = {
+  totals: { signals: number; calls: number; reviewed: number; agreed: number }
+  byType: { type: string; n: number; avg_conf: number | null }[]
+  audit: QaAuditRow[]
+}
+export const fetchQA = () => get<QaData>('/api/qa')
+export const submitFeedback = (signalId: string, verdict: 'correct' | 'incorrect', givenBy?: string) =>
+  post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, given_by: givenBy })

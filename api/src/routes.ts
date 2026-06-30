@@ -89,6 +89,33 @@ router.get('/associates', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// QA & Evaluation — live transparency metrics + an audit trail with source quotes.
+router.get('/qa', async (_req, res, next) => {
+  try {
+    const byType = await q(
+      `SELECT type, count(*)::int AS n, round(avg(confidence))::int AS avg_conf
+       FROM signals GROUP BY type ORDER BY type`
+    );
+    const totals = await q(
+      `SELECT (SELECT count(*)::int FROM signals) AS signals,
+              (SELECT count(*)::int FROM calls)   AS calls,
+              (SELECT count(*)::int FROM feedback) AS reviewed,
+              (SELECT count(*)::int FROM feedback WHERE verdict = 'correct') AS agreed`
+    );
+    const audit = await q(
+      `SELECT s.id, s.type, s.summary, s.quote, s.confidence, s.details,
+              a.name AS account, p.name AS project, c.title AS call_title, s.created_at,
+              (SELECT verdict FROM feedback f WHERE f.signal_id = s.id ORDER BY f.created_at DESC LIMIT 1) AS verdict
+       FROM signals s
+       LEFT JOIN accounts a ON a.id = s.account_id
+       LEFT JOIN projects p ON p.id = s.project_id
+       LEFT JOIN calls    c ON c.id = s.call_id
+       ORDER BY s.created_at DESC LIMIT 100`
+    );
+    res.json({ totals: totals.rows[0], byType: byType.rows, audit: audit.rows });
+  } catch (e) { next(e); }
+});
+
 // Signals feed — filterable by type/status/account, paginated.
 router.get('/signals', async (req, res, next) => {
   try {
