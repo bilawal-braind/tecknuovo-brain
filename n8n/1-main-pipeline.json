@@ -139,7 +139,7 @@
     },
     {
       "parameters": {
-        "jsonSchemaExample": "{\"signals\":[{\"type\":\"risk\",\"subtype\":\"delivery slip\",\"summary\":\"...\",\"quote\":\"...\",\"suggested_action\":\"...\",\"details\":{\"risk_category\":\"Operational Delivery\",\"likelihood\":3,\"impact\":3}}],\"budget_remaining\":0}"
+        "jsonSchemaExample": "{\"signals\":[{\"type\":\"risk\",\"subtype\":\"delivery slip\",\"summary\":\"...\",\"quote\":\"...\",\"suggested_action\":\"...\",\"details\":{\"risk_category\":\"Operational Delivery\",\"likelihood\":3,\"impact\":3}},{\"type\":\"opportunity\",\"subtype\":\"extension\",\"summary\":\"...\",\"quote\":\"...\",\"suggested_action\":\"...\",\"details\":{\"networks_total\":24}}],\"budget_remaining\":0}"
       },
       "id": "648facc7-fe2c-49de-a6fa-4aa06288ca38",
       "name": "Signals Output Parser",
