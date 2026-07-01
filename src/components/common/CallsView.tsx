@@ -5,6 +5,7 @@ import { transcriptFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
 import { SignalBadge, ConfidenceBar, SeverityTag } from './primitives'
+import { QAReview } from './QAReview'
 import { fmt } from './SignalLayer'
 
 const TODAY = '2026-06-18'
@@ -121,6 +122,7 @@ function CallCard({ call }: { call: Call }) {
                   <p className="mt-2 text-[13px] font-medium leading-snug">{s.summary}</p>
                   <p className="mt-1 text-[12px] italic leading-relaxed text-muted">“{s.quote}”</p>
                   <p className="mt-1.5 text-[11px] text-muted">→ {s.suggestedAction} <span className="text-muted-2">({s.suggestedOwner.person} · {s.suggestedOwner.role})</span></p>
+                  <div className="mt-2.5"><QAReview signalId={s.id} /></div>
                 </div>
               ))}
             </div>
