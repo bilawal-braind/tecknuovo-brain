@@ -7,6 +7,7 @@ import { riskScope } from '../../data/signals'
 import { callForSignal } from '../../data/calls'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { CallTranscript } from './CallsView'
+import { QAReview } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
@@ -55,6 +56,11 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
               <CallTranscript call={call} />
             </div>
           )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-2.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-2">Is this right?</span>
+            <QAReview signalId={signal.id} />
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {onOpenAccount && (

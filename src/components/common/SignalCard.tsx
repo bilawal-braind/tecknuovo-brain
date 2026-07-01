@@ -3,6 +3,7 @@ import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
+import { QAReview } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 
 export function SignalCard({ signal, showAccount = true, showAction = true }: { signal: Signal; showAccount?: boolean; showAction?: boolean }) {
@@ -48,6 +49,7 @@ export function SignalCard({ signal, showAccount = true, showAction = true }: { 
           <SeverityTag severity={signal.severity} />
           {signal.value && <span className="text-[11px] text-muted">{signal.value}</span>}
           <ConfidenceBar value={signal.confidence} />
+          <QAReview signalId={signal.id} />
         </div>
         {showAction && (
           done ? (
