@@ -22,7 +22,7 @@ export function QA() {
     if (verdicts[row.id]) return // one review per signal this session
     setVerdicts((v) => ({ ...v, [row.id]: verdict }))
     setExtra((x) => ({ reviewed: x.reviewed + 1, agreed: x.agreed + (verdict === 'correct' ? 1 : 0) }))
-    try { await submitFeedback(row.id, verdict, 'QA reviewer') } catch { /* optimistic; ignore */ }
+    try { await submitFeedback(row.id, verdict) } catch { /* optimistic; ignore */ }
   }
 
   const reviewed = (data?.totals.reviewed ?? 0) + extra.reviewed
