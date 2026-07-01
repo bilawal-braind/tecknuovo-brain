@@ -1,10 +1,14 @@
 // Thin typed client for the Read API. One place that knows about HTTP, the base
 // URL and the auth header; everything above this layer works in domain types.
 import { API_URL, API_TOKEN } from './source'
+import { getAuthToken } from './auth'
+
+// The signed-in user's token (Entra SSO) if present, else the dev token.
+const bearer = () => getAuthToken() || API_TOKEN
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {},
+    headers: bearer() ? { Authorization: `Bearer ${bearer()}` } : {},
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -16,7 +20,7 @@ async function get<T>(path: string): Promise<T> {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(bearer() ? { Authorization: `Bearer ${bearer()}` } : {}) },
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`)
@@ -72,6 +76,7 @@ export type ApiCall = {
   project_id: string | null
   title: string | null
   call_date: string | null
+  transcript: string | null
   source: string | null
 }
 
@@ -109,6 +114,10 @@ export type QaData = {
   audit: QaAuditRow[]
 }
 export const fetchQA = () => get<QaData>('/api/qa')
+
+// ── Who am I (role + scope from the signed-in token) ──
+export type Me = { email: string; role: string; scope: string; name: string | null }
+export const fetchMe = () => get<Me>('/api/me')
 export const submitFeedback = (
   signalId: string,
   verdict: 'correct' | 'incorrect' | 'relabel',

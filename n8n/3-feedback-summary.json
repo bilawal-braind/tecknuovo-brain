@@ -1,85 +1,218 @@
 {
-  "name": "TN Brain · 3 · Feedback Summary Builder",
+  "name": "TN Brain \u00b7 3 \u00b7 Feedback Summary (learning loop)",
   "nodes": [
     {
-      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "30 6 * * 1-5" } ] } },
-      "id": "sched3",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 6 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "fb_sched",
       "name": "Every weekday 06:30",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- accounts that have feedback to summarise\nSELECT DISTINCT account_id FROM feedback;",
+        "query": "SELECT f.account_id, a.name AS account, string_agg(('- was '''||f.verdict||''''||COALESCE(', should be '''||f.correct_type||'''','')||COALESCE(': '||f.reason,'')), E'\\n' ORDER BY f.created_at DESC) AS notes FROM feedback f JOIN accounts a ON a.id=f.account_id WHERE f.account_id IS NOT NULL GROUP BY f.account_id, a.name;",
         "options": {}
       },
-      "id": "pg_accts",
+      "id": "fb_acc",
       "name": "Accounts with feedback",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [420, 300]
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- all feedback for this account\nSELECT verdict, correct_type, reason FROM feedback WHERE account_id = $1 ORDER BY created_at DESC LIMIT 100;",
-        "options": {}
+        "jsCode": "const rows=$input.all().map(i=>i.json);\nreturn rows.map(r=>{\n  const notes=r.notes||'';\n  const prompt='You are refining the Tecknuovo second-brain signal classifier for the account \"'+(r.account||'')+'\".\\n'\n    +'Below are human corrections to signals we generated for this account (most recent first). '\n    +'Distil them into 3-5 short, imperative lessons the classifier should apply next time '\n    +'(e.g. \"Do not flag routine status updates as risks\"; \"Budget mentions under 50k are not opportunities\"). '\n    +'Be specific to the patterns you actually see. Return ONLY the bullet lessons, no preamble.\\n\\nCORRECTIONS:\\n'+notes;\n  return {json:{account_id:r.account_id,account:r.account,prompt}};\n});"
       },
-      "id": "pg_fb3",
-      "name": "Feedback for account",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [640, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const rows = $input.all().map(i => i.json);\nconst text = rows.map(r => `- was '${r.verdict}', correct '${r.correct_type||''}': ${r.reason||''}`).join('\\n');\nconst system = `Summarise these recurring corrections into 3-5 short bullet guidelines an analyst should remember for this account. Plain text bullets only.`;\nconst payload = { temperature: 0.2, messages: [ { role: 'system', content: system }, { role: 'user', content: text || 'No feedback.' } ] };\nreturn [{ json: { account_id: $('Accounts with feedback').item.json.account_id, payload } }];"
-      },
-      "id": "code_sum",
-      "name": "Build summary prompt",
+      "id": "fb_prompt",
+      "name": "Build prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT/chat/completions?api-version=2024-08-01-preview",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "api-key", "value": "YOUR_AZURE_OPENAI_KEY" }, { "name": "Content-Type", "value": "application/json" } ] },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.payload) }}",
-        "options": {}
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "messages": {},
+        "batching": {}
       },
-      "id": "http_llm3",
-      "name": "Azure OpenAI: Summarise",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1080, 300]
+      "id": "fb_chain",
+      "name": "Summarise (Azure)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "fb_model",
+      "name": "Azure OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+      "typeVersion": 1,
+      "position": [
+        680,
+        480
+      ],
+      "credentials": {
+        "azureOpenAiApi": {
+          "id": "W7KKkeJLvjngHgZA",
+          "name": "Azure Open AI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const e=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst summary=($json.text||$json.response||$json.output||'').trim();\nconst accId=$('Build prompt').item.json.account_id;\nif(!summary||!accId){return [];}\nconst sql=\"UPDATE accounts SET feedback_summary='\"+e(summary)+\"' WHERE id='\"+e(accId)+\"';\";\nreturn [{json:{sql,account_id:accId,chars:summary.length}}];",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "fb_build",
+      "name": "Build save SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- store precomputed summary (read by the main pipeline)\nUPDATE accounts SET feedback_summary = $2 WHERE id = $1;",
+        "query": "={{ $json.sql }}",
         "options": {}
       },
-      "id": "pg_savesum",
+      "id": "fb_save",
       "name": "Save summary",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [1300, 300]
+      "typeVersion": 2.5,
+      "position": [
+        1160,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Feedback Summary \u2014 the learning loop\n06:30 weekdays: gather all human corrections per account \u2192 ask the AI to distil 3-5 lessons \u2192 save to `accounts.feedback_summary`.\n\nThe **Main Pipeline reads this** and adds it to the classifier prompt, so the brain stops repeating corrected mistakes. Not model retraining \u2014 in-context learning.",
+        "height": 220,
+        "width": 420
+      },
+      "id": "fb_note",
+      "name": "note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        40
+      ]
     }
   ],
   "connections": {
-    "Every weekday 06:30": { "main": [[{ "node": "Accounts with feedback", "type": "main", "index": 0 }]] },
-    "Accounts with feedback": { "main": [[{ "node": "Feedback for account", "type": "main", "index": 0 }]] },
-    "Feedback for account": { "main": [[{ "node": "Build summary prompt", "type": "main", "index": 0 }]] },
-    "Build summary prompt": { "main": [[{ "node": "Azure OpenAI: Summarise", "type": "main", "index": 0 }]] },
-    "Azure OpenAI: Summarise": { "main": [[{ "node": "Save summary", "type": "main", "index": 0 }]] }
+    "Every weekday 06:30": {
+      "main": [
+        [
+          {
+            "node": "Accounts with feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accounts with feedback": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Summarise (Azure)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarise (Azure)": {
+      "main": [
+        [
+          {
+            "node": "Build save SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build save SQL": {
+      "main": [
+        [
+          {
+            "node": "Save summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Azure OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarise (Azure)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": {},
-  "active": false
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

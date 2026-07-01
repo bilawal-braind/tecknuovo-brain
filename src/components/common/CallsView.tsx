@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Search, Video, ChevronDown } from 'lucide-react'
 import type { Call } from '../../data/calls'
-import { transcriptFor } from '../../data/calls'
+import { transcriptLinesFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
 import { SignalBadge, ConfidenceBar, SeverityTag } from './primitives'
@@ -136,7 +136,7 @@ function CallCard({ call }: { call: Call }) {
 }
 
 export function CallTranscript({ call }: { call: Call }) {
-  const lines = transcriptFor(call)
+  const lines = transcriptLinesFor(call)
   return (
     <div>
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">Transcript · captured moments highlighted</div>

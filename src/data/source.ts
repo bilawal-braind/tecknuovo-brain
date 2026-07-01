@@ -13,3 +13,11 @@ export const API_URL = (env.VITE_API_URL ?? 'http://localhost:4000').replace(/\/
 
 // Dev bearer token (AUTH_MODE=token on the API). Swapped for Entra SSO at go-live.
 export const API_TOKEN = env.VITE_API_TOKEN ?? ''
+
+// ── Auth (Microsoft Entra SSO) ──
+// 'none' (default) = no login, current behaviour. 'entra' = sign in with a TN email.
+export const AUTH_MODE: 'none' | 'entra' = env.VITE_AUTH === 'entra' ? 'entra' : 'none'
+export const ENTRA_TENANT_ID = env.VITE_ENTRA_TENANT_ID ?? ''
+export const ENTRA_CLIENT_ID = env.VITE_ENTRA_CLIENT_ID ?? ''
+export const ENTRA_REDIRECT =
+  env.VITE_ENTRA_REDIRECT ?? (typeof window !== 'undefined' ? window.location.origin + '/' : '')

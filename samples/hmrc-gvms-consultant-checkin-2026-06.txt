@@ -1,0 +1,24 @@
+HMRC — GVMS New Work Orders — Fortnightly Consultant Check-in
+Date: 24 June 2026
+Attendees: Tom Beckett (TN Delivery Coordinator), Marcus Reid (Consultant, Front-end), Elena Popescu (Consultant, Back-end), Daniel Osei (Consultant, QA/Test)
+[This is a SAMPLE transcript generated for testing. This is a DC ↔ consultants check-in — no commercials discussed.]
+
+Tom Beckett (TN DC): Thanks all for joining the fortnightly. Usual agenda — delivery updates, any risks or blockers, team dynamics, and anything you're hearing from the customer side. Marcus, want to kick off?
+
+Marcus Reid (Consultant): Sure. Front-end wise, we finished the Work Orders screens and they went into the integration release, so that's done and dusted. This fortnight I'm on the reconciliation views. No blockers on my side, though I'll flag I'm a bit stretched — I'm effectively covering two workstreams since James started winding down his handover.
+
+Tom Beckett (TN DC): Noted, thanks Marcus — I'll come back to capacity. Elena?
+
+Elena Popescu (Consultant): Back-end, the integration is live in staging which is great. My blocker is the test environment — I still don't have access to the HMRC pre-prod environment for the migration testing. I raised the request nearly two weeks ago and it's stuck on their side. Until that's sorted I can't validate the migration scripts properly, and that's on the critical path for the customs reporting go-live.
+
+Tom Beckett (TN DC): That's an important one. I'll escalate the environment access today — that's a delivery risk if it drags on because it holds up the migration validation. Daniel, QA?
+
+Daniel Osei (Consultant): Testing's in decent shape. UAT for the integration passed. One thing — the volume of regression tests is growing and it's mostly manual right now. If we get the reporting module as well we'll need to think about automation, otherwise QA becomes a bottleneck. Not urgent this fortnight but worth flagging.
+
+Tom Beckett (TN DC): Good, I'll note it. On team dynamics — Marcus, you mentioned being stretched. How are you all feeling on workload generally?
+
+Marcus Reid (Consultant): Honestly, morale's good, the integration going well gave everyone a lift. But if James rolls off and we don't backfill quickly, front-end is going to be thin. It's manageable for a few weeks, not longer.
+
+Elena Popescu (Consultant): Agreed, the team's in a good place. One thing I picked up from the client stand-up — HMRC are reorganising the customs directorate next quarter, and the team we work with is going to merge with another group. Nothing confirmed, but it sounds like the scope of what they'll want from us could grow.
+
+Tom Beckett (TN DC): That's really useful, thank you Elena — I'll pass that up to Rachel and Sarah because that could be relevant commercially. Right, actions: I'll escalate Elena's pre-prod access today, flag the front-end capacity risk around James rolling off, note the QA automation point for when the reporting module lands, and pass on the directorate reorg. Anything else? Great, thanks everyone.

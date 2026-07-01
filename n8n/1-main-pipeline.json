@@ -1,23 +1,70 @@
 {
-  "name": "TN Brain · 1 · Main Pipeline",
+  "name": "TN Brain \u00b7 1 \u00b7 Main Pipeline (inbox-driven)",
   "nodes": [
     {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "sched1",
+      "name": "Every 5 min (safety sweep)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        5560,
+        2760
+      ]
+    },
+    {
       "parameters": {},
-      "id": "817c7c19-3051-4b59-b38d-917b6ea71944",
-      "name": "Run",
-      "type": "n8n-nodes-base.manualTrigger",
+      "id": "exec_trig",
+      "name": "On new inbox row (called by Watcher)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [5760, 2704]
+      "position": [
+        5560,
+        2600
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const account='HMRC';const title='HMRC GVMS New Work Orders - Monthly Governance (MOCK)';const dedup_key='mock-'+Date.now();const transcript=['Engagement Lead: Thanks all for joining the GVMS monthly governance. Lets start with the delivery overview.','Delivery Manager: For this period we are AMBER. We delivered the new work orders integration and the trader notification service, both signed off by the client.','Delivery Manager: As a value add outside the SOW, the team built a reconciliation dashboard that the clients ops team now uses daily.','Client sponsor: That dashboard has been really well received, thank you.','Delivery Manager: On risks - the data migration milestone slipped about two weeks because we are waiting on a third party integration that is on the critical path. Likelihood is high and the impact on go-live is significant.','Delivery Manager: Second risk - one of our associates has SC clearance expiring next month and renewal is not yet confirmed, which could affect cover.','Engagement Lead: Decision - we will re-baseline the delivery plan with the client and escalate the third party dependency.','Client sponsor: Commercially we are at about 72 percent of the SOW spent with roughly 300000 pounds remaining. Once this stabilises we would like to extend into Q2 and may need two more developers given new scope from the platform-team merger.','Delivery Manager: On people - morale is good and Priya has been excellent, the client specifically praised her.','Client sponsor: For the quarterly health check we would score quality and communication a four out of five, and flexibility a five.','Engagement Lead: Goals next period - clear the third party blocker, complete the migration, and scope the Q2 extension.'].join(String.fromCharCode(10));const e=s=>String(s).replace(/'/g,\"''\");const ensureSql=\"WITH a AS (INSERT INTO accounts (name,last_verified) VALUES ('\"+e(account)+\"',now()) ON CONFLICT (name) DO UPDATE SET last_verified=now() RETURNING id) SELECT a.id AS account_id,(SELECT count(*) FROM projects p WHERE p.account_id=a.id) AS project_count FROM a;\";const ctxSql=\"SELECT a.id AS account_id, a.name AS account, COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'value',p.sow_value,'status',p.sow_status)) FROM projects p WHERE p.account_id=a.id),'[]'::json) AS projects FROM accounts a WHERE lower(a.name)=lower('\"+e(account)+\"');\";return [{json:{account,title,dedup_key,transcript,ensureSql,ctxSql}}];"
+        "operation": "executeQuery",
+        "query": "UPDATE inbox SET status='processing', attempts=attempts+1, processed_at=now() WHERE id = (SELECT id FROM inbox WHERE (status='pending' AND attempts < 5) OR (status='processing' AND attempts < 5 AND processed_at < now() - interval '15 minutes') ORDER BY received_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id, payload;",
+        "options": {}
+      },
+      "id": "inbox_read",
+      "name": "Next inbox item",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        5760,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const all=$input.all();if(!all.length||!all[0].json||!all[0].json.id){return [];}const item=all[0].json;let pl=item.payload;if(typeof pl==='string'){try{pl=JSON.parse(pl);}catch(e){pl={};}}pl=pl||{};const inbox_id=item.id||null;const account=pl.account||'UNKNOWN';const title=pl.title||('Call '+(pl.dedup_key||''));const dedup_key=pl.dedup_key||('call-'+inbox_id);const transcript=pl.transcript||'';const e=s=>String(s).replace(/'/g,\"''\");const ensureSql=\"WITH a AS (INSERT INTO accounts (name,last_verified) VALUES ('\"+e(account)+\"',now()) ON CONFLICT (name) DO UPDATE SET last_verified=now() RETURNING id) SELECT a.id AS account_id,(SELECT count(*) FROM projects p WHERE p.account_id=a.id) AS project_count FROM a;\";const ctxSql=\"SELECT a.id AS account_id, a.name AS account, COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'value',p.sow_value,'status',p.sow_status)) FROM projects p WHERE p.account_id=a.id),'[]'::json) AS projects, a.feedback_summary FROM accounts a WHERE lower(a.name)=lower('\"+e(account)+\"');\";return [{json:{account,title,dedup_key,transcript,ensureSql,ctxSql,inbox_id}}];"
       },
       "id": "6d90f8ab-13c0-45b4-b77b-32b84c1d16c8",
       "name": "Prep",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5936, 2704]
+      "position": [
+        5936,
+        2704
+      ]
     },
     {
       "parameters": {
@@ -29,16 +76,36 @@
       "name": "Ensure account & check",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [6128, 2704],
-      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+      "position": [
+        6128,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
           "combinator": "and",
           "conditions": [
-            { "leftValue": "={{ $json.project_count }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }
+            {
+              "leftValue": "={{ $json.project_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
           ]
         },
         "options": {}
@@ -47,7 +114,10 @@
       "name": "Cache miss?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [6304, 2704]
+      "position": [
+        6304,
+        2704
+      ]
     },
     {
       "parameters": {
@@ -56,7 +126,14 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "API-Version", "value": "2026-04" } ] },
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "{\"query\":\"query { boards(ids:[1126338886]){ items_page(limit:200){ items { id name group{ title } column_values(ids:[\\\"date\\\",\\\"date6\\\",\\\"sow_status\\\",\\\"status\\\"]){ id text } subitems { column_values(ids:[\\\"numbers\\\"]){ id text } } } } } }\"}",
@@ -66,8 +143,16 @@
       "name": "Monday: SOWs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [6496, 2576],
-      "credentials": { "httpHeaderAuth": { "id": "yDd9RQMyxouZTh46", "name": "Monday API" } }
+      "position": [
+        6496,
+        2576
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yDd9RQMyxouZTh46",
+          "name": "Monday API"
+        }
+      }
     },
     {
       "parameters": {
@@ -77,7 +162,10 @@
       "name": "Build enrich SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [6704, 2576]
+      "position": [
+        6704,
+        2576
+      ]
     },
     {
       "parameters": {
@@ -89,8 +177,16 @@
       "name": "Upsert enrich",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [6896, 2576],
-      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+      "position": [
+        6896,
+        2576
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
@@ -102,8 +198,16 @@
       "name": "Read context",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [7104, 2704],
-      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+      "position": [
+        7104,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
@@ -115,27 +219,49 @@
       "name": "Load TN knowledge",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [7280, 2704],
-      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+      "position": [
+        7280,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const prep=$('Prep').first().json;const ctx=$('Read context').first().json;let projects=ctx.projects;if(typeof projects==='string'){try{projects=JSON.parse(projects);}catch(e){projects=[];}}projects=Array.isArray(projects)?projects:[];const titleL=(prep.title||'').toLowerCase();let proj=projects.find(p=>{const nm=(p.name||'').toLowerCase();if(!nm)return false;const tok=nm.split(/[^a-z0-9]+/).filter(w=>w.length>=3);return tok.some(w=>titleL.includes(w));})||null;const project_id=proj?proj.id:null;const projLine=proj?('IDENTIFIED PROJECT: '+proj.name):'IDENTIFIED PROJECT: (none matched - leave project null)';const lines=projects.length?projects.map(p=>'- '+p.name+(p.value?(' (GBP '+p.value+')'):'')+(p.status?(' ['+p.status+']'):'')).join('\\n'):'(no known projects yet)';const kn={};for(const it of $('Load TN knowledge').all()){kn[it.json.key]=it.json.content;}const systemMessage='You are the signal classifier for the Tecknuovo second brain. Apply the frameworks below.\\n\\n[SIGNAL DEFINITIONS]\\n'+(kn.signal_definitions||'')+'\\n\\n[RISK FRAMEWORK]\\n'+(kn.risk_framework||'')+'\\n\\n[OPPORTUNITY FRAMEWORK]\\n'+(kn.opportunity_framework||'')+'\\n\\n[TONE OF VOICE]\\n'+(kn.tone_of_voice||'')+'\\n\\nReturn ONLY JSON with a top-level signals array and a top-level budget_remaining field. Each signal has these fields: type (one of risk, opportunity, update, people), subtype, summary, quote, suggested_action, details. Score STRICTLY using the frameworks above. For a RISK, details has risk_category (one of the 14), likelihood (1 to 5) and impact (1 to 5). For an OPPORTUNITY, details has networks_total (the NETWORKS score out of 40). Otherwise details is empty. Do NOT include a confidence field; it is computed from your scores. budget_remaining is the remaining SOW budget in pounds as a plain number if the call states it (e.g. 300000), otherwise 0. Capture EVERY material signal, not only risks: log delivery progress, decisions and milestones as type update; client praise, morale, joiners or leavers, and SC clearance or cover issues as type people; new work, extensions, renewals or value adds delivered beyond the SOW as type opportunity. For each OPPORTUNITY you MUST score the 8 NETWORKS components and set networks_total to their sum out of 40 (never leave it 0 for a genuine opportunity). A call usually contains several signals; ground each in an exact transcript quote.';const user='ACCOUNT: '+prep.account+'\\n'+projLine+'\\nKNOWN PROJECTS / SOWs:\\n'+lines+'\\n\\nCALL: '+prep.title+'\\nTRANSCRIPT:\\n'+prep.transcript;return [{json:{systemMessage,user,account:prep.account,title:prep.title,dedup_key:prep.dedup_key,transcript:prep.transcript,account_id:ctx.account_id,project_id}}];"
+        "jsCode": "const prep=$('Prep').first().json;const ctx=$('Read context').first().json;let projects=ctx.projects;if(typeof projects==='string'){try{projects=JSON.parse(projects);}catch(e){projects=[];}}projects=Array.isArray(projects)?projects:[];const titleL=(prep.title||'').toLowerCase();let proj=projects.find(p=>{const nm=(p.name||'').toLowerCase();if(!nm)return false;const tok=nm.split(/[^a-z0-9]+/).filter(w=>w.length>=3);return tok.some(w=>titleL.includes(w));})||null;const project_id=proj?proj.id:null;const projLine=proj?('IDENTIFIED PROJECT: '+proj.name):'IDENTIFIED PROJECT: (none matched - leave project null)';const lines=projects.length?projects.map(p=>'- '+p.name+(p.value?(' (GBP '+p.value+')'):'')+(p.status?(' ['+p.status+']'):'')).join('\\n'):'(no known projects yet)';const kn={};for(const it of $('Load TN knowledge').all()){kn[it.json.key]=it.json.content;}const lessons=(ctx.feedback_summary&&String(ctx.feedback_summary).trim())?('\\n\\n[LESSONS FROM HUMAN FEEDBACK \\u2014 apply these corrections to avoid repeating past mistakes]\\n'+ctx.feedback_summary):'';const systemMessage='You are the signal classifier for the Tecknuovo second brain. Apply the frameworks below.\\n\\n[SIGNAL DEFINITIONS]\\n'+(kn.signal_definitions||'')+'\\n\\n[RISK FRAMEWORK]\\n'+(kn.risk_framework||'')+'\\n\\n[OPPORTUNITY FRAMEWORK]\\n'+(kn.opportunity_framework||'')+'\\n\\n[TONE OF VOICE]\\n'+(kn.tone_of_voice||'')+'\\n\\nReturn ONLY JSON with a top-level signals array and a top-level budget_remaining field. Each signal has these fields: type (one of risk, opportunity, update, people), subtype, summary, quote, suggested_action, details. Score STRICTLY using the frameworks above. For a RISK, details has risk_category (one of the 14), likelihood (1 to 5) and impact (1 to 5). For an OPPORTUNITY, details has networks_total (the NETWORKS score out of 40). Otherwise details is empty. Do NOT include a confidence field; it is computed from your scores. budget_remaining is the remaining SOW budget in pounds as a plain number if the call states it (e.g. 300000), otherwise 0. Capture EVERY material signal, not only risks: log delivery progress, decisions and milestones as type update; client praise, morale, joiners or leavers, and SC clearance or cover issues as type people; new work, extensions, renewals or value adds delivered beyond the SOW as type opportunity. For each OPPORTUNITY you MUST score the 8 NETWORKS components and set networks_total to their sum out of 40 (never leave it 0 for a genuine opportunity). A call usually contains several signals; ground each in an exact transcript quote.'+lessons;const user='ACCOUNT: '+prep.account+'\\n'+projLine+'\\nKNOWN PROJECTS / SOWs:\\n'+lines+'\\n\\nCALL: '+prep.title+'\\nTRANSCRIPT:\\n'+prep.transcript;return [{json:{systemMessage,user,account:prep.account,title:prep.title,dedup_key:prep.dedup_key,transcript:prep.transcript,account_id:ctx.account_id,project_id}}];"
       },
       "id": "70edab1c-95eb-470f-ad52-8623144fc603",
       "name": "Assemble context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [7456, 2704]
+      "position": [
+        7456,
+        2704
+      ]
     },
     {
-      "parameters": { "model": "gpt-4o-mini", "options": {} },
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {}
+      },
       "id": "0533ab00-37fa-4c3c-8732-d85864206c9c",
       "name": "Azure OpenAI Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
       "typeVersion": 1,
-      "position": [7584, 2896],
-      "credentials": { "azureOpenAiApi": { "id": "W7KKkeJLvjngHgZA", "name": "Azure Open AI account" } }
+      "position": [
+        7584,
+        2896
+      ],
+      "credentials": {
+        "azureOpenAiApi": {
+          "id": "W7KKkeJLvjngHgZA",
+          "name": "Azure Open AI account"
+        }
+      }
     },
     {
       "parameters": {
@@ -145,30 +271,41 @@
       "name": "Signals Output Parser",
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.2,
-      "position": [7776, 2896]
+      "position": [
+        7776,
+        2896
+      ]
     },
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.user }}",
         "hasOutputParser": true,
-        "options": { "systemMessage": "={{ $json.systemMessage }}" }
+        "options": {
+          "systemMessage": "={{ $json.systemMessage }}"
+        }
       },
       "id": "67c9e23a-768f-4af4-9475-c4a568c2a115",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.9,
-      "position": [7680, 2704]
+      "position": [
+        7680,
+        2704
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const a=$('Assemble context').first().json;let parsed=$json.output;if(typeof parsed==='string'){parsed=parsed.replace(/```json/gi,'').replace(/```/g,'').trim();try{parsed=JSON.parse(parsed);}catch(e){parsed={signals:[]};}}if(!parsed||typeof parsed!=='object')parsed={signals:[]};if(!Array.isArray(parsed.signals))parsed.signals=[];const types=['opportunity','risk','update','people'];const SQ=String.fromCharCode(39);const q=s=>(s===null||s===undefined||s==='')?'NULL':SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const sigs=parsed.signals.filter(s=>s&&types.includes(String(s.type||'').toLowerCase()));const rows=sigs.map(s=>{const t=String(s.type).toLowerCase();const d=(s.details&&typeof s.details==='object')?s.details:{};let conf='NULL';if(t==='risk'){const L=Number(d.likelihood)||0,I=Number(d.impact)||0,score=L*I;d.likelihood=L;d.impact=I;d.score=score;d.band=score>=20?'Critical':score>=12?'High':score>=8?'Medium':score>=4?'Low-Medium':'Low';if(score>0)conf=Math.round(score/25*100);}else if(t==='opportunity'){const nw=(d.networks&&typeof d.networks==='object')?d.networks:{};let total=0,any=false;['n','e','t','w','o','r','k','s'].forEach(k=>{const v=Number(nw[k]);if(nw[k]!==undefined&&!isNaN(v)){total+=v;any=true;}});if(!any&&d.networks_total!=null&&d.networks_total!==''){total=Number(d.networks_total)||0;any=true;}d.networks_total=total;d.band=total>=28?'High':total>=16?'Moderate':'Low';if(any)conf=Math.round(total/40*100);}return '('+q(t)+','+q(s.subtype)+','+q(s.summary)+','+q(s.quote)+','+q(s.suggested_action)+','+conf+','+q(JSON.stringify(d))+'::jsonb)';});const acctId=a.account_id?q(a.account_id):'NULL';const projId=a.project_id?q(a.project_id):'NULL';let sql;if(!rows.length){sql='SELECT '+SQ+'no signals'+SQ+' AS note;';}else{sql='WITH c AS (INSERT INTO calls (title,account_id,project_id,source,dedup_key,transcript,call_date) VALUES ('+q(a.title)+','+acctId+','+projId+','+q('mock')+','+q(a.dedup_key)+','+q(a.transcript)+',now()) RETURNING id) INSERT INTO signals (call_id,account_id,project_id,type,subtype,summary,quote,suggested_action,confidence,details) SELECT c.id,'+acctId+','+projId+',v.type,v.subtype,v.summary,v.quote,v.action,v.conf::numeric,v.details FROM c,(VALUES '+rows.join(',')+') AS v(type,subtype,summary,quote,action,conf,details);';}const br=(parsed&&parsed.budget_remaining!=null&&parsed.budget_remaining!=='')?Number(parsed.budget_remaining):0;if(br>0&&a.project_id){sql=sql+' UPDATE projects SET budget_remaining='+br+', last_verified=now() WHERE id='+SQ+a.project_id+SQ+';';}return [{json:{sql,signal_count:rows.length,budget_remaining:br}}];"
+        "jsCode": "const a=$('Assemble context').first().json;let parsed=$json.output;if(typeof parsed==='string'){parsed=parsed.replace(/```json/gi,'').replace(/```/g,'').trim();try{parsed=JSON.parse(parsed);}catch(e){parsed={signals:[]};}}if(!parsed||typeof parsed!=='object')parsed={signals:[]};if(!Array.isArray(parsed.signals))parsed.signals=[];const types=['opportunity','risk','update','people'];const SQ=String.fromCharCode(39);const q=s=>(s===null||s===undefined||s==='')?'NULL':SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const sigs=parsed.signals.filter(s=>s&&types.includes(String(s.type||'').toLowerCase()));const rows=sigs.map(s=>{const t=String(s.type).toLowerCase();const d=(s.details&&typeof s.details==='object')?s.details:{};let conf='NULL';if(t==='risk'){const L=Number(d.likelihood)||0,I=Number(d.impact)||0,score=L*I;d.likelihood=L;d.impact=I;d.score=score;d.band=score>=20?'Critical':score>=12?'High':score>=8?'Medium':score>=4?'Low-Medium':'Low';if(score>0)conf=Math.round(score/25*100);}else if(t==='opportunity'){const nw=(d.networks&&typeof d.networks==='object')?d.networks:{};let total=0,any=false;['n','e','t','w','o','r','k','s'].forEach(k=>{const v=Number(nw[k]);if(nw[k]!==undefined&&!isNaN(v)){total+=v;any=true;}});if(!any&&d.networks_total!=null&&d.networks_total!==''){total=Number(d.networks_total)||0;any=true;}d.networks_total=total;d.band=total>=28?'High':total>=16?'Moderate':'Low';if(any)conf=Math.round(total/40*100);}return '('+q(t)+','+q(s.subtype)+','+q(s.summary)+','+q(s.quote)+','+q(s.suggested_action)+','+conf+','+q(JSON.stringify(d))+'::jsonb)';});const acctId=a.account_id?q(a.account_id):'NULL';const projId=a.project_id?q(a.project_id):'NULL';let sql;if(!rows.length){sql='SELECT '+SQ+'no signals'+SQ+' AS note;';}else{sql='WITH c AS (INSERT INTO calls (title,account_id,project_id,source,dedup_key,transcript,call_date) VALUES ('+q(a.title)+','+acctId+','+projId+','+q('teams')+','+q(a.dedup_key)+','+q(a.transcript)+',now()) RETURNING id) INSERT INTO signals (call_id,account_id,project_id,type,subtype,summary,quote,suggested_action,confidence,details) SELECT c.id,'+acctId+','+projId+',v.type,v.subtype,v.summary,v.quote,v.action,v.conf::numeric,v.details FROM c,(VALUES '+rows.join(',')+') AS v(type,subtype,summary,quote,action,conf,details);';}const br=(parsed&&parsed.budget_remaining!=null&&parsed.budget_remaining!=='')?Number(parsed.budget_remaining):0;if(br>0&&a.project_id){sql=sql+' UPDATE projects SET budget_remaining='+br+', last_verified=now() WHERE id='+SQ+a.project_id+SQ+';';}return [{json:{sql,signal_count:rows.length}}];"
       },
       "id": "5c91f75f-fcab-422c-8045-89fa130729e2",
       "name": "Build store SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [7888, 2704]
+      "position": [
+        7888,
+        2704
+      ]
     },
     {
       "parameters": {
@@ -180,26 +317,238 @@
       "name": "Store",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [8080, 2704],
-      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+      "position": [
+        8080,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE inbox SET status='done', processed_at=now() WHERE id = '{{ $('Prep').first().json.inbox_id }}';",
+        "options": {}
+      },
+      "id": "inbox_done",
+      "name": "Mark done",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        8280,
+        2704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     }
   ],
   "connections": {
-    "Run": { "main": [[{ "node": "Prep", "type": "main", "index": 0 }]] },
-    "Prep": { "main": [[{ "node": "Ensure account & check", "type": "main", "index": 0 }]] },
-    "Ensure account & check": { "main": [[{ "node": "Cache miss?", "type": "main", "index": 0 }]] },
-    "Cache miss?": { "main": [ [ { "node": "Monday: SOWs", "type": "main", "index": 0 } ], [ { "node": "Read context", "type": "main", "index": 0 } ] ] },
-    "Monday: SOWs": { "main": [[{ "node": "Build enrich SQL", "type": "main", "index": 0 }]] },
-    "Build enrich SQL": { "main": [[{ "node": "Upsert enrich", "type": "main", "index": 0 }]] },
-    "Upsert enrich": { "main": [[{ "node": "Read context", "type": "main", "index": 0 }]] },
-    "Read context": { "main": [[{ "node": "Load TN knowledge", "type": "main", "index": 0 }]] },
-    "Load TN knowledge": { "main": [[{ "node": "Assemble context", "type": "main", "index": 0 }]] },
-    "Assemble context": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
-    "Azure OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "Signals Output Parser": { "ai_outputParser": [[{ "node": "AI Agent", "type": "ai_outputParser", "index": 0 }]] },
-    "AI Agent": { "main": [[{ "node": "Build store SQL", "type": "main", "index": 0 }]] },
-    "Build store SQL": { "main": [[{ "node": "Store", "type": "main", "index": 0 }]] }
+    "Every 5 min (safety sweep)": {
+      "main": [
+        [
+          {
+            "node": "Next inbox item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On new inbox row (called by Watcher)": {
+      "main": [
+        [
+          {
+            "node": "Next inbox item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next inbox item": {
+      "main": [
+        [
+          {
+            "node": "Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep": {
+      "main": [
+        [
+          {
+            "node": "Ensure account & check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure account & check": {
+      "main": [
+        [
+          {
+            "node": "Cache miss?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache miss?": {
+      "main": [
+        [
+          {
+            "node": "Monday: SOWs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: SOWs": {
+      "main": [
+        [
+          {
+            "node": "Build enrich SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build enrich SQL": {
+      "main": [
+        [
+          {
+            "node": "Upsert enrich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert enrich": {
+      "main": [
+        [
+          {
+            "node": "Read context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read context": {
+      "main": [
+        [
+          {
+            "node": "Load TN knowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load TN knowledge": {
+      "main": [
+        [
+          {
+            "node": "Assemble context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble context": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Azure OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signals Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Build store SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build store SQL": {
+      "main": [
+        [
+          {
+            "node": "Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store": {
+      "main": [
+        [
+          {
+            "node": "Mark done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "pinData": {},
-  "meta": { "templateCredsSetupCompleted": true, "instanceId": "c079bda3b47b252bbd53b0a9a784b7bc49f99b65cb844d664842ae1763345827" }
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c079bda3b47b252bbd53b0a9a784b7bc49f99b65cb844d664842ae1763345827"
+  }
 }

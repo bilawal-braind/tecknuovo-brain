@@ -24,9 +24,9 @@ bootstrap().then((boot) => {
     return
   }
 
-  if (boot.source === 'live') {
+  if (boot.counts) {
     // eslint-disable-next-line no-console
-    console.info('[second-brain] live data loaded', boot.counts)
+    console.info('[second-brain] data loaded', boot.counts)
   }
 
   root.render(

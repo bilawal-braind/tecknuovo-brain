@@ -13,6 +13,7 @@ export type Call = {
   accountId: string
   projectId?: string
   signals: Signal[]
+  transcript?: string
 }
 
 const byKey = new Map<string, Call>()
@@ -44,6 +45,25 @@ export const callForSignal = (signal: Signal) => calls.find((c) => c.signals.som
 // ── Transcript (representative): the real captured quotes are the highlighted moments,
 // framed with natural surrounding turns. In production this is the full Teams transcript. ──
 export type TranscriptLine = { speaker: string; text: string; signalType?: SignalType }
+
+// Prefer the REAL stored transcript (from the DB / snapshot) when present — parse it into
+// "Speaker: text" lines, skipping metadata/header lines. Falls back to the representative
+// transcript for demo/mock rows that don't carry one.
+export function transcriptLinesFor(call: Call): TranscriptLine[] {
+  const raw = call.transcript
+  if (raw && raw.trim()) {
+    return raw
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !/^\[.*\]$/.test(l) && !/^(Date|Attendees)\s*:/i.test(l))
+      .map((line) => {
+        const m = line.match(/^([A-Za-z0-9 .,'()/&-]{1,60}?):\s*(.+)$/)
+        return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: '', text: line }
+      })
+  }
+  return transcriptFor(call)
+}
 
 const ACK: Record<SignalType, string> = {
   risk: 'Understood - we will get a plan together on that and come back to you.',

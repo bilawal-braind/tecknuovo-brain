@@ -1,68 +1,306 @@
 {
-  "name": "TN Brain · 2 · Reconciliation (07:00 Mon-Fri)",
+  "name": "TN Brain \u00b7 2 \u00b7 Reconciliation (07:00 Mon-Fri \u2014 refresh active accounts only)",
   "nodes": [
     {
-      "parameters": { "rule": { "interval": [ { "field": "cronExpression", "expression": "0 7 * * 1-5" } ] } },
-      "id": "sched2",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "r_sched",
       "name": "Every weekday 07:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- only accounts already in the brain get refreshed\nSELECT id, name, last_verified FROM accounts;",
+        "query": "SELECT id, name FROM accounts;",
         "options": {}
       },
-      "id": "pg_get",
-      "name": "Get accounts in DB",
+      "id": "r_acc",
+      "name": "Accounts in DB",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [420, 300]
+      "typeVersion": 2.5,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://PLACEHOLDER-source/api/account/{{ $json.name }}",
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1126338886]){ items_page(limit:200){ items { id name group{ title } column_values(ids:[\\\"date\\\",\\\"date6\\\",\\\"sow_status\\\",\\\"status\\\"]){ id text } subitems { column_values(ids:[\\\"numbers\\\"]){ id text } } } } } }\"}",
         "options": {}
       },
-      "id": "http_src",
-      "name": "Fetch source snapshot",
+      "id": "r_sow",
+      "name": "Monday: SOWs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [640, 300],
-      "continueOnFail": true
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yDd9RQMyxouZTh46",
+          "name": "Monday API"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// FAIL-SAFE: if the source failed, do nothing (keep existing data)\nif ($json.error || !$json) { return []; }\nconst changed = true; // wire real comparison later\nreturn [{ json: { name: $('Get accounts in DB').item.json.name, changed } }];"
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1692810780]){ items_page(limit:200){ items { group{ title } column_values(ids:[\\\"dropdown8__1\\\",\\\"people__1\\\"]){ id text } } } } }\"}",
+        "options": {}
       },
-      "id": "code_diff",
-      "name": "Diff vs stored (fail-safe)",
+      "id": "r_cad",
+      "name": "Monday: cadence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yDd9RQMyxouZTh46",
+          "name": "Monday API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1118885420]){ items_page(limit:200){ items { id name column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } } }\"}",
+        "options": {}
+      },
+      "id": "r_as",
+      "name": "Monday: associates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yDd9RQMyxouZTh46",
+          "name": "Monday API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const SQ=String.fromCharCode(39);\nconst q=s=>(s===null||s===undefined||s==='')?'NULL':SQ+String(s).split(SQ).join(SQ+SQ)+SQ;\nconst num=s=>{if(s==null||s==='')return null;const v=parseFloat(String(s).replace(/[^0-9.\\-]/g,''));return isNaN(v)?null:v;};\nconst col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};\nconst rows=(node)=>{const b=((($(node).first().json||{}).data||{}).boards)||[];return (b[0]&&b[0].items_page&&b[0].items_page.items)?b[0].items_page.items:[];};\n\n// Refresh ONLY accounts already in the brain. New/dormant accounts are NOT imported here \u2014\n// a new account is created on demand by the Main Pipeline when its first call arrives.\nconst existing=$('Accounts in DB').all().map(r=>r.json).filter(a=>a&&a.name);\nif(!existing.length){return [{json:{sql:\"SELECT 'reconcile skipped: no active accounts to refresh' AS note;\",accounts:0,projects:0,associates:0,statements:0}}];}\nconst findAcc=(name)=>{const nl=(name||'').toLowerCase();if(!nl)return null;return existing.find(a=>{const al=a.name.toLowerCase();return al===nl||al.includes(nl)||nl.includes(al);})||null;};\n\nconst sowItems=rows('Monday: SOWs');\nconst cadItems=rows('Monday: cadence');\nconst asItems=rows('Monday: associates');\nif(!sowItems.length){return [{json:{sql:\"SELECT 'reconcile skipped: no Monday SOW data (fail-safe)' AS note;\",accounts:existing.length,projects:0,associates:0,statements:0}}];}\n\nconst stmts=[];\nlet pj=0, asc=0;\n\n// 1) Freshness stamp + pod, for every already-tracked account.\nconst groups={};\nfor(const it of cadItems){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}\nconst gkeys=Object.keys(groups);\nfor(const a of existing){\n  stmts.push(\"UPDATE accounts SET last_verified=now() WHERE id=\"+q(a.id)+\";\");\n  const gk=gkeys.find(k=>{const kl=k.toLowerCase(),al=a.name.toLowerCase();return (kl.includes(al)||al.includes(kl))&&groups[k].pod;});\n  if(gk){stmts.push(\"UPDATE accounts SET pod=\"+q(groups[gk].pod)+\" WHERE id=\"+q(a.id)+\" AND pod IS DISTINCT FROM \"+q(groups[gk].pod)+\";\");}\n}\n\n// 2) Projects + SOW numbers + DM \u2014 ONLY for SOWs whose account is already tracked.\nfor(const it of sowItems){\n  const acc=findAcc((it.group&&it.group.title)?it.group.title:'');\n  if(!acc)continue;\n  pj++;\n  let sum=0,any=false;(it.subitems||[]).forEach(su=>{const v=num(col(su.column_values,'numbers'));if(v!==null){sum+=v;any=true;}});\n  const val=any?Math.round(sum*100)/100:null;\n  const cv=it.column_values;\n  stmts.push(\"INSERT INTO projects (monday_item_id,name,account_name,account_id,sow_value,start_date,end_date,sow_status,commercial_model,last_verified) VALUES (\"+q(it.id)+\",\"+q(it.name)+\",\"+q(acc.name)+\",\"+q(acc.id)+\",\"+(val===null?'NULL':val)+\",\"+q(col(cv,'date'))+\"::date,\"+q(col(cv,'date6'))+\"::date,\"+q(col(cv,'sow_status'))+\",\"+q(col(cv,'status'))+\",now()) ON CONFLICT (monday_item_id) DO UPDATE SET name=EXCLUDED.name,account_id=EXCLUDED.account_id,sow_value=EXCLUDED.sow_value,start_date=EXCLUDED.start_date,end_date=EXCLUDED.end_date,sow_status=EXCLUDED.sow_status,commercial_model=EXCLUDED.commercial_model,last_verified=now() WHERE projects.sow_value IS DISTINCT FROM EXCLUDED.sow_value OR projects.sow_status IS DISTINCT FROM EXCLUDED.sow_status OR projects.start_date IS DISTINCT FROM EXCLUDED.start_date OR projects.end_date IS DISTINCT FROM EXCLUDED.end_date OR projects.commercial_model IS DISTINCT FROM EXCLUDED.commercial_model;\");\n  const toks=(it.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);\n  let gk=gkeys.find(k=>{const kl=k.toLowerCase();return kl.includes(acc.name.toLowerCase())&&toks.some(t=>kl.includes(t))&&groups[k].dm;});\n  if(!gk)gk=gkeys.find(k=>toks.some(t=>k.toLowerCase().includes(t))&&groups[k].dm);\n  if(gk){stmts.push(\"UPDATE projects SET delivery_manager_name=\"+q(groups[gk].dm)+\" WHERE monday_item_id=\"+q(it.id)+\" AND delivery_manager_name IS DISTINCT FROM \"+q(groups[gk].dm)+\";\");}\n}\n\n// 3) Consultants \u2014 ONLY for accounts already tracked.\nfor(const it of asItems){\n  const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const acc=findAcc(cname);\n  if(!acc)continue;\n  asc++;\n  const team=col(cv,'team');const placement=col(cv,'status0');\n  stmts.push(\"INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES (\"+q(it.id)+\",\"+q(it.name)+\",\"+q(acc.id)+\",\"+q(acc.name)+\",\"+q(team)+\",\"+q(placement)+\",now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now() WHERE associates.placement_status IS DISTINCT FROM EXCLUDED.placement_status OR associates.project_or_programme IS DISTINCT FROM EXCLUDED.project_or_programme OR associates.account_id IS DISTINCT FROM EXCLUDED.account_id;\");\n}\n\nconst sql=stmts.length?stmts.join(' '):\"SELECT 'nothing to reconcile' AS note;\";\nreturn [{json:{sql,accounts:existing.length,projects:pj,associates:asc,statements:stmts.length}}];"
+      },
+      "id": "r_build",
+      "name": "Build reconcile SQL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300]
+      "position": [
+        1000,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- update drift + stamp freshness + log\nUPDATE accounts SET last_verified = now() WHERE name = $1;\nINSERT INTO run_logs (kind, ref, ok, created_at) VALUES ('reconcile', $1, true, now());",
+        "query": "={{ $json.sql }}",
         "options": {}
       },
-      "id": "pg_upd",
-      "name": "Update + stamp last_verified",
+      "id": "r_apply",
+      "name": "Apply",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [1080, 300]
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO run_logs (workflow,status,detail) VALUES ('reconcile','ok', jsonb_build_object('accounts', {{ $('Build reconcile SQL').first().json.accounts }}, 'projects', {{ $('Build reconcile SQL').first().json.projects }}, 'associates', {{ $('Build reconcile SQL').first().json.associates }}, 'statements', {{ $('Build reconcile SQL').first().json.statements }}));",
+        "options": {}
+      },
+      "id": "r_log",
+      "name": "Run log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Reconciliation \u2014 refresh ACTIVE accounts only\n07:00 weekdays. Reads the accounts already in the brain, then updates **only those** from Monday (SOW numbers/status/dates, pod, DM, consultants) \u2014 and **only where something changed**. Stamps `last_verified`.\n\nDormant accounts are left alone. A NEW account is created on demand by the Main Pipeline when its first call arrives (read-through cache).\n\nFail-safe: empty Monday response = no changes.",
+        "height": 260,
+        "width": 460
+      },
+      "id": "r_note",
+      "name": "note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        10
+      ]
     }
   ],
   "connections": {
-    "Every weekday 07:00": { "main": [[{ "node": "Get accounts in DB", "type": "main", "index": 0 }]] },
-    "Get accounts in DB": { "main": [[{ "node": "Fetch source snapshot", "type": "main", "index": 0 }]] },
-    "Fetch source snapshot": { "main": [[{ "node": "Diff vs stored (fail-safe)", "type": "main", "index": 0 }]] },
-    "Diff vs stored (fail-safe)": { "main": [[{ "node": "Update + stamp last_verified", "type": "main", "index": 0 }]] }
+    "Every weekday 07:00": {
+      "main": [
+        [
+          {
+            "node": "Accounts in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accounts in DB": {
+      "main": [
+        [
+          {
+            "node": "Monday: SOWs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: SOWs": {
+      "main": [
+        [
+          {
+            "node": "Monday: cadence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: cadence": {
+      "main": [
+        [
+          {
+            "node": "Monday: associates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday: associates": {
+      "main": [
+        [
+          {
+            "node": "Build reconcile SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reconcile SQL": {
+      "main": [
+        [
+          {
+            "node": "Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply": {
+      "main": [
+        [
+          {
+            "node": "Run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": {},
-  "active": false
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
