@@ -8,7 +8,7 @@ import { fmt } from './SignalLayer'
 
 const PHASES = ['Discovery', 'Design', 'Build', 'Test', 'Go-live', 'Run'] as const
 
-export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Back' }: { projectId: string; onBack: () => void; onOpenAccount?: (accountId: string) => void; backLabel?: string }) {
+export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Back', commercial = true }: { projectId: string; onBack: () => void; onOpenAccount?: (accountId: string) => void; backLabel?: string; commercial?: boolean }) {
   const project = projectById(projectId)
   const account = project ? accountById(project.accountId) : undefined
   if (!project || !account) return null
@@ -37,7 +37,7 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{project.name}</h2>
             <div className="mt-1 text-[13px] text-muted">{podName(account.pod)} pod · {project.sprint} · last activity {project.lastActivity}</div>
-            {project.advisors.length > 0 && (
+            {commercial && project.advisors.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="eyebrow mr-1">Advisors</span>
                 {project.advisors.map((a) => (
@@ -48,10 +48,14 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
           </div>
           <div className="flex flex-col gap-1.5 text-[12px]">
             <span className="text-muted">Delivery Manager <b className="font-semibold text-text">{project.deliveryManager ? personName(project.deliveryManager) : 'None (resource-only)'}</b></span>
-            <span className="text-muted">Consultants <b className="font-semibold text-text">{project.advisors.length}</b></span>
-            <span className="text-muted">Spend <b className="font-semibold text-text">{money(project.spend)}</b></span>
-            <span className="text-muted">Client Partner <b className="font-semibold text-text">{personName(account.clientPartner)}</b></span>
-            <span className="text-muted">Client Director <b className="font-semibold text-text">{personName(account.clientDirector)}</b></span>
+            {commercial && (
+              <>
+                <span className="text-muted">Consultants <b className="font-semibold text-text">{project.advisors.length}</b></span>
+                <span className="text-muted">Spend <b className="font-semibold text-text">{money(project.spend)}</b></span>
+                <span className="text-muted">Client Partner <b className="font-semibold text-text">{personName(account.clientPartner)}</b></span>
+                <span className="text-muted">Client Director <b className="font-semibold text-text">{personName(account.clientDirector)}</b></span>
+              </>
+            )}
           </div>
         </div>
 
@@ -77,7 +81,7 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
       </div>
 
       {/* project extension context */}
-      {project.extension && (
+      {commercial && project.extension && (
         <div className="mt-4 rounded-2xl border border-line bg-surface p-4" style={{ borderLeft: '3px solid var(--opp)' }}>
           <div className="flex items-center gap-2">
             <span className="eyebrow">Project extension</span>

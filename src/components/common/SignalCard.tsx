@@ -49,7 +49,6 @@ export function SignalCard({ signal, showAccount = true, showAction = true }: { 
           <SeverityTag severity={signal.severity} />
           {signal.value && <span className="text-[11px] text-muted">{signal.value}</span>}
           <ConfidenceBar value={signal.confidence} />
-          <QAReview signalId={signal.id} />
         </div>
         {showAction && (
           done ? (
@@ -64,6 +63,8 @@ export function SignalCard({ signal, showAccount = true, showAction = true }: { 
           )
         )}
       </div>
+
+      <div className="mt-2.5"><QAReview signalId={signal.id} /></div>
     </div>
   )
 }

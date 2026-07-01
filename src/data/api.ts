@@ -109,5 +109,8 @@ export type QaData = {
   audit: QaAuditRow[]
 }
 export const fetchQA = () => get<QaData>('/api/qa')
-export const submitFeedback = (signalId: string, verdict: 'correct' | 'incorrect', givenBy?: string) =>
-  post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, given_by: givenBy })
+export const submitFeedback = (
+  signalId: string,
+  verdict: 'correct' | 'incorrect' | 'relabel',
+  opts?: { correctType?: string; reason?: string },
+) => post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, correct_type: opts?.correctType, reason: opts?.reason })

@@ -57,10 +57,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
             </div>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-2.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-2">Is this right?</span>
-            <QAReview signalId={signal.id} />
-          </div>
+          <div className="mt-3"><QAReview signalId={signal.id} /></div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {onOpenAccount && (
