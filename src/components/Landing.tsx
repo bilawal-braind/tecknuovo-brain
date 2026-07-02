@@ -41,7 +41,7 @@ export function Landing() {
           <span className="grid h-10 w-10 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={19} /></span>
           <div className="flex-1">
             <h3 className="text-[15px] font-semibold">QA &amp; Evaluation <span className="ml-1 align-middle rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: 'var(--accent)' }}>validated</span></h3>
-            <p className="text-[13px] text-muted">How rigorously the AI is tested, and how it scored — independently validated with DeepEval.</p>
+            <p className="text-[13px] text-muted">How rigorously the AI is tested, and how it scored. Independently validated with DeepEval.</p>
           </div>
           <ArrowRight size={18} className="text-muted-2 transition-transform group-hover:translate-x-0.5 group-hover:text-text" />
         </a>
