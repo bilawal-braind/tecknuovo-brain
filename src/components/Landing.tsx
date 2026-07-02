@@ -1,4 +1,4 @@
-import { ClipboardList, Briefcase, BarChart3, ShieldCheck, GitBranch, ArrowRight } from 'lucide-react'
+import { ClipboardList, Briefcase, BarChart3, ShieldCheck, GitBranch, ArrowRight, Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { TnMark } from './common/Brand'
 
@@ -36,6 +36,15 @@ export function Landing() {
             )
           })}
         </div>
+
+        <a href="#/qa" className="group mt-4 flex items-center gap-3 rounded-2xl border p-4 transition-all hover:-translate-y-0.5" style={{ borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+          <span className="grid h-10 w-10 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={19} /></span>
+          <div className="flex-1">
+            <h3 className="text-[15px] font-semibold">QA &amp; Evaluation <span className="ml-1 align-middle rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: 'var(--accent)' }}>validated</span></h3>
+            <p className="text-[13px] text-muted">How rigorously the AI is tested, and how it scored — independently validated with DeepEval.</p>
+          </div>
+          <ArrowRight size={18} className="text-muted-2 transition-transform group-hover:translate-x-0.5 group-hover:text-text" />
+        </a>
 
         <a href="#/flow" className="group mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 transition-all hover:border-[var(--line-2)]">
           <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent-d)' }}><GitBranch size={19} /></span>

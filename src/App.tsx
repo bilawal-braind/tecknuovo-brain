@@ -6,6 +6,7 @@ import { Leadership } from './components/dashboards/Leadership'
 import { Observability } from './components/dashboards/Observability'
 import { SecondBrainFlow } from './components/vision/SecondBrainFlow'
 import { QA } from './components/qa/QA'
+import { EvalShowcase } from './components/qa/EvalShowcase'
 import { Landing } from './components/Landing'
 import { LoginScreen } from './components/Login'
 import { authEnabled, handleRedirect, getAuthToken, login } from './data/auth'
@@ -20,7 +21,8 @@ const routeFromHash = () => window.location.hash.replace(/^#\/?/, '').trim()
 
 function renderDash(route: string) {
   if (route === 'flow') return <SecondBrainFlow />
-  if (route === 'qa') return <QA />
+  if (route === 'qa') return <EvalShowcase />
+  if (route === 'qa-review') return <QA />
   const dash =
     route === 'partner' ? <ClientPartner /> :
     route === 'leadership' ? <Leadership /> :
