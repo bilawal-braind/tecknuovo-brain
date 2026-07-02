@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode, CSSProperties } from 'react'
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts'
 import { fetchQA, submitFeedback } from '../../data/api'
 import type { QaData, QaAuditRow } from '../../data/api'
 import { SIGNAL_META } from '../../data/types'
 import { mapSignalType } from '../../data/map'
+import { signals } from '../../data/signals'
+import { calls } from '../../data/calls'
+import { accountName, projectById } from '../../data/org'
+import { evalSummary } from '../../data/evals'
 
 // Standalone QA & Evaluation screen. Transparent by design: every signal shows the
 // exact transcript quote it came from, and a human can mark it Correct / Incorrect.
 // Those reviews feed the live "human agreement" number — the trust metric.
 export function QA() {
   const [data, setData] = useState<QaData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [verdicts, setVerdicts] = useState<Record<string, 'correct' | 'incorrect'>>({})
   const [extra, setExtra] = useState<{ reviewed: number; agreed: number }>({ reviewed: 0, agreed: 0 })
 
   useEffect(() => {
-    fetchQA().then(setData).catch((e) => setError(String(e?.message || e)))
+    // Live: real feedback stats from the API. Public build (no API): derive everything from
+    // the loaded signals/calls so the page still works and shows the eval metrics.
+    fetchQA().then(setData).catch(() => setData(localQa()))
   }, [])
 
   const review = async (row: QaAuditRow, verdict: 'correct' | 'incorrect') => {
@@ -35,7 +41,6 @@ export function QA() {
     return m
   }, [data])
 
-  if (error) return <Shell><div style={box}>Could not reach the API: <code>{error}</code></div></Shell>
   if (!data) return <Shell><div style={{ ...box, color: 'var(--muted)' }}>Loading QA metrics…</div></Shell>
 
   return (
@@ -47,6 +52,9 @@ export function QA() {
         <Stat label="Human agreement" value={agreementPct == null ? '—' : `${agreementPct}%`} accent />
         <Stat label="Reviewed by humans" value={String(reviewed)} sub={`of ${data.totals.signals}`} />
       </div>
+
+      {/* automated evaluation quality (computed in-browser, works on every build) */}
+      <EvalQuality />
 
       {/* by signal type */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 22 }}>
@@ -104,6 +112,64 @@ export function QA() {
       </div>
     </Shell>
   )
+}
+
+// Automated evaluation quality — the same checks as Phoenix, shown in the product.
+function EvalQuality() {
+  const s = useMemo(() => evalSummary(), [])
+  const metrics = [
+    { key: 'Groundedness', v: s.groundedness, def: 'Quote appears in the transcript — no hallucination.' },
+    { key: 'Framework validity', v: s.frameworkValidity, def: 'Scored on TN frameworks (Risk 5×5 / NETWORKS).' },
+    { key: 'Calibration', v: s.calibration, def: 'Confidence matches the framework maths.' },
+  ]
+  const barColor = (v: number) => (v >= 90 ? '#16a34a' : v >= 70 ? '#d97706' : '#dc2626')
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Evaluation quality — automated, on all {s.n} signals</h3>
+      <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
+        Plain-maths checks against the call transcript and Tecknuovo&apos;s own frameworks — not an AI grading an AI.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {metrics.map((m) => (
+          <div key={m.key} style={card}>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.key}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: barColor(m.v) }}>{m.v}%</div>
+            <div style={{ height: 6, borderRadius: 4, background: 'var(--line)', overflow: 'hidden', marginTop: 4 }}>
+              <div style={{ width: `${m.v}%`, height: '100%', background: barColor(m.v) }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 6 }}>{m.def}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...card, marginTop: 12, height: 190 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Quality scores (0–100%)</div>
+        <ResponsiveContainer width="100%" height="86%">
+          <BarChart data={metrics.map((m) => ({ name: m.key, value: m.v }))} layout="vertical" margin={{ left: 10, right: 24, top: 4, bottom: 4 }}>
+            <XAxis type="number" domain={[0, 100]} hide />
+            <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 12, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+            <Bar dataKey="value" radius={[0, 6, 6, 0]} isAnimationActive={false}>
+              {metrics.map((m, i) => <Cell key={i} fill={barColor(m.v)} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+// Build the QA view from the loaded signals/calls when the API isn't reachable (public build).
+function localQa(): QaData {
+  const byType = (['risk', 'opportunity', 'update', 'people'] as const).map((t) => {
+    const arr = signals.filter((x) => x.type === t)
+    const confs = arr.map((x) => x.confidence).filter((n) => n > 0)
+    return { type: t, n: arr.length, avg_conf: confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null }
+  })
+  const audit: QaAuditRow[] = signals.map((s) => ({
+    id: s.id, type: s.type, summary: s.summary, quote: s.quote, confidence: s.confidence, details: {},
+    account: accountName(s.accountId), project: s.projectId ? projectById(s.projectId)?.name ?? null : null,
+    call_title: s.sourceCall.title, created_at: s.createdAt, verdict: null,
+  }))
+  return { totals: { signals: signals.length, calls: calls.length, reviewed: 0, agreed: 0 }, byType, audit }
 }
 
 function Shell({ children }: { children: ReactNode }) {

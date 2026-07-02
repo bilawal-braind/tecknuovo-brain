@@ -64,6 +64,11 @@ export type Signal = {
   suggestedAction: string
   status: SignalStatus
   createdAt: string // ISO
+  // Framework scores carried through for the QA / evaluation layer (from the classifier).
+  likelihood?: number
+  impact?: number
+  networksTotal?: number
+  band?: string
 }
 
 export type CadenceKind = 'standup' | 'weekly' | 'governance'

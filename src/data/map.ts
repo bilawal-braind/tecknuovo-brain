@@ -84,6 +84,8 @@ export const mapProject = (p: ApiProject): Project => ({
 
 export const mapSignal = (s: ApiSignal): Signal => {
   const confidence = num(s.confidence)
+  const d: Record<string, unknown> = s.details && typeof s.details === 'object' ? (s.details as Record<string, unknown>) : {}
+  const asNum = (v: unknown) => (typeof v === 'number' ? v : undefined)
   return {
     id: s.id,
     type: mapSignalType(s.type),
@@ -100,5 +102,9 @@ export const mapSignal = (s: ApiSignal): Signal => {
     suggestedAction: s.suggested_action ?? '',
     status: asStatus(s.status),
     createdAt: toDate(s.created_at),
+    likelihood: asNum(d.likelihood),
+    impact: asNum(d.impact),
+    networksTotal: asNum(d.networks_total),
+    band: typeof d.band === 'string' ? d.band : undefined,
   }
 }
