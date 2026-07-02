@@ -40,6 +40,9 @@ def main():
     ap.add_argument("--transcripts", default="qa/goldens/transcripts")
     ap.add_argument("--concurrency", type=int, default=3, help="parallel judge calls (lower if you hit 429s)")
     ap.add_argument("--throttle", type=int, default=2, help="seconds between calls")
+    ap.add_argument("--limit", type=int, default=0, help="only evaluate the first N signals (0 = all)")
+    ap.add_argument("--pace", action="store_true", help="one call at a time with --sleep between — works around a low Azure TPM")
+    ap.add_argument("--sleep", type=float, default=2.0, help="seconds between calls in --pace mode")
     args = ap.parse_args()
 
     try:
@@ -90,11 +93,36 @@ def main():
             retrieval_context=[tx],
         ))
 
-    print(f"Running DeepEval on {len(cases)} signals with Faithfulness + Correctness + Action quality "
-          f"(concurrency={args.concurrency}, throttle={args.throttle}s)...\n")
+    if args.limit:
+        cases = cases[: args.limit]
     metrics = [faithfulness, correctness, action_quality]
-    # Run fully SERIALLY (run_async=False) so we never burst past the Azure rate limit,
-    # and don't abort on a stray 429.
+
+    # --pace: one call at a time with a sleep between, so a low Azure TPM never trips.
+    # Prints a single clean summary (still fully DeepEval-powered: Faithfulness + G-Eval).
+    if args.pace:
+        import time
+        spec = [(faithfulness, "Faithfulness", 0.7), (correctness, "Correctness (G-Eval)", 0.7), (action_quality, "Action quality (G-Eval)", 0.6)]
+        agg = {label: [] for _, label, _ in spec}
+        print(f"Running DeepEval (paced) on {len(cases)} signals, {args.sleep}s between calls...\n")
+        for i, tc in enumerate(cases):
+            line = f"[{i + 1:>2}/{len(cases)}]"
+            for m, label, _ in spec:
+                try:
+                    m.measure(tc)
+                    agg[label].append(m.score)
+                    line += f"  {label.split()[0]}={m.score:.2f}"
+                except Exception:
+                    line += f"  {label.split()[0]}=ERR"
+                time.sleep(args.sleep)
+            print(line)
+        print("\n" + "=" * 48 + "\nDeepEval summary\n" + "-" * 48)
+        for _, label, thr in spec:
+            v = agg[label]
+            if v:
+                print(f"  {label:<26} avg {sum(v) / len(v) * 100:5.1f}%   pass {sum(1 for x in v if x >= thr)}/{len(v)}")
+        return 0
+
+    print(f"Running DeepEval on {len(cases)} signals (serial)...\n")
     try:
         from deepeval.evaluate.configs import AsyncConfig, ErrorConfig
     except Exception:
