@@ -4,9 +4,7 @@ import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { callForSignal } from '../../data/calls'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
-import { CallTranscript } from './CallsView'
 import { QAReview } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 
@@ -18,7 +16,6 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   const m = SIGNAL_META[signal.type]
   const status = statusOf(signal)
   const done = status === 'actioned' || status === 'dismissed'
-  const call = callForSignal(signal)
   const scope = riskScope(signal)
 
   return (
@@ -50,12 +47,6 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
               <span className="mt-0.5 block text-[11px] text-muted">→ {signal.suggestedOwner.person} · {signal.suggestedOwner.role}</span>
             </div>
           </div>
-
-          {call && (
-            <div className="mt-3 rounded-lg border border-line bg-surface p-3">
-              <CallTranscript call={call} />
-            </div>
-          )}
 
           <div className="mt-3"><QAReview signalId={signal.id} /></div>
 
