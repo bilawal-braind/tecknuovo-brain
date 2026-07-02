@@ -29,19 +29,31 @@ def esc(s): return str(s).replace("'", "''")
 def prompt_for(spec):
     lines = [p["line"] for p in spec["planted"]] + [t["line"] for t in spec["traps"]]
     must = "\n".join(f'  - "{l}"' for l in lines)
+
+    # Ground the call in the real Monday project state, when provided.
+    ctx = spec.get("context") or {}
+    ctx_block = ""
+    if ctx:
+        facts = "\n".join(f"  - {k}: {v}" for k, v in ctx.items() if v not in (None, ""))
+        ctx_block = ("\nGROUND THE CALL IN THIS REAL PROJECT STATE — reference these real details "
+                     "naturally through the conversation (status, value, dates, stage):\n" + facts + "\n")
+    dm = spec.get("dm")
+    dm_block = (f'\nThe real Tecknuovo delivery manager on this account is "{dm}" — include them as a '
+                f"speaker.\n" if dm else "")
+
     return f"""Write a realistic Microsoft Teams call transcript for a UK digital-delivery consultancy (Tecknuovo).
 
 Call: {spec['call_type']} for the account "{spec['account']}", project "{spec['project']}".
 Length: a natural 15-20 minute call — roughly 2000-2600 words. Multiple named speakers
 (Tecknuovo delivery/commercial people + client stakeholders), realistic back-and-forth, an
 agenda appropriate to a {spec['call_type']}, hesitations and small talk. British English.
-
+{ctx_block}{dm_block}
 CRITICAL: the following sentences MUST each appear in the transcript, spoken naturally and
 VERBATIM (word for word) by whichever speaker fits. Weave them in; don't list them:
 {must}
 
 Output ONLY the transcript text (start with a title line, date, and attendees). No commentary.
-This is SAMPLE data for testing — use fictional client stakeholder names."""
+This is SAMPLE data for testing — keep CLIENT stakeholder names fictional (real Tecknuovo staff names are fine)."""
 
 def main():
     c, dep = client()
