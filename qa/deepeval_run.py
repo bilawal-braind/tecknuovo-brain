@@ -38,6 +38,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--predicted", default="qa/goldens/predicted.json")
     ap.add_argument("--transcripts", default="qa/goldens/transcripts")
+    ap.add_argument("--concurrency", type=int, default=3, help="parallel judge calls (lower if you hit 429s)")
+    ap.add_argument("--throttle", type=int, default=2, help="seconds between calls")
     args = ap.parse_args()
 
     try:
@@ -86,8 +88,23 @@ def main():
             retrieval_context=[tx],
         ))
 
-    print(f"Running DeepEval on {len(cases)} signals with Faithfulness + Correctness + Action quality...\n")
-    evaluate(cases, [faithfulness, correctness, action_quality])
+    print(f"Running DeepEval on {len(cases)} signals with Faithfulness + Correctness + Action quality "
+          f"(concurrency={args.concurrency}, throttle={args.throttle}s)...\n")
+    metrics = [faithfulness, correctness, action_quality]
+    # Throttle so we don't trip the Azure rate limit, and don't abort on a stray 429.
+    try:
+        from deepeval.evaluate.configs import AsyncConfig, ErrorConfig
+    except Exception:
+        try:
+            from deepeval.evaluate import AsyncConfig, ErrorConfig  # older layout
+        except Exception:
+            AsyncConfig = ErrorConfig = None
+    if AsyncConfig and ErrorConfig:
+        evaluate(cases, metrics,
+                 async_config=AsyncConfig(max_concurrent=args.concurrency, throttle_value=args.throttle),
+                 error_config=ErrorConfig(ignore_errors=True))
+    else:
+        evaluate(cases, metrics)
     return 0
 
 if __name__ == "__main__":
