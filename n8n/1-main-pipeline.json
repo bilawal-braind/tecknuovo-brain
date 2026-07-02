@@ -246,7 +246,9 @@
     {
       "parameters": {
         "model": "gpt-4o-mini",
-        "options": {}
+        "options": {
+          "maxTokens": 4000
+        }
       },
       "id": "0533ab00-37fa-4c3c-8732-d85864206c9c",
       "name": "Azure OpenAI Chat Model",
@@ -280,7 +282,7 @@
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.user }}",
-        "hasOutputParser": true,
+        "hasOutputParser": false,
         "options": {
           "systemMessage": "={{ $json.systemMessage }}"
         }
@@ -496,17 +498,6 @@
           {
             "node": "AI Agent",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Signals Output Parser": {
-      "ai_outputParser": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_outputParser",
             "index": 0
           }
         ]
