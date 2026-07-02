@@ -56,6 +56,7 @@ def main():
     if not preds:
         print("No predicted signals found.", file=sys.stderr); return 1
 
+    # async_mode=False -> each metric runs its sub-calls one at a time (gentler on the rate limit).
     correctness = GEval(
         name="Signal correctness",
         criteria=("Using the call transcript in the context, decide whether the extracted signal is "
@@ -63,16 +64,17 @@ def main():
                   "per Tecknuovo's frameworks, and accurately summarised. Penalise hallucinated, "
                   "mis-typed, or trivial-but-flagged signals."),
         evaluation_params=[LLMTestCaseParams.RETRIEVAL_CONTEXT, LLMTestCaseParams.ACTUAL_OUTPUT],
-        threshold=0.7,
+        threshold=0.7, async_mode=False,
     )
     action_quality = GEval(
         name="Action quality",
         criteria=("Judge whether the suggested action in the output is specific, sensible and genuinely "
-                  "useful for a delivery/commercial team — not vague or generic."),
+                  "useful for a delivery/commercial team — not vague or generic. If the action is '(none)', "
+                  "score low."),
         evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT],
-        threshold=0.6,
+        threshold=0.6, async_mode=False,
     )
-    faithfulness = FaithfulnessMetric(threshold=0.7)
+    faithfulness = FaithfulnessMetric(threshold=0.7, async_mode=False)
 
     cases = []
     for p in preds:
@@ -91,7 +93,8 @@ def main():
     print(f"Running DeepEval on {len(cases)} signals with Faithfulness + Correctness + Action quality "
           f"(concurrency={args.concurrency}, throttle={args.throttle}s)...\n")
     metrics = [faithfulness, correctness, action_quality]
-    # Throttle so we don't trip the Azure rate limit, and don't abort on a stray 429.
+    # Run fully SERIALLY (run_async=False) so we never burst past the Azure rate limit,
+    # and don't abort on a stray 429.
     try:
         from deepeval.evaluate.configs import AsyncConfig, ErrorConfig
     except Exception:
@@ -101,7 +104,7 @@ def main():
             AsyncConfig = ErrorConfig = None
     if AsyncConfig and ErrorConfig:
         evaluate(cases, metrics,
-                 async_config=AsyncConfig(max_concurrent=args.concurrency, throttle_value=args.throttle),
+                 async_config=AsyncConfig(run_async=False),
                  error_config=ErrorConfig(ignore_errors=True))
     else:
         evaluate(cases, metrics)
