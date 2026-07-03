@@ -25,6 +25,7 @@ export type Account = {
   lastContact: string // ISO date
   relationship: 'strong' | 'stable' | 'strained'
   valueAdds: number
+  healthReason?: string // why the account is On track / Watch / At risk (derived from open signals)
 }
 
 export type Project = {

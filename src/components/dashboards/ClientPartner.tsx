@@ -100,7 +100,10 @@ export function ClientPartner() {
                       {accounts.filter((a) => a.name.toLowerCase().includes(acctQ.trim().toLowerCase())).map((a) => (
                         <tr key={a.id} onClick={() => setSel(a.id)} className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-bg-2">
                           <td className="px-4 py-3 font-semibold">{a.name}{a.coverage === 'limited' && <span className="ml-2 align-middle"><CoverageBadge coverage="limited" /></span>}</td>
-                          <td className="px-4 py-3"><RagDot health={a.health} withLabel /></td>
+                          <td className="px-4 py-3">
+                            <RagDot health={a.health} withLabel />
+                            {a.healthReason && <div className="mt-0.5 text-[11px] leading-tight text-muted-2">{a.healthReason}</div>}
+                          </td>
                           <td className="px-4 py-3 capitalize text-muted">{a.relationship}</td>
                           <td className="px-4 py-3">{money(a.sowValue)}</td>
                           <td className="px-4 py-3"><BurnBar pct={a.budgetBurnPct} /></td>

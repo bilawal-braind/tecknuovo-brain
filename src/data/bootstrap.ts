@@ -16,11 +16,44 @@ import { signals } from './signals'
 import { calls } from './calls'
 import type { Call } from './calls'
 import type { ApiAccount, ApiProject, ApiSignal, ApiCall, ApiAssociate } from './api'
-import type { Person } from './types'
+import type { Person, Health, Signal } from './types'
 
 // Replace an array's contents while keeping the same reference (live ESM binding).
 function replace<T>(target: T[], next: T[]) {
   target.splice(0, target.length, ...next)
+}
+
+// Account health = a defensible read of the OPEN signals on the account, not a blunt
+// "any risk => red". Severity is weighted, and positive momentum (more opportunities than
+// risks) softens the rating by one level. Returns the RAG plus a short human reason.
+function deriveAccountHealth(sigs: Signal[]): { health: Health; reason: string } {
+  const open = sigs.filter((s) => s.status !== 'actioned' && s.status !== 'dismissed')
+  if (!open.length) return { health: 'green', reason: 'No open signals' }
+
+  const risks = open.filter((s) => s.type === 'risk')
+  const opps = open.filter((s) => s.type === 'opportunity')
+  const critical = risks.filter((s) => s.severity === 'critical').length
+  const high = risks.filter((s) => s.severity === 'high').length
+  const otherRisks = risks.length - critical - high
+
+  let health: Health
+  if (critical >= 1 || high >= 2) health = 'red'      // a critical, or multiple serious risks
+  else if (high >= 1 || risks.length >= 2) health = 'amber' // one serious risk, or a few smaller ones
+  else health = 'green'
+
+  // Clear positive momentum softens one level (an account winning more than it's losing
+  // isn't "at risk" on the strength of a single issue).
+  const softened = opps.length > risks.length
+  if (softened) health = health === 'red' ? 'amber' : 'green'
+
+  const parts: string[] = []
+  if (critical) parts.push(`${critical} critical risk${critical > 1 ? 's' : ''}`)
+  if (high) parts.push(`${high} high-severity risk${high > 1 ? 's' : ''}`)
+  if (otherRisks > 0) parts.push(`${otherRisks} lower risk${otherRisks > 1 ? 's' : ''}`)
+  if (opps.length) parts.push(`${opps.length} opportunit${opps.length > 1 ? 'ies' : 'y'}`)
+  let reason = parts.join(' · ') || `${open.length} open signal${open.length > 1 ? 's' : ''}`
+  if (softened) reason += ' · opportunities outweigh risks'
+  return { health, reason }
 }
 
 export type BootResult = {
@@ -120,6 +153,14 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   for (const pr of liveProjects) {
     const cs = liveCalls.filter((c) => c.projectId === pr.id)
     if (cs.length) pr.lastActivity = cs[0].date
+  }
+
+  // Recompute account health from the actual open signals (overrides the API's blunt
+  // "any high risk => red"), so the portfolio reads as a sensible RAG mix with a reason.
+  for (const acc of liveAccounts) {
+    const h = deriveAccountHealth(liveSignals.filter((s) => s.accountId === acc.id))
+    acc.health = h.health
+    acc.healthReason = h.reason
   }
 
   replace(accounts, liveAccounts)
