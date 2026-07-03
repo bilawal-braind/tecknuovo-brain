@@ -41,7 +41,7 @@ export function Delivery() {
         {selProject ? (
           <ProjectView projectId={selProject} onBack={() => setSelProject(null)} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back'} commercial={false} />
         ) : sel ? (
-          <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back" />
+          <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back" commercial={false} />
         ) : (
           <>
             {view === 'overview' && (

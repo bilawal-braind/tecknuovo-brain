@@ -18,12 +18,13 @@ const CAD_LABEL: Record<CadenceStatus, string> = {
   done: 'Held', missed: 'Missed', overdue: 'Overdue', 'not-due': 'Not due',
 }
 
-export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Back' }: { accountId: string; onBack: () => void; onOpenProject?: (projectId: string) => void; backLabel?: string }) {
+export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Back', commercial = true }: { accountId: string; onBack: () => void; onOpenProject?: (projectId: string) => void; backLabel?: string; commercial?: boolean }) {
   const account = accountById(accountId)
   if (!account) return null
   const projects = projectsForAccount(account.id)
   const calls = callsForAccount(account.id)
   const openCount = signalsForAccount(account.id).filter((s) => s.status === 'new' || s.status === 'routed').length
+  const offTrack = projects.filter((p) => p.rag !== 'green').length
 
   return (
     <div>
@@ -50,10 +51,20 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="SOW value" value={money(account.sowValue)} />
-          <Stat label="Budget burn" value={`${account.budgetBurnPct}%`} color={account.budgetBurnPct > 75 ? 'var(--risk)' : account.budgetBurnPct > 60 ? 'var(--people)' : undefined} bar={account.budgetBurnPct} />
-          <Stat label="Headroom" value={money(account.headroom)} />
-          <Stat label="Open signals" value={`${openCount}`} color="var(--accent)" />
+          {commercial ? (
+            <>
+              <Stat label="SOW value" value={money(account.sowValue)} />
+              <Stat label="Budget burn" value={`${account.budgetBurnPct}%`} color={account.budgetBurnPct > 75 ? 'var(--risk)' : account.budgetBurnPct > 60 ? 'var(--people)' : undefined} bar={account.budgetBurnPct} />
+              <Stat label="Headroom" value={money(account.headroom)} />
+              <Stat label="Open signals" value={`${openCount}`} color="var(--accent)" />
+            </>
+          ) : (
+            <>
+              <Stat label="Projects" value={`${projects.length}`} />
+              <Stat label="Open signals" value={`${openCount}`} color="var(--accent)" />
+              <Stat label="Off track" value={`${offTrack}`} color={offTrack ? 'var(--risk)' : undefined} />
+            </>
+          )}
         </div>
       </div>
 

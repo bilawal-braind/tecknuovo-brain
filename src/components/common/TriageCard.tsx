@@ -35,20 +35,32 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
       </button>
 
       {open && (
-        <div className="border-t border-line bg-surface-2 p-3.5">
-          <p className="text-[13px] italic leading-relaxed text-muted">“{signal.quote}”</p>
-          <div className="mt-1.5 text-[11px] text-muted-2">{signal.sourceCall.title} · {signal.sourceCall.type} · {signal.sourceCall.speaker} · captured via Microsoft Teams</div>
+        <div className="border-t border-line bg-surface-2 p-4">
+          {/* Signal — what it is */}
+          <div className="eyebrow text-muted-2">Signal</div>
+          <div className="mt-1 flex items-start gap-2 text-[13px] font-medium leading-snug text-text">
+            <span style={{ color: m.color }}>{m.emoji}</span>
+            <span>{signal.summary}</span>
+          </div>
 
-          <div className="mt-2.5 flex items-start gap-2 rounded-lg bg-surface px-3 py-2">
+          {/* Reason — why it was flagged */}
+          <div className="mt-3 eyebrow text-muted-2">Why it was flagged</div>
+          <p className="mt-1 border-l-2 pl-2.5 text-[13px] italic leading-relaxed text-muted" style={{ borderColor: m.color }}>“{signal.quote}”</p>
+          <div className="mt-1 text-[11px] text-muted-2">{signal.sourceCall.title} · {signal.sourceCall.type}{signal.sourceCall.speaker ? ` · ${signal.sourceCall.speaker}` : ''} · via Microsoft Teams</div>
+
+          {/* Action — what to do next */}
+          <div className="mt-3 eyebrow text-muted-2">Suggested action</div>
+          <div className="mt-1 flex items-start gap-2 rounded-lg bg-surface px-3 py-2">
             <ArrowRightCircle size={14} className="mt-0.5 shrink-0" style={{ color: m.color }} />
-            <div className="text-[12px] leading-snug text-text">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-2">Suggested </span>
-              {signal.suggestedAction}
-              <span className="mt-0.5 block text-[11px] text-muted">→ {signal.suggestedOwner.person} · {signal.suggestedOwner.role}</span>
+            <div className="text-[12.5px] leading-snug text-text">
+              {signal.suggestedAction || 'No action suggested.'}
+              {signal.suggestedOwner.person && signal.suggestedOwner.person !== '-' && (
+                <span className="mt-0.5 block text-[11px] text-muted">Owner: {signal.suggestedOwner.person}{signal.suggestedOwner.role ? ` · ${signal.suggestedOwner.role}` : ''}</span>
+              )}
             </div>
           </div>
 
-          <div className="mt-3"><QAReview signalId={signal.id} /></div>
+          <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} /></div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {onOpenAccount && (

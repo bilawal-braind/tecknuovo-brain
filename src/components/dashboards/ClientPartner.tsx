@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { LayoutDashboard, Radio, Building2, PoundSterling, ArrowRight, Search } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
-import { accounts } from '../../data/org'
+import { accounts, projectsForAccount } from '../../data/org'
 import { signals, rankByImpact, riskScope } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
 import { TriageCard } from '../common/TriageCard'
@@ -93,23 +93,31 @@ export function ClientPartner() {
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className="border-b border-line text-left">
-                        <th className="px-4 py-2.5 eyebrow">Account</th><th className="px-4 py-2.5 eyebrow">Health</th><th className="px-4 py-2.5 eyebrow">Relationship</th><th className="px-4 py-2.5 eyebrow">SOW</th><th className="px-4 py-2.5 eyebrow">Budget burn</th><th className="px-4 py-2.5 eyebrow">Headroom</th>
+                        <th className="px-4 py-2.5 eyebrow">Account</th><th className="px-4 py-2.5 eyebrow">Health</th><th className="px-4 py-2.5 eyebrow">Team &amp; scope</th><th className="px-4 py-2.5 eyebrow">SOW</th><th className="px-4 py-2.5 eyebrow">Budget burn</th><th className="px-4 py-2.5 eyebrow">Headroom</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {accounts.filter((a) => a.name.toLowerCase().includes(acctQ.trim().toLowerCase())).map((a) => (
+                      {accounts.filter((a) => a.name.toLowerCase().includes(acctQ.trim().toLowerCase())).map((a) => {
+                        const ps = projectsForAccount(a.id)
+                        const consultants = new Set(ps.flatMap((p) => p.advisors)).size
+                        const extensions = ps.filter((p) => p.extension).length
+                        return (
                         <tr key={a.id} onClick={() => setSel(a.id)} className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-bg-2">
                           <td className="px-4 py-3 font-semibold">{a.name}{a.coverage === 'limited' && <span className="ml-2 align-middle"><CoverageBadge coverage="limited" /></span>}</td>
                           <td className="px-4 py-3">
                             <RagDot health={a.health} withLabel />
                             {a.healthReason && <div className="mt-0.5 text-[11px] leading-tight text-muted-2">{a.healthReason}</div>}
                           </td>
-                          <td className="px-4 py-3 capitalize text-muted">{a.relationship}</td>
+                          <td className="px-4 py-3 text-muted">
+                            {ps.length} project{ps.length !== 1 ? 's' : ''} · {consultants} consultant{consultants !== 1 ? 's' : ''}
+                            {extensions > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)' }}>{extensions} ext</span>}
+                          </td>
                           <td className="px-4 py-3">{money(a.sowValue)}</td>
                           <td className="px-4 py-3"><BurnBar pct={a.budgetBurnPct} /></td>
                           <td className="px-4 py-3 text-muted">{money(a.headroom)}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
