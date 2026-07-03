@@ -8,15 +8,22 @@ import { submitFeedback } from '../../data/api'
 // the same Correct / Incorrect / Relabel + note flow as the Observability screen.
 // Feeds the feedback loop (silently no-ops if the API isn't reachable, e.g. the mock demo).
 const TYPES: SignalType[] = ['opportunity', 'risk', 'update', 'people']
+export type Verdict = { kind: 'correct' | 'incorrect' | 'relabel'; newType?: SignalType }
 
-export function QAReview({ signalId }: { signalId: string }) {
-  const [verdict, setVerdict] = useState<{ kind: 'correct' | 'incorrect' | 'relabel'; newType?: SignalType } | null>(null)
+// Uncontrolled by default (manages + submits its own verdict). If `value`/`onSubmit`
+// are passed it is controlled by the parent (e.g. TriageCard, which shares one verdict
+// between the always-visible row control and this fuller panel).
+export function QAReview({ signalId, value, onSubmit }: { signalId: string; value?: Verdict | null; onSubmit?: (v: Verdict, note?: string) => void }) {
+  const controlled = value !== undefined
+  const [internal, setInternal] = useState<Verdict | null>(null)
+  const verdict = controlled ? value : internal
   const [relabeling, setRelabeling] = useState(false)
   const [note, setNote] = useState('')
 
   const submit = (kind: 'correct' | 'incorrect' | 'relabel', newType?: SignalType) => {
-    setVerdict({ kind, newType })
     setRelabeling(false)
+    if (controlled) { onSubmit?.({ kind, newType }, note || undefined); return }
+    setInternal({ kind, newType })
     submitFeedback(signalId, kind, { correctType: newType, reason: note || undefined }).catch(() => {})
   }
 

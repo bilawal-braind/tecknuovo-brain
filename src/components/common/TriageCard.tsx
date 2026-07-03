@@ -1,38 +1,55 @@
 import { useState } from 'react'
-import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight } from 'lucide-react'
+import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName } from '../../data/org'
 import { riskScope } from '../../data/signals'
+import { submitFeedback } from '../../data/api'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
+import type { Verdict } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
 // the suggested action, and the full call transcript behind it.
 export function TriageCard({ signal, onOpenAccount, showAccount = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [verdict, setVerdict] = useState<Verdict | null>(null)
   const { statusOf, setStatus } = useSignal()
   const m = SIGNAL_META[signal.type]
   const status = statusOf(signal)
   const done = status === 'actioned' || status === 'dismissed'
   const scope = riskScope(signal)
 
+  // One shared verdict for the row control and the fuller panel in the expanded card.
+  const logFeedback = (v: Verdict, note?: string) => {
+    setVerdict(v)
+    submitFeedback(signal.id, v.kind, { correctType: v.newType, reason: note }).catch(() => {})
+  }
+
   return (
     <div className={`overflow-hidden rounded-xl border border-line bg-surface transition-opacity ${done ? 'opacity-60' : ''}`} style={{ borderLeft: `3px solid ${m.color}` }}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-bg-2">
-        <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium leading-snug text-text">{signal.summary}</div>
-          <div className="truncate text-[11px] text-muted-2">{showAccount && <span className="font-medium text-muted">{accountName(signal.accountId)} · </span>}{signal.projectId ? projectById(signal.projectId)?.name : 'Account-level'} · {fmt(signal.sourceCall.date)}</div>
+      <div className="flex w-full items-start gap-3 p-3">
+        <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+          <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium leading-snug text-text">{signal.summary}</div>
+            <div className="truncate text-[11px] text-muted-2">{showAccount && <span className="font-medium text-muted">{accountName(signal.accountId)} · </span>}{signal.projectId ? projectById(signal.projectId)?.name : 'Account-level'} · {fmt(signal.sourceCall.date)}</div>
+          </div>
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {scope && <span className="hidden rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:inline" style={{ color: scope === 'account' ? 'var(--accent-d)' : 'var(--muted)', borderColor: 'var(--line)' }}>{scope === 'account' ? 'Account' : 'Delivery'}</span>}
+          <SeverityTag severity={signal.severity} />
+          {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
+          <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
+          {done ? (
+            <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>
+          ) : (
+            <FeedbackControl verdict={verdict} onVote={logFeedback} onRelabel={() => setOpen(true)} />
+          )}
+          <button onClick={() => setOpen((o) => !o)} aria-label="Expand" className="rounded-md p-0.5 text-muted-2 transition-colors hover:text-text"><ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button>
         </div>
-        {scope && <span className="hidden shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:inline" style={{ color: scope === 'account' ? 'var(--accent-d)' : 'var(--muted)', borderColor: 'var(--line)' }}>{scope === 'account' ? 'Account' : 'Delivery'}</span>}
-        <SeverityTag severity={signal.severity} />
-        {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
-        <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
-        {done && <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>}
-        <ChevronDown size={15} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-line bg-surface-2 p-4">
@@ -60,7 +77,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
             </div>
           </div>
 
-          <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} /></div>
+          <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} value={verdict} onSubmit={logFeedback} /></div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {onOpenAccount && (
@@ -76,5 +93,28 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
         </div>
       )}
     </div>
+  )
+}
+
+// Always-visible feedback control on every signal row, on every dashboard — so anyone
+// (not just people with the Observability dashboard) can mark a signal Correct / Incorrect
+// or open it to relabel. Once given, it shows the logged verdict.
+function FeedbackControl({ verdict, onVote, onRelabel }: { verdict: Verdict | null; onVote: (v: Verdict) => void; onRelabel: () => void }) {
+  if (verdict) {
+    const label = verdict.kind === 'correct' ? 'Correct' : verdict.kind === 'incorrect' ? 'Incorrect' : 'Relabelled'
+    const color = verdict.kind === 'correct' ? 'var(--opp)' : verdict.kind === 'incorrect' ? 'var(--risk)' : 'var(--people)'
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
+        {verdict.kind === 'correct' ? <Check size={11} /> : verdict.kind === 'incorrect' ? <X size={11} /> : <RefreshCw size={10} />} {label}
+      </span>
+    )
+  }
+  const btn = 'grid h-6 w-6 place-items-center rounded-md border border-line text-muted-2 transition-colors'
+  return (
+    <span className="inline-flex items-center gap-1" title="Is this signal right? Give feedback">
+      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'correct' }) }} aria-label="Mark correct" className={`${btn} hover:border-[var(--opp)] hover:text-[var(--opp)]`}><Check size={13} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'incorrect' }) }} aria-label="Mark incorrect" className={`${btn} hover:border-[var(--risk)] hover:text-[var(--risk)]`}><X size={13} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onRelabel() }} aria-label="Relabel or add a note" className={`${btn} hover:border-[var(--people)] hover:text-[var(--people)]`}><RefreshCw size={11} /></button>
+    </span>
   )
 }
