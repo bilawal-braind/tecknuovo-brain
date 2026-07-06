@@ -1,0 +1,87 @@
+{
+  "name": "6 — Watchlist sync (Security Group → watchlist)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual_trigger",
+      "name": "Run now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      },
+      "id": "schedule_trigger",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/groups/ac1d9b72-d7a0-4b1b-a777-3a64e81b873d/members/microsoft.graph.user",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "$select", "value": "id,displayName,userPrincipalName" },
+            { "name": "$top", "value": "999" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get_members",
+      "name": "Get group members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 290],
+      "credentials": { "oAuth2Api": { "id": "MSGRAPH_CRED", "name": "MS Graph" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn the group's user members into one upsert + deactivate SQL for the watchlist.\n// Members in the group -> active=true; anyone in the watchlist no longer in the group -> active=false.\nconst resp = $input.first().json;\nconst items = (resp.value || []).filter(u => u && u.id);\nif (!items.length) {\n  // Safety: never deactivate everyone if the call returned nothing.\n  return [{ json: { sql: \"SELECT 'no members returned - watchlist left unchanged' AS note;\", count: 0 } }];\n}\nconst esc = s => String(s == null ? '' : s).replace(/'/g, \"''\");\nconst vals = items.map(u => \"('\" + esc(u.id) + \"','\" + esc(u.displayName || u.userPrincipalName || '') + \"')\").join(',');\nconst ids = items.map(u => \"'\" + esc(u.id) + \"'\").join(',');\nconst sql =\n  \"INSERT INTO watchlist (graph_user_id, display_name, active) \" +\n  \"SELECT v.graph_user_id, v.display_name, true FROM (VALUES \" + vals + \") AS v(graph_user_id, display_name) \" +\n  \"ON CONFLICT (graph_user_id) DO UPDATE SET display_name = EXCLUDED.display_name, active = true; \" +\n  \"UPDATE watchlist SET active = false WHERE graph_user_id NOT IN (\" + ids + \");\";\nreturn [{ json: { sql, count: items.length } }];"
+      },
+      "id": "build_sql",
+      "name": "Build sync SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 290]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "sync_watchlist",
+      "name": "Sync watchlist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [940, 290],
+      "credentials": { "postgres": { "id": "tv0yKxg1fyTfyh8x", "name": "TN Azure DB" } }
+    },
+    {
+      "parameters": {
+        "content": "## Watchlist sync\nKeeps the `watchlist` table in step with the **Second Brain - In Scope** security group.\n\n**Group id:** ac1d9b72-d7a0-4b1b-a777-3a64e81b873d\n\n**Needs:** the app must have `GroupMember.Read.All` (Application) consented, and the same **MS Graph** OAuth2 credential the Watcher uses (client-credentials grant).\n\nMembers in the group -> active. Anyone removed from the group -> active=false (Watcher stops polling them). Runs every 6h + Run now.\n\nNote: single page (top 999). If the group ever exceeds 999 members, add @odata.nextLink paging.",
+        "height": 300,
+        "width": 360
+      },
+      "id": "note",
+      "name": "How it works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [460, 480]
+    }
+  ],
+  "connections": {
+    "Run now (manual)": { "main": [[{ "node": "Get group members", "type": "main", "index": 0 }]] },
+    "Every 6 hours": { "main": [[{ "node": "Get group members", "type": "main", "index": 0 }]] },
+    "Get group members": { "main": [[{ "node": "Build sync SQL", "type": "main", "index": 0 }]] },
+    "Build sync SQL": { "main": [[{ "node": "Sync watchlist", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
