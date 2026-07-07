@@ -1,25 +1,63 @@
 import { Router } from 'express';
+import type { Request } from 'express';
 import { q } from './db.js';
 
 export const router = Router();
 
-// Portfolio / list view — accounts with a count of open signals (Leadership, Client Partner, Portfolio).
-router.get('/accounts', async (_req, res, next) => {
+// ── Per-user data scoping ──────────────────────────────────────────────────
+// Returns null  = full access (dev/token mode, or scope='all' / admin).
+// Returns [ids] = the account ids this person is allowed to see (scope='own').
+// Ownership is DERIVED from the org data (no hand-maintained list): a Client
+// Partner owns the accounts where they're the client_partner; a Delivery Manager
+// owns the accounts of projects they run — matched via people.email = the login.
+async function allowedAccounts(req: Request): Promise<string[] | null> {
+  const user = (req as Request & { user?: { email?: string } }).user;
+  if (!user?.email) return null; // token/dev mode → full access
+  const email = user.email.toLowerCase();
+  const u = await q('SELECT role, scope FROM app_users WHERE lower(email) = lower($1)', [email]);
+  const row = u.rows[0];
+  if (row && (row.scope === 'all' || row.role === 'admin')) return null; // full access
+  const r = await q(
+    `SELECT a.id FROM accounts a JOIN people pe ON pe.id = a.client_partner WHERE lower(pe.email) = lower($1)
+     UNION
+     SELECT pr.account_id FROM projects pr JOIN people pe ON pe.id = pr.delivery_manager WHERE lower(pe.email) = lower($1) AND pr.account_id IS NOT NULL`,
+    [email]
+  );
+  return r.rows.map((x) => String(x.id));
+}
+
+// Who am I — role + scope for the signed-in user, so the dashboard shows the right views.
+router.get('/me', async (req, res, next) => {
   try {
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
+    if (!user?.email) return res.json({ email: null, role: 'admin', scope: 'all', name: 'dev' }); // token mode
+    const r = await q('SELECT email, role, scope, name FROM app_users WHERE lower(email) = lower($1)', [user.email]);
+    if (r.rows.length) return res.json(r.rows[0]);
+    // Unlisted TN user → safe least-privilege default (their own accounts only).
+    return res.json({ email: user.email, role: 'delivery', scope: 'own', name: user.name || null });
+  } catch (e) { next(e); }
+});
+
+// Portfolio / list view — accounts with a count of open signals (Leadership, Client Partner, Portfolio).
+router.get('/accounts', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE a.id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT a.id, a.name, a.pod,
-              -- health is DERIVED from open risk signals (Monday has no client RAG)
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END AS health,
               (SELECT count(*) FROM signals s WHERE s.account_id = a.id AND s.status = 'new') AS open_signals,
-              -- commercial rollup, derived from project budget_remaining vs sow_value
               COALESCE((SELECT round(100.0 * (sum(p.sow_value) - sum(p.budget_remaining)) / NULLIF(sum(p.sow_value), 0))
                         FROM projects p WHERE p.account_id = a.id AND p.budget_remaining IS NOT NULL), 0) AS budget_burn_pct,
               COALESCE((SELECT sum(p.budget_remaining) FROM projects p WHERE p.account_id = a.id), 0) AS headroom
-       FROM accounts a ORDER BY a.name`
+       FROM accounts a ${filter} ORDER BY a.name`,
+      params
     );
     res.json(r.rows);
   } catch (e) { next(e); }
@@ -28,6 +66,8 @@ router.get('/accounts', async (_req, res, next) => {
 // Account drill-down — the account, its projects/SOWs, and recent signals.
 router.get('/accounts/:id', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
+    if (allowed !== null && !allowed.includes(req.params.id)) return res.status(403).json({ error: 'forbidden' });
     const acc = await q('SELECT * FROM accounts WHERE id = $1', [req.params.id]);
     if (!acc.rows.length) return res.status(404).json({ error: 'not found' });
     const projects = await q(
@@ -50,20 +90,29 @@ router.get('/accounts/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Calls (the source Teams calls). The dashboard groups signals under these.
-router.get('/calls', async (_req, res, next) => {
+// Calls (the source Teams calls) — includes the transcript for the transcript view.
+router.get('/calls', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
-      `SELECT id, account_id, project_id, title, call_date, source
-       FROM calls ORDER BY call_date DESC NULLS LAST LIMIT 500`
+      `SELECT id, account_id, project_id, title, call_date, transcript, source
+       FROM calls ${filter} ORDER BY call_date DESC NULLS LAST LIMIT 500`,
+      params
     );
     res.json(r.rows);
   } catch (e) { next(e); }
 });
 
 // Flat projects list (the dashboard hydrates its org tree from this + /accounts).
-router.get('/projects', async (_req, res, next) => {
+router.get('/projects', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE p.account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT p.id, p.name, p.account_id, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
               p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend, p.delivery_manager_name,
@@ -72,26 +121,33 @@ router.get('/projects', async (_req, res, next) => {
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END AS rag
-       FROM projects p ORDER BY p.sow_value DESC NULLS LAST`
+       FROM projects p ${filter} ORDER BY p.sow_value DESC NULLS LAST`,
+      params
     );
     res.json(r.rows);
   } catch (e) { next(e); }
 });
 
 // Associates (consultants on the ground). No PII (no email/phone).
-router.get('/associates', async (_req, res, next) => {
+router.get('/associates', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT id, name, account_id, project_or_programme, placement_status
-       FROM associates ORDER BY name`
+       FROM associates ${filter} ORDER BY name`,
+      params
     );
     res.json(r.rows);
   } catch (e) { next(e); }
 });
 
-// QA & Evaluation — live transparency metrics + an audit trail with source quotes.
-router.get('/qa', async (_req, res, next) => {
+// QA & Evaluation — transparency metrics + audit trail. Audit is scoped; aggregate counts are not sensitive.
+router.get('/qa', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
     const byType = await q(
       `SELECT type, count(*)::int AS n, round(avg(confidence))::int AS avg_conf
        FROM signals GROUP BY type ORDER BY type`
@@ -102,6 +158,9 @@ router.get('/qa', async (_req, res, next) => {
               (SELECT count(*)::int FROM feedback) AS reviewed,
               (SELECT count(*)::int FROM feedback WHERE verdict = 'correct') AS agreed`
     );
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE s.account_id = ANY($${params.length}::uuid[])`; }
     const audit = await q(
       `SELECT s.id, s.type, s.summary, s.quote, s.confidence, s.details,
               a.name AS account, p.name AS project, c.title AS call_title, s.created_at,
@@ -110,20 +169,24 @@ router.get('/qa', async (_req, res, next) => {
        LEFT JOIN accounts a ON a.id = s.account_id
        LEFT JOIN projects p ON p.id = s.project_id
        LEFT JOIN calls    c ON c.id = s.call_id
-       ORDER BY s.created_at DESC LIMIT 100`
+       ${filter}
+       ORDER BY s.created_at DESC LIMIT 100`,
+      params
     );
     res.json({ totals: totals.rows[0], byType: byType.rows, audit: audit.rows });
   } catch (e) { next(e); }
 });
 
-// Signals feed — filterable by type/status/account, paginated.
+// Signals feed — filterable by type/status/account, paginated, scoped to the user.
 router.get('/signals', async (req, res, next) => {
   try {
+    const allowed = await allowedAccounts(req);
     const where: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
     for (const [key, col] of [['type', 'type'], ['status', 'status'], ['account_id', 'account_id']] as const) {
       if (req.query[key]) { params.push(req.query[key]); where.push(`s.${col} = $${params.length}`); }
     }
+    if (allowed !== null) { params.push(allowed); where.push(`s.account_id = ANY($${params.length}::uuid[])`); }
     const limit = Math.min(Number(req.query.limit || 50), 200);
     const offset = Number(req.query.offset || 0);
     params.push(limit); const lp = params.length;
