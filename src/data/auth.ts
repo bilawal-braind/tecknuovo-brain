@@ -9,6 +9,13 @@ const AUTHORITY = `https://login.microsoftonline.com/${ENTRA_TENANT_ID}`
 let idToken: string | null = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('tn_id_token') : null
 export const getAuthToken = () => idToken
 
+// Drop the local token (e.g. it was rejected/expired) without redirecting to Microsoft's
+// logout — the app then falls back to the sign-in screen.
+export function clearAuth(): void {
+  idToken = null
+  if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('tn_id_token')
+}
+
 function b64url(bytes: Uint8Array): string {
   let s = ''
   for (const b of bytes) s += String.fromCharCode(b)

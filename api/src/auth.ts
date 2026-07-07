@@ -45,7 +45,10 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
         name: typeof payload.name === 'string' ? payload.name : undefined,
       };
       return next();
-    } catch {
+    } catch (e) {
+      // Log the real reason (e.g. "unexpected 'aud' claim value", "exp claim timestamp check failed")
+      // so token issues are diagnosable from the API console.
+      console.warn('[auth] token rejected:', e instanceof Error ? e.message : String(e));
       return res.status(401).json({ error: 'invalid or expired token' });
     }
   }
