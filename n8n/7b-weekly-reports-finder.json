@@ -12,17 +12,9 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/sites",
+        "url": "https://graph.microsoft.com/v1.0/sites?search=*&$select=id,displayName,webUrl&$top=200",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "search", "value": "*" },
-            { "name": "$select", "value": "id,displayName,webUrl" },
-            { "name": "$top", "value": "200" }
-          ]
-        },
         "options": {
           "pagination": {
             "pagination": {
