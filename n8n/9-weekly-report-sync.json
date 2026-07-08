@@ -161,6 +161,28 @@
     {
       "parameters": {
         "operation": "executeQuery",
+        "query": "INSERT INTO projects (monday_item_id, name, account_id, account_name, phase, rag, delivery_manager_name, last_verified) SELECT 'wr:'||w.project_title, NULLIF(trim(regexp_replace(w.project_title, '(Weekly )?(Delivery )?Summary\\s*$', '', 'i')), ''), w.account_id, w.account_name, w.phase, w.rag, w.customer_lead, now() FROM weekly_reports w WHERE w.week_ending = (SELECT max(week_ending) FROM weekly_reports) AND w.account_id IS NOT NULL ON CONFLICT (monday_item_id) DO UPDATE SET account_id=COALESCE(EXCLUDED.account_id, projects.account_id), phase=EXCLUDED.phase, rag=EXCLUDED.rag, delivery_manager_name=EXCLUDED.delivery_manager_name, last_verified=now();",
+        "options": {}
+      },
+      "id": "wr9_projects",
+      "name": "Derive projects from reports",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1650,
+        300
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
         "query": "=INSERT INTO run_logs (workflow,status,detail) VALUES ('weekly_report_sync','ok', jsonb_build_object('files', {{ $('Each report file').all().length }}));",
         "options": {}
       },
@@ -275,6 +297,17 @@
       ]
     },
     "Apply": {
+      "main": [
+        [
+          {
+            "node": "Derive projects from reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Derive projects from reports": {
       "main": [
         [
           {
