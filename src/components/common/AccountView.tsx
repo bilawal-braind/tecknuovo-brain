@@ -43,7 +43,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
               <CoverageBadge coverage={account.coverage} />
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{account.name}</h2>
-            <div className="mt-1 text-[13px] text-muted">{podName(account.pod)} pod · {projects.length} project{projects.length !== 1 ? 's' : ''} · last contact {account.lastContact}</div>
+            <div className="mt-1 text-[13px] text-muted">{account.pod ? `${podName(account.pod)} pod · ` : ''}{projects.length} project{projects.length !== 1 ? 's' : ''} · last contact {account.lastContact}</div>
           </div>
           <div className="flex flex-col gap-1.5 text-[12px]">
             <span className="flex items-center gap-1.5 text-muted"><Users size={12} /> Client Director <b className="font-semibold text-text">{personName(account.clientDirector)}</b></span>
