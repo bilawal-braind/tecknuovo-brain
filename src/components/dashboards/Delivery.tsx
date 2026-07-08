@@ -10,6 +10,8 @@ import { SignalsDonut } from '../common/SignalsDonut'
 import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
+import { WeeklyReports } from '../common/WeeklyReports'
+import { weeklyReports } from '../../data/crm'
 
 // Delivery = "how is the work going" (execution). Account / commercial info
 // (consultants, spend, extensions, the account+project browse) lives on the
@@ -78,7 +80,7 @@ export function Delivery() {
               </>
             )}
 
-            {view === 'weekly' && <WeeklyComingSoon />}
+            {view === 'weekly' && (weeklyReports.length ? <WeeklyReports /> : <WeeklyComingSoon />)}
           </>
         )}
       </div>

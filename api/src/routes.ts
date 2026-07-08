@@ -206,6 +206,58 @@ router.get('/signals', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Weekly delivery reports — per-project sections parsed from the SharePoint portfolio
+// report (workflow 9). Scoped users only see their accounts' sections.
+router.get('/weekly-reports', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `SELECT id, week_ending, project_title, account_id, account_name, rag, customer_lead, phase,
+              summary, highlights, lowlights, next_week, risks
+       FROM weekly_reports ${filter}
+       ORDER BY week_ending DESC, project_title LIMIT 400`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
+// CRM mirror — client stakeholders and their buying power (HubSpot, read-only).
+// No emails exposed through the API; the dashboard only needs name/title/role.
+router.get('/stakeholders', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `SELECT id, name, job_title, buying_role, seniority, account_id, company_name
+       FROM stakeholders ${filter} ORDER BY (buying_role IS NULL), name LIMIT 1000`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
+// CRM mirror — deals (the commercial pipeline per account; HubSpot, read-only).
+router.get('/deals', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `SELECT id, name, amount, pipeline, stage, is_open, networks_score, close_date, account_id, company_name
+       FROM deals ${filter} ORDER BY is_open DESC, amount DESC NULLS LAST LIMIT 500`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
 // The single write path — Observability corrections feed the learning loop.
 router.post('/feedback', async (req, res, next) => {
   try {

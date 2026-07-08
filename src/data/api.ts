@@ -94,6 +94,48 @@ export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
 export const fetchCalls = () => get<ApiCall[]>('/api/calls')
 export const fetchAssociates = () => get<ApiAssociate[]>('/api/associates')
 
+// ── Weekly reports + CRM mirror (HubSpot, read-only) ──
+export type ApiWeeklyReport = {
+  id: string
+  week_ending: string
+  project_title: string
+  account_id: string | null
+  account_name: string | null
+  rag: string | null
+  customer_lead: string | null
+  phase: string | null
+  summary: string | null
+  highlights: string | null
+  lowlights: string | null
+  next_week: string | null
+  risks: string | null
+}
+export type ApiStakeholder = {
+  id: string
+  name: string
+  job_title: string | null
+  buying_role: string | null
+  seniority: string | null
+  account_id: string | null
+  company_name: string | null
+}
+export type ApiDeal = {
+  id: string
+  name: string
+  amount: number | string | null
+  pipeline: string | null
+  stage: string | null
+  is_open: boolean
+  networks_score: number | string | null
+  close_date: string | null
+  account_id: string | null
+  company_name: string | null
+}
+// Tolerant fetchers: an older API without these endpoints just yields empty lists.
+export const fetchWeeklyReports = () => get<ApiWeeklyReport[]>('/api/weekly-reports').catch(() => [] as ApiWeeklyReport[])
+export const fetchStakeholders = () => get<ApiStakeholder[]>('/api/stakeholders').catch(() => [] as ApiStakeholder[])
+export const fetchDeals = () => get<ApiDeal[]>('/api/deals').catch(() => [] as ApiDeal[])
+
 // ── QA & Evaluation ──
 export type QaAuditRow = {
   id: string

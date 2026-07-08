@@ -1,8 +1,9 @@
-import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight, Briefcase, Contact } from 'lucide-react'
 import { accountById, personName, podName, projectsForAccount } from '../../data/org'
 import { signalsForAccount } from '../../data/signals'
 import { callsForAccount } from '../../data/calls'
 import { complianceFor } from '../../data/delivery'
+import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole } from '../../data/crm'
 import type { CadenceStatus } from '../../data/types'
 import { RagDot, CoverageBadge } from './primitives'
 import { CallsView } from './CallsView'
@@ -93,8 +94,69 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
               ))}
             </div>
           </div>
+
+          {/* commercial pipeline + client stakeholders (CRM mirror; only renders when synced) */}
+          {commercial && <CrmPanel accountId={account.id} />}
         </div>
       </div>
+    </div>
+  )
+}
+
+// Open deals + who holds the budget on this account — from the read-only HubSpot
+// mirror. Renders nothing until the HubSpot sync has run (mock mode stays clean).
+function CrmPanel({ accountId }: { accountId: string }) {
+  const accDeals = dealsForAccount(accountId)
+  const openDeals = accDeals.filter((d) => d.is_open)
+  const stak = stakeholdersForAccount(accountId)
+  if (!accDeals.length && !stak.length) return null
+  const amt = (v: number | string | null) => {
+    const n = typeof v === 'string' ? Number(v) : v
+    return n && !isNaN(n) && n > 0 ? money(n) : null
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      {openDeals.length > 0 && (
+        <>
+          <div className="mb-2.5 flex items-center gap-2"><Briefcase size={14} className="text-muted-2" /><h3 className="text-[14px] font-semibold">Open pipeline</h3><span className="text-[11px] text-muted-2">from HubSpot</span></div>
+          <div className="space-y-2">
+            {openDeals.slice(0, 6).map((d) => (
+              <div key={d.id} className="rounded-lg bg-bg-2 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold">{d.name}</span>
+                  {amt(d.amount) && <span className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>{amt(d.amount)}</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
+                  {d.stage && <span>{d.stage}</span>}
+                  {d.pipeline && (<><span className="text-muted-2">·</span><span>{d.pipeline}</span></>)}
+                  {d.networks_score != null && d.networks_score !== '' && (<><span className="text-muted-2">·</span><span>NETWORKS {d.networks_score}/40</span></>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {stak.length > 0 && (
+        <>
+          <div className={`${openDeals.length ? 'mt-4 ' : ''}mb-2.5 flex items-center gap-2`}><Contact size={14} className="text-muted-2" /><h3 className="text-[14px] font-semibold">Key stakeholders</h3><span className="text-[11px] text-muted-2">buying power from CRM</span></div>
+          <div className="space-y-1.5">
+            {stak.slice(0, 8).map((s) => {
+              const role = prettyBuyingRole(s.buying_role)
+              return (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 rounded-lg bg-bg-2 px-3 py-2">
+                  <div className="text-[12.5px]"><b className="font-semibold">{s.name}</b>{s.job_title && <span className="text-muted"> · {s.job_title}</span>}</div>
+                  {role && (
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: 'var(--accent-d)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+                      {role}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

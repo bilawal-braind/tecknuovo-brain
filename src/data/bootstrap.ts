@@ -9,7 +9,8 @@
 // Note: compliance, weekly reports, trends and observability are not produced by the
 // pipeline yet, so they stay as demo data in all modes.
 import { isLive } from './source'
-import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates } from './api'
+import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals } from './api'
+import { weeklyReports, stakeholders, deals } from './crm'
 import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
 import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
@@ -282,14 +283,21 @@ export async function bootstrap(): Promise<BootResult> {
   // Live: fetch from the Read API (the VM build).
   if (isLive) {
     try {
-      const [aRows, pRows, sRows, cRows, asRows] = await Promise.all([
+      const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows] = await Promise.all([
         fetchAccounts(),
         fetchProjects(),
         fetchSignals(),
         fetchCalls(),
         fetchAssociates(),
+        fetchWeeklyReports(),
+        fetchStakeholders(),
+        fetchDeals(),
       ])
       const counts = hydrate({ aRows, pRows, sRows, cRows, asRows })
+      // Weekly reports + CRM mirror (fetchers are tolerant — empty on older APIs).
+      replace(weeklyReports, wrRows)
+      replace(stakeholders, stRows)
+      replace(deals, dlRows)
       return { source: 'live', counts }
     } catch (e) {
       return { source: 'live', error: e instanceof Error ? e.message : String(e) }

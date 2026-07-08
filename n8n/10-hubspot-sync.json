@@ -1,0 +1,320 @@
+{
+  "name": "TN Brain · 10 · HubSpot sync (stakeholders + deals, read-only)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 7 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "hs10_sched",
+      "name": "Every weekday 07:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/pipelines/deals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs10_pipes",
+      "name": "Get pipelines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals?limit=100&properties=dealname,amount,dealstage,pipeline,closedate,networks_score&associations=companies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.paging?.next?.link }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.paging?.next?.link }}",
+              "limitPagesFetched": true,
+              "maxRequests": 30
+            }
+          }
+        }
+      },
+      "id": "hs10_deals",
+      "name": "Get deals (all pages)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts?limit=100&properties=firstname,lastname,email,jobtitle,hs_buying_role,hs_seniority&associations=companies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.paging?.next?.link }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.paging?.next?.link }}",
+              "limitPagesFetched": true,
+              "maxRequests": 30
+            }
+          }
+        }
+      },
+      "id": "hs10_cont",
+      "name": "Get contacts (all pages)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gather all pages of deals + contacts, dedupe company ids, emit one item per\n// batch of <=100 company ids for the batch-read call (plus one 'empty' item if none).\nconst deals=$('Get deals (all pages)').all().flatMap(i=>(i.json.results||[]));\nconst contacts=$('Get contacts (all pages)').all().flatMap(i=>(i.json.results||[]));\nconst compAssoc=o=>{const a=((o.associations||{}).companies||{}).results||[];return a.length?String(a[0].id):null;};\nconst ids=new Set();\nfor(const o of deals.concat(contacts)){const id=compAssoc(o);if(id)ids.add(id);}\nconst all=[...ids];\nconst batches=[];\nfor(let i=0;i<all.length;i+=100)batches.push(all.slice(i,i+100));\nif(!batches.length)batches.push([]);\nreturn batches.map(b=>({json:{inputs:b.map(id=>({id}))}}));"
+      },
+      "id": "hs10_batch",
+      "name": "Company id batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies/batch/read",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: ['name','domain'], inputs: $json.inputs }) }}",
+        "options": {}
+      },
+      "id": "hs10_comp",
+      "name": "Read companies (batch)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build ONE idempotent upsert for stakeholders + deals.\n// Company names come from the batch reads (may be empty if the token lacks the\n// companies scope - the deal-name prefix fallback still resolves most accounts).\nconst q=s=>(s===null||s===undefined||s==='')?'NULL':\"'\"+String(s).replace(/'/g,\"''\")+\"'\";\nconst num=v=>{if(v===null||v===undefined||v==='')return 'NULL';const n=Number(v);return isNaN(n)?'NULL':String(n);};\n\n// stage-id -> label map from the pipelines call\nconst stageMap={};const pipeMap={};\nfor(const p of ($('Get pipelines').first().json.results||[])){pipeMap[p.id]=p.label;for(const s of (p.stages||[])){stageMap[s.id]=s.label;}}\n\n// company id -> {name,domain}\nconst comp={};\nfor(const it of $('Read companies (batch)').all()){for(const c of (it.json.results||[])){comp[String(c.id)]={name:(c.properties||{}).name||null,domain:(c.properties||{}).domain||null};}}\n\nconst compAssoc=o=>{const a=((o.associations||{}).companies||{}).results||[];return a.length?String(a[0].id):null;};\nconst CLOSED=/closed won|closed lost|qualified out/i;\n\nconst dealRows=[];\nfor(const it of $('Get deals (all pages)').all()){for(const d of (it.json.results||[])){\n  const p=d.properties||{};const cid=compAssoc(d);const cname=cid&&comp[cid]?comp[cid].name:null;\n  const stage=stageMap[p.dealstage]||p.dealstage||null;\n  const isOpen=stage?(!CLOSED.test(stage)):true;\n  dealRows.push('('+q(d.id)+','+q(p.dealname)+','+num(p.amount)+','+q(pipeMap[p.pipeline]||p.pipeline)+','+q(stage)+','+(isOpen?'true':'false')+','+num(p.networks_score)+','+q(p.closedate)+'::timestamptz,'+q(cid)+','+q(cname)+')');\n}}\n\nconst stakRows=[];\nfor(const it of $('Get contacts (all pages)').all()){for(const c of (it.json.results||[])){\n  const p=c.properties||{};const cid=compAssoc(c);const cname=cid&&comp[cid]?comp[cid].name:null;\n  const name=((p.firstname||'')+' '+(p.lastname||'')).trim();\n  if(!name)continue;\n  stakRows.push('('+q(c.id)+','+q(name)+','+q(p.email)+','+q(p.jobtitle)+','+q(p.hs_buying_role)+','+q(p.hs_seniority)+','+q(cid)+','+q(cname)+')');\n}}\n\nconst parts=[];\nif(dealRows.length){parts.push(\n  \"INSERT INTO deals (hubspot_deal_id,name,amount,pipeline,stage,is_open,networks_score,close_date,hubspot_company_id,company_name,account_id,last_verified) \"+\n  \"SELECT v.hid,v.nm,v.amt,v.pipe,v.stage,v.open,v.nscore,v.close,v.cid,v.cname,\"+\n  \"COALESCE(\"+\n  \"(SELECT id FROM accounts WHERE v.cname IS NOT NULL AND (lower(name)=lower(v.cname) OR v.cname ILIKE '%'||name||'%' OR name ILIKE '%'||v.cname||'%') ORDER BY length(name) DESC LIMIT 1),\"+\n  \"(SELECT id FROM accounts WHERE split_part(v.nm,' - ',1) ILIKE '%'||name||'%' OR name ILIKE '%'||split_part(v.nm,' - ',1)||'%' ORDER BY length(name) DESC LIMIT 1)\"+\n  \"), now() \"+\n  \"FROM (VALUES \"+dealRows.join(',')+\") AS v(hid,nm,amt,pipe,stage,open,nscore,close,cid,cname) \"+\n  \"ON CONFLICT (hubspot_deal_id) DO UPDATE SET name=EXCLUDED.name, amount=EXCLUDED.amount, pipeline=EXCLUDED.pipeline, stage=EXCLUDED.stage, is_open=EXCLUDED.is_open, networks_score=EXCLUDED.networks_score, close_date=EXCLUDED.close_date, company_name=COALESCE(EXCLUDED.company_name, deals.company_name), account_id=COALESCE(EXCLUDED.account_id, deals.account_id), last_verified=now();\");}\nif(stakRows.length){parts.push(\n  \"INSERT INTO stakeholders (hubspot_contact_id,name,email,job_title,buying_role,seniority,hubspot_company_id,company_name,account_id,last_verified) \"+\n  \"SELECT v.hid,v.nm,v.em,v.jt,v.br,v.sen,v.cid,v.cname,\"+\n  \"(SELECT id FROM accounts WHERE v.cname IS NOT NULL AND (lower(name)=lower(v.cname) OR v.cname ILIKE '%'||name||'%' OR name ILIKE '%'||v.cname||'%') ORDER BY length(name) DESC LIMIT 1), now() \"+\n  \"FROM (VALUES \"+stakRows.join(',')+\") AS v(hid,nm,em,jt,br,sen,cid,cname) \"+\n  \"ON CONFLICT (hubspot_contact_id) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, job_title=EXCLUDED.job_title, buying_role=EXCLUDED.buying_role, seniority=EXCLUDED.seniority, company_name=COALESCE(EXCLUDED.company_name, stakeholders.company_name), account_id=COALESCE(EXCLUDED.account_id, stakeholders.account_id), last_verified=now();\");}\nif(!parts.length)parts.push(\"SELECT 'nothing to sync' AS note;\");\nreturn [{json:{sql:parts.join(' '),deals:dealRows.length,stakeholders:stakRows.length,companies:Object.keys(comp).length}}];"
+      },
+      "id": "hs10_build",
+      "name": "Build upserts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "hs10_apply",
+      "name": "Apply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO run_logs (workflow,status,detail) VALUES ('hubspot_sync','ok', jsonb_build_object('deals', {{ $('Build upserts').first().json.deals }}, 'stakeholders', {{ $('Build upserts').first().json.stakeholders }}, 'companies', {{ $('Build upserts').first().json.companies }}));",
+        "options": {}
+      },
+      "id": "hs10_log",
+      "name": "Run log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1760,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## HubSpot sync — read-only mirror\nWeekdays 07:30: pipelines (stage-id → label map) → all deals + all contacts (paginated) → company names via batch read → idempotent upserts into `deals` + `stakeholders`.\n\n**Account matching:** company name vs accounts; deals also fall back to the deal-name prefix ('HMRC - Dynamo' → HMRC), so it works even while the token lacks the companies scope (ask IT for crm.objects.companies.read — until then company_name stays NULL).\n\n**Credential:** the same Header Auth 'HubSpot' credential as workflow 8 — select it on the 5 HTTP nodes.\nRun db/2026-07_hubspot.sql BEFORE first run. NO write-back to HubSpot (banked pending client sign-off).",
+        "height": 340,
+        "width": 520
+      },
+      "id": "hs10_note",
+      "name": "How it works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Every weekday 07:30": {
+      "main": [
+        [
+          {
+            "node": "Get pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pipelines": {
+      "main": [
+        [
+          {
+            "node": "Get deals (all pages)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get deals (all pages)": {
+      "main": [
+        [
+          {
+            "node": "Get contacts (all pages)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get contacts (all pages)": {
+      "main": [
+        [
+          {
+            "node": "Company id batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company id batches": {
+      "main": [
+        [
+          {
+            "node": "Read companies (batch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read companies (batch)": {
+      "main": [
+        [
+          {
+            "node": "Build upserts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build upserts": {
+      "main": [
+        [
+          {
+            "node": "Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply": {
+      "main": [
+        [
+          {
+            "node": "Run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
