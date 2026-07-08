@@ -45,7 +45,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}')",
+        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}',startDateTime={{ $now.minus({ days: 2 }).toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }},endDateTime={{ $now.toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }})",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
         "sendQuery": false,
@@ -61,8 +61,8 @@
       ],
       "credentials": {
         "oAuth2Api": {
-          "id": "MSGRAPH_CRED",
-          "name": "MS Graph"
+          "id": "QIB3e7FDXq9aL6tW",
+          "name": "Microsoft Graph API"
         }
       },
       "onError": "continueRegularOutput"
@@ -99,8 +99,8 @@
       ],
       "credentials": {
         "oAuth2Api": {
-          "id": "MSGRAPH_CRED",
-          "name": "MS Graph"
+          "id": "QIB3e7FDXq9aL6tW",
+          "name": "Microsoft Graph API"
         }
       },
       "onError": "continueRegularOutput"
@@ -138,15 +138,16 @@
       ],
       "credentials": {
         "oAuth2Api": {
-          "id": "MSGRAPH_CRED",
-          "name": "MS Graph"
+          "id": "QIB3e7FDXq9aL6tW",
+          "name": "Microsoft Graph API"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "function vttToText(v){\n  if(!v) return '';\n  const turns=[]; let cur=null; let inCue=false;\n  for(const raw of String(v).split(/\\r?\\n/)){\n    const l=raw.trim();\n    if(!l){ inCue=false; continue; }\n    if(/-->/.test(l)){ inCue=true; continue; }   // timestamp: cue payload follows\n    if(!inCue) continue;                          // WEBVTT header / cue id / NOTE -> skip\n    const m=l.match(/^<v\\s+([^>]+)>([\\s\\S]*)$/i);\n    if(m){\n      const speaker=m[1].trim();\n      const text=m[2].replace(/<\\/v>/ig,'').replace(/<[^>]+>/g,'').trim();\n      if(cur && cur.speaker===speaker){ cur.text += ' ' + text; }\n      else { cur={speaker,text}; turns.push(cur); }\n    } else {\n      const text=l.replace(/<[^>]+>/g,'').trim();\n      if(!text) continue;\n      if(cur){ cur.text += ' ' + text; } else { cur={speaker:'',text}; turns.push(cur); }\n    }\n  }\n  return turns.map(t => (t.speaker?t.speaker+': ':'')+t.text.replace(/\\s+/g,' ').trim()).filter(Boolean).join('\\n');\n}\nconst e = s => String(s==null?'':s).replace(/'/g,\"''\");\nconst tid     = ($('Each transcript').item.json.id) || '';\nconst subject = ($('Get meeting subject').item.json.subject) || '';\nconst text    = vttToText($('Get transcript content').item.json.data || $('Get transcript content').item.json.body || '');\nconst sql =\n  \"INSERT INTO inbox (source, dedup_key, payload, status) \" +\n  \"SELECT 'teams', '\" + e(tid) + \"', jsonb_build_object(\" +\n    \"'account', COALESCE((SELECT name FROM accounts WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), 'UNKNOWN'),\" +\n    \"'title', '\" + e(subject) + \"',\" +\n    \"'dedup_key', '\" + e(tid) + \"',\" +\n    \"'transcript', '\" + e(text) + \"'\" +\n  \"), 'pending' \" +\n  \"WHERE '\" + e(text) + \"' <> '' \" +\n  \"ON CONFLICT (dedup_key) DO NOTHING RETURNING id;\";\nreturn [{ json: { sql, transcript_id: tid, subject, chars: text.length } }];"
+        "mode": "runOnceForEachItem",
+        "jsCode": "function vttToText(v){\n  if(!v) return '';\n  const turns=[]; let cur=null; let inCue=false;\n  for(const raw of String(v).split(/\\r?\\n/)){\n    const l=raw.trim();\n    if(!l){ inCue=false; continue; }\n    if(/-->/.test(l)){ inCue=true; continue; }   // timestamp: cue payload follows\n    if(!inCue) continue;                          // WEBVTT header / cue id / NOTE -> skip\n    const m=l.match(/^<v\\s+([^>]+)>([\\s\\S]*)$/i);\n    if(m){\n      const speaker=m[1].trim();\n      const text=m[2].replace(/<\\/v>/ig,'').replace(/<[^>]+>/g,'').trim();\n      if(cur && cur.speaker===speaker){ cur.text += ' ' + text; }\n      else { cur={speaker,text}; turns.push(cur); }\n    } else {\n      const text=l.replace(/<[^>]+>/g,'').trim();\n      if(!text) continue;\n      if(cur){ cur.text += ' ' + text; } else { cur={speaker:'',text}; turns.push(cur); }\n    }\n  }\n  return turns.map(t => (t.speaker?t.speaker+': ':'')+t.text.replace(/\\s+/g,' ').trim()).filter(Boolean).join('\\n');\n}\nconst e = s => String(s==null?'':s).replace(/'/g,\"''\");\nconst tid     = ($('Each transcript').item.json.id) || '';\nconst subject = ($('Get meeting subject').item.json.subject) || '';\nconst text    = vttToText($('Get transcript content').item.json.data || $('Get transcript content').item.json.body || '');\nconst sql =\n  \"INSERT INTO inbox (source, dedup_key, payload, status) \" +\n  \"SELECT 'teams', '\" + e(tid) + \"', jsonb_build_object(\" +\n    \"'account', COALESCE((SELECT name FROM accounts WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), 'UNKNOWN'),\" +\n    \"'title', '\" + e(subject) + \"',\" +\n    \"'dedup_key', '\" + e(tid) + \"',\" +\n    \"'transcript', '\" + e(text) + \"'\" +\n  \"), 'pending' \" +\n  \"WHERE '\" + e(text) + \"' <> '' \" +\n  \"ON CONFLICT (dedup_key) DO NOTHING RETURNING id;\";\nreturn { json: { sql, transcript_id: tid, subject, chars: text.length } };"
       },
       "id": "w_build",
       "name": "Build inbox insert",
@@ -180,6 +181,39 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w_isnew",
+      "name": "New call? (insert returned id)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1900,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
           "mode": "list",
@@ -193,13 +227,13 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1900,
+        2140,
         300
       ]
     },
     {
       "parameters": {
-        "content": "## Watcher — Teams transcripts → inbox\nEvery 15 min: read the watchlist (allow-listed people) → pull each person's meeting transcripts in the last 35 min → dedupe by transcript id → drop into `inbox` (pending) → fire the Main Pipeline once per NEW call.\n\n**Edge case handled:** 2 calls → 2 inbox rows → 2 pipeline runs, each claims its own row (FOR UPDATE SKIP LOCKED). Transcripts never mix.",
+        "content": "## Watcher — Teams transcripts → inbox\nEvery 15 min: read the watchlist (allow-listed people) → pull each person's transcripts from the **last 2 days** (rolling window; dedup on transcript id makes re-sweeps free) → one inbox row per transcript → fire the Main Pipeline once per **NEW** row only (the IF gate checks the insert returned an id — duplicates return nothing).\n\n**Multiple calls in one sweep:** the split fans out per transcript and the Code node runs once PER ITEM, so 3 new calls → 3 inbox rows → 3 pipeline runs, each claiming its own row (FOR UPDATE SKIP LOCKED). Transcripts never mix. The pipeline's 5-min safety sweep catches any leftovers.",
         "height": 260,
         "width": 420
       },
@@ -214,7 +248,7 @@
     },
     {
       "parameters": {
-        "content": "## ⚠️ Before going live — confirm 3 things\n1. **Credential 'MS Graph'** — Entra app with `OnlineMeetingTranscript.Read.All` (application) + an application access policy granting it. Select it on the 3 HTTP nodes.\n2. **Endpoints** — if your original working automation used different Graph URLs/params, paste it and I'll drop them in exactly.\n3. **Watchlist** — run `db/2026-07_watchlist.sql` and insert the real GUIDs/UPNs.\n\nThen pick the target workflow on 'Trigger pipeline'.",
+        "content": "## ⚠️ After importing — 2 clicks\n1. **'Trigger pipeline (per new call)'** → open it and SELECT 'TN Brain · 1 · Main Pipeline' from the list (workflow ids are instance-specific, so the import leaves it blank).\n2. Confirm the 3 HTTP nodes picked up the 'Microsoft Graph API' credential and the 2 Postgres nodes picked up 'TN Azure DB'.\n\n**Window:** pulls the last 2 days each sweep — safe because dedup_key = transcript id (ON CONFLICT DO NOTHING), so already-seen calls insert nothing and don't re-trigger the pipeline.",
         "height": 300,
         "width": 460
       },
@@ -307,6 +341,17 @@
       ]
     },
     "Insert to inbox": {
+      "main": [
+        [
+          {
+            "node": "New call? (insert returned id)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New call? (insert returned id)": {
       "main": [
         [
           {
