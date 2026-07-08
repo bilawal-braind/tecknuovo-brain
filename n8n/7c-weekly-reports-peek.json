@@ -7,7 +7,10 @@
       "name": "Run now",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
@@ -21,7 +24,10 @@
       "name": "1. Libraries on Reporting Efficiency",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [220, 300],
+      "position": [
+        220,
+        300
+      ],
       "credentials": {
         "oAuth2Api": {
           "id": "ieNwdcRlBlCL0EM0",
@@ -37,7 +43,10 @@
       "name": "2. Pick 'Generated Report'",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,7 +60,10 @@
       "name": "3. What's inside (files & folders)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300],
+      "position": [
+        660,
+        300
+      ],
       "credentials": {
         "oAuth2Api": {
           "id": "ieNwdcRlBlCL0EM0",
@@ -67,7 +79,40 @@
       "name": "4. Listing (newest first)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $(\"2. Pick 'Generated Report'\").first().json.driveId }}/items/{{ $json.id }}/content",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "wp_content",
+      "name": "5. Download newest report (raw HTML)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
     },
     {
       "parameters": {
@@ -79,22 +124,70 @@
       "name": "How to use",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [0, -60]
+      "position": [
+        0,
+        -60
+      ]
     }
   ],
   "connections": {
     "Run now": {
-      "main": [[{ "node": "1. Libraries on Reporting Efficiency", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "1. Libraries on Reporting Efficiency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "1. Libraries on Reporting Efficiency": {
-      "main": [[{ "node": "2. Pick 'Generated Report'", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "2. Pick 'Generated Report'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "2. Pick 'Generated Report'": {
-      "main": [[{ "node": "3. What's inside (files & folders)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "3. What's inside (files & folders)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "3. What's inside (files & folders)": {
-      "main": [[{ "node": "4. Listing (newest first)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "4. Listing (newest first)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Listing (newest first)": {
+      "main": [
+        [
+          {
+            "node": "5. Download newest report (raw HTML)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
