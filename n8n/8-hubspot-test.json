@@ -1,76 +1,141 @@
 {
-  "name": "8 — HubSpot API test (deals + contacts)",
+  "name": "8 — HubSpot discovery (pipelines, buyer-role property, companies, contacts, deals)",
   "nodes": [
     {
       "parameters": {},
-      "id": "manual_trigger",
+      "id": "hs_run",
       "name": "Run now",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [0, 300]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.hubapi.com/crm/v3/objects/deals",
+        "url": "https://api.hubapi.com/crm/v3/pipelines/deals",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "limit", "value": "10" },
-            { "name": "properties", "value": "dealname,amount,dealstage,pipeline,closedate" }
-          ]
-        },
         "options": {}
       },
-      "id": "list_deals",
-      "name": "1. List deals (pipeline)",
+      "id": "hs_pipes",
+      "name": "1. Deal pipelines",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 220],
-      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } }
+      "position": [200, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.hubapi.com/crm/v3/objects/contacts",
+        "url": "https://api.hubapi.com/crm/v3/properties/contacts",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "limit", "value": "10" },
-            { "name": "properties", "value": "firstname,lastname,email,jobtitle,company" }
-          ]
-        },
         "options": {}
       },
-      "id": "list_contacts",
-      "name": "2. List contacts",
+      "id": "hs_cprops",
+      "name": "2. Contact properties",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 400],
-      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } }
+      "position": [400, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## HubSpot API test\n\n**Setup:** create an n8n credential of type **Header Auth**, named **HubSpot**:\n- Name: `Authorization`\n- Value: `Bearer <your HubSpot private-app token>`\n\nThen select it on both HTTP nodes and **Run now**.\n\n**Expect:** node 1 returns your deals (pipeline) with dealname/amount/stage; node 2 returns contacts. This shows how deals + contacts are structured, so we can map the opportunity write-back later.\n\nDocs: HubSpot CRM v3 — /crm/v3/objects/deals and /contacts.",
-        "height": 280,
-        "width": 360
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/properties/deals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
       },
-      "id": "note",
+      "id": "hs_dprops",
+      "name": "3. Deal properties",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies?limit=50&properties=name,domain",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs_comp",
+      "name": "4. Companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts?limit=20&properties=firstname,lastname,jobtitle,hs_buying_role&associations=companies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs_cont",
+      "name": "5. Contacts (sample)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals?limit=20&properties=dealname,amount,dealstage,pipeline,closedate&associations=companies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs_deals",
+      "name": "6. Deals (sample)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One compact digest of everything the integration design needs.\nconst j=n=>{try{return $(n).first().json||{};}catch(e){return {};}};\nconst interesting=/buy|role|influen|stakeholder|persona|decision|network|level|seniorit/i;\n\nconst pipelines=(j('1. Deal pipelines').results||[]).map(p=>({pipeline:p.label,id:p.id,stages:(p.stages||[]).map(s=>s.label)}));\n\nconst propPick=res=>((res.results||[]).filter(p=>interesting.test(p.name+' '+(p.label||''))).map(p=>({name:p.name,label:p.label,type:p.type,options:(p.options||[]).slice(0,12).map(o=>o.label)})));\nconst contact_props_of_interest=propPick(j('2. Contact properties'));\nconst deal_props_of_interest=propPick(j('3. Deal properties'));\n\nconst companies=(j('4. Companies').results||[]).map(c=>({id:c.id,name:(c.properties||{}).name,domain:(c.properties||{}).domain}));\n\nconst compAssoc=o=>{const a=((o.associations||{}).companies||{}).results||[];return a.length?a[0].id:null;};\nconst contacts=(j('5. Contacts (sample)').results||[]).map(c=>{const p=c.properties||{};return {name:((p.firstname||'')+' '+(p.lastname||'')).trim(),jobtitle:p.jobtitle||null,hs_buying_role:p.hs_buying_role||null,company_id:compAssoc(c)};});\n\nconst deals=(j('6. Deals (sample)').results||[]).map(d=>{const p=d.properties||{};return {name:p.dealname,amount:p.amount,stage:p.dealstage,pipeline:p.pipeline,close:p.closedate,company_id:compAssoc(d)};});\n\nreturn [{json:{pipelines,contact_props_of_interest,deal_props_of_interest,companies,contacts,deals}}];"
+      },
+      "id": "hs_digest",
+      "name": "7. Digest (paste this back)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "content": "## HubSpot discovery — one run, one digest\n**Credential:** Header Auth named 'HubSpot' — Name: `Authorization`, Value: `Bearer <private-app token>`. Select it on all 6 HTTP nodes.\n\nWhat this finds (from the workshops):\n1. The **pipelines** — expect the MQL→SQL one, the existing-customer **'need pipeline'**, and the sales/opportunity pipeline.\n2. The **buyer/influencer tag** — which contact property TN actually uses (Kaitlyn: 'all our contacts are tagged as buyers, influencers…'). Could be native `hs_buying_role` or a custom property — the filtered property list will show it, with its option labels.\n3. Any **NETWORKS scoring properties** on deals.\n4. **Companies** (names + domains — domains also let us match calls to accounts by attendee email domain).\n\nPaste node 7's output back to BraindAI. If a node 403s, the private-app token is missing a scope (needs crm.objects.contacts.read, crm.objects.companies.read, crm.objects.deals.read, crm.schemas readonly).",
+        "height": 360,
+        "width": 520
+      },
+      "id": "hs_note",
       "name": "How to test",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [800, 240]
+      "position": [0, -120]
     }
   ],
   "connections": {
-    "Run now": { "main": [[
-      { "node": "1. List deals (pipeline)", "type": "main", "index": 0 },
-      { "node": "2. List contacts", "type": "main", "index": 0 }
-    ]] }
+    "Run now": { "main": [[{ "node": "1. Deal pipelines", "type": "main", "index": 0 }]] },
+    "1. Deal pipelines": { "main": [[{ "node": "2. Contact properties", "type": "main", "index": 0 }]] },
+    "2. Contact properties": { "main": [[{ "node": "3. Deal properties", "type": "main", "index": 0 }]] },
+    "3. Deal properties": { "main": [[{ "node": "4. Companies", "type": "main", "index": 0 }]] },
+    "4. Companies": { "main": [[{ "node": "5. Contacts (sample)", "type": "main", "index": 0 }]] },
+    "5. Contacts (sample)": { "main": [[{ "node": "6. Deals (sample)", "type": "main", "index": 0 }]] },
+    "6. Deals (sample)": { "main": [[{ "node": "7. Digest (paste this back)", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" }
 }
