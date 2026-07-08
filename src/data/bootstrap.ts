@@ -77,16 +77,17 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   const liveProjects = pRows.map(mapProject)
   const liveSignals = sRows.map(mapSignal)
 
-  // Account £ value: projects' SOW value when present, otherwise the sum of
-  // closed-won HubSpot deals (Monday decommissioned — HubSpot is the money source).
+  // Account £ value: HubSpot is the money source (sum of closed-won deals).
+  // Monday's SOW values are used only when the account has no won deals at all —
+  // Monday still provides projects/context, just not the trusted financials.
   for (const acc of liveAccounts) {
-    acc.sowValue = pRows
-      .filter((p) => p.account_id === acc.id)
-      .reduce((sum, p) => sum + (typeof p.sow_value === 'string' ? Number(p.sow_value) || 0 : p.sow_value ?? 0), 0)
+    acc.sowValue = deals
+      .filter((d) => d.account_id === acc.id && !d.is_open && /won/i.test(d.stage || ''))
+      .reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
     if (!acc.sowValue) {
-      acc.sowValue = deals
-        .filter((d) => d.account_id === acc.id && !d.is_open && /won/i.test(d.stage || ''))
-        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+      acc.sowValue = pRows
+        .filter((p) => p.account_id === acc.id)
+        .reduce((sum, p) => sum + (typeof p.sow_value === 'string' ? Number(p.sow_value) || 0 : p.sow_value ?? 0), 0)
     }
   }
 
