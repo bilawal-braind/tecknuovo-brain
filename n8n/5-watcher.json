@@ -121,39 +121,6 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.is_external }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "w_extif",
-      "name": "Client-facing?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1420,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "method": "GET",
         "url": "=https://graph.microsoft.com/beta/users/{{ $('Read watchlist').item.json.graph_user_id }}/onlineMeetings/{{ $('Each transcript').item.json.meetingId }}/transcripts/{{ $('Each transcript').item.json.id }}/content",
         "authentication": "genericCredentialType",
@@ -280,7 +247,7 @@
     },
     {
       "parameters": {
-        "content": "## Watcher — Teams transcripts → inbox\nEvery 30 min: read the watchlist → pull each person's transcripts from the last 75 min (2.5× the interval; dedup on transcript id makes the overlap free) → **keep only client-facing calls** (≥1 attendee outside TN's domain — internal calls are skipped before the VTT is even downloaded) → one inbox row per transcript → fire the Main Pipeline once per NEW row only.\n\n**Account matching:** title vs `accounts` + `client_directory` (the full Monday client list, kept warm by the 07:00 reconcile). No match → UNKNOWN → the pipeline classifies anyway and stores the signals UNLINKED (no fake account).",
+        "content": "## Watcher — Teams transcripts → inbox\nEvery 30 min: read the watchlist → pull each person's transcripts from the last 75 min (2.5× the interval; dedup on transcript id makes the overlap free) → one inbox row per transcript → fire the Main Pipeline once per NEW row only.\n\nALL calls are ingested for now (internal + client). 'Attendee check' records the external attendee domains in the payload, so filtering to client-facing-only later is a one-node change.\n\n**Account matching:** title vs `accounts` + `client_directory` (the full Monday client list, kept warm by the 07:00 reconcile). No match → UNKNOWN → the pipeline classifies anyway and stores the signals UNLINKED (no fake account).",
         "height": 260,
         "width": 420
       },
@@ -295,7 +262,7 @@
     },
     {
       "parameters": {
-        "content": "## ⚠️ After importing\n1. **'Trigger pipeline (per new call)'** → select 'TN Brain · 1 · Main Pipeline' (ids are instance-specific).\n2. Run `db/2026-07_client_directory.sql` BEFORE activating (the insert references client_directory).\n3. In **'Attendee check'**: confirm INTERNAL_DOMAINS matches TN's real email domain(s).\n4. Confirm credentials on the 3 HTTP nodes (Microsoft Graph API) + 2 Postgres nodes (TN Azure DB).\n\n**Window:** last 75 min per 30-min sweep. If n8n is down >45 min, run once manually with a wider window (edit `minutes: 75`), then set it back — dedup makes backfill safe.",
+        "content": "## ⚠️ After importing\n1. **'Trigger pipeline (per new call)'** → select 'TN Brain · 1 · Main Pipeline'.\n2. Run the one-off SQL first (creates client_directory) — see db/2026-07_client_directory.sql.\n3. Confirm credentials on the HTTP nodes (Microsoft Graph API) + Postgres nodes (TN Azure DB).\n\n**Window:** last 75 min per 30-min sweep. If n8n is down >45 min, run once manually with a wider window (edit `minutes: 75`), then set it back — dedup makes backfill safe.",
         "height": 300,
         "width": 460
       },
@@ -410,17 +377,6 @@
       ]
     },
     "Attendee check": {
-      "main": [
-        [
-          {
-            "node": "Client-facing?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Client-facing?": {
       "main": [
         [
           {

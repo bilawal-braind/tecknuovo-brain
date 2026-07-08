@@ -1,33 +1,67 @@
 {
-  "name": "7 — SharePoint API test (resolve site + list libraries)",
+  "name": "7 — SharePoint API test (discover sites, then list libraries)",
   "nodes": [
     {
       "parameters": {},
-      "id": "manual_trigger",
+      "id": "sp_run",
       "name": "Run now",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [0, 300]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/sites/tecknuovo.sharepoint.com:/sites/REPLACE_WITH_SITE_NAME",
+        "url": "https://graph.microsoft.com/v1.0/sites",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "search", "value": "*" },
+            { "name": "$select", "value": "id,name,displayName,webUrl" },
+            { "name": "$top", "value": "200" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sp_all",
+      "name": "1. All sites the app can see",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/root",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
         "options": {}
       },
-      "id": "resolve_site",
-      "name": "1. Resolve site",
+      "id": "sp_root",
+      "name": "2. Root site (auth sanity check)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [440, 300],
-      "credentials": { "oAuth2Api": { "id": "SP_CRED", "name": "MS Graph SharePoint" } }
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/sites/{{ $json.id }}/lists",
+        "url": "https://graph.microsoft.com/v1.0/sites/PASTE_SITE_ID_HERE/lists",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
         "sendQuery": true,
@@ -38,29 +72,42 @@
         },
         "options": {}
       },
-      "id": "list_lists",
-      "name": "2. List lists & libraries",
+      "id": "sp_lists",
+      "name": "3. Lists & libraries (paste a site id first)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300],
-      "credentials": { "oAuth2Api": { "id": "SP_CRED", "name": "MS Graph SharePoint" } }
+      "position": [660, 300],
+      "disabled": true,
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
     },
     {
       "parameters": {
-        "content": "## SharePoint API test\n\n**Setup:**\n1. Create an n8n OAuth2 credential named **MS Graph SharePoint** (Grant Type: **Client Credentials**; Token URL: `https://login.microsoftonline.com/<TENANT>/oauth2/v2.0/token`; the SharePoint app's Client ID + Secret; Scope: `https://graph.microsoft.com/.default`).\n2. On BOTH HTTP nodes, select that credential.\n3. In **1. Resolve site**, replace `REPLACE_WITH_SITE_NAME` with the real site (e.g. the part after `/sites/` in the SharePoint URL). Fix the hostname too if it isn't `tecknuovo.sharepoint.com`.\n4. **Run now.**\n\n**Expect:** node 1 returns the site (with an `id`); node 2 lists the document libraries + lists in it. If node 1 works but node 2 403s, it's a Sites.Selected site-grant issue.",
+        "content": "## How to test (after IT added Sites.Read.All + admin consent)\n1. **Execute workflow.** Node 1 returns every SharePoint site the app can see — `displayName` + `webUrl` per site. Node 2 is just an auth sanity check (root site).\n2. Find the site that holds the **weekly reports** (recognisable from displayName/webUrl). Copy its `id` (the long `tecknuovo.sharepoint.com,guid,guid` string).\n3. Paste that id into node 3's URL (replace PASTE_SITE_ID_HERE), enable the node, run again → you get the document libraries/lists on that site.\n\n**If node 1 returns an empty `value` array or 403:** the permission isn't consented yet, or it was added as *Delegated* instead of **Application** — ask IT to double-check both.",
         "height": 320,
-        "width": 380
+        "width": 480
       },
-      "id": "note",
+      "id": "sp_note",
       "name": "How to test",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [440, 460]
+      "position": [0, -80]
     }
   ],
   "connections": {
-    "Run now": { "main": [[{ "node": "1. Resolve site", "type": "main", "index": 0 }]] },
-    "1. Resolve site": { "main": [[{ "node": "2. List lists & libraries", "type": "main", "index": 0 }]] }
+    "Run now": {
+      "main": [[{ "node": "1. All sites the app can see", "type": "main", "index": 0 }]]
+    },
+    "1. All sites the app can see": {
+      "main": [[{ "node": "2. Root site (auth sanity check)", "type": "main", "index": 0 }]]
+    },
+    "2. Root site (auth sanity check)": {
+      "main": [[{ "node": "3. Lists & libraries (paste a site id first)", "type": "main", "index": 0 }]]
+    }
   },
   "settings": { "executionOrder": "v1" }
 }
