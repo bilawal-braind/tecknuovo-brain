@@ -7,13 +7,13 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 15
+              "minutesInterval": 30
             }
           ]
         }
       },
       "id": "w_sched",
-      "name": "Every 15 min",
+      "name": "Every 30 min",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -45,7 +45,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}',startDateTime={{ $now.minus({ days: 2 }).toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }},endDateTime={{ $now.toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }})",
+        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}',startDateTime={{ $now.minus({ minutes: 75 }).toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }},endDateTime={{ $now.toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }})",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
         "sendQuery": false,
@@ -233,7 +233,7 @@
     },
     {
       "parameters": {
-        "content": "## Watcher — Teams transcripts → inbox\nEvery 15 min: read the watchlist (allow-listed people) → pull each person's transcripts from the **last 2 days** (rolling window; dedup on transcript id makes re-sweeps free) → one inbox row per transcript → fire the Main Pipeline once per **NEW** row only (the IF gate checks the insert returned an id — duplicates return nothing).\n\n**Multiple calls in one sweep:** the split fans out per transcript and the Code node runs once PER ITEM, so 3 new calls → 3 inbox rows → 3 pipeline runs, each claiming its own row (FOR UPDATE SKIP LOCKED). Transcripts never mix. The pipeline's 5-min safety sweep catches any leftovers.",
+        "content": "## Watcher — Teams transcripts → inbox\nEvery 30 min: read the watchlist (allow-listed people) → pull each person's transcripts from the **last 75 min** (2.5× the interval: each transcript gets 2–3 sweeps, so one failed sweep or a late-arriving transcript is never missed; dedup on transcript id makes the overlap free) → one inbox row per transcript → fire the Main Pipeline once per **NEW** row only (the IF gate checks the insert returned an id — duplicates return nothing).\n\n**Multiple calls in one sweep:** the split fans out per transcript and the Code node runs once PER ITEM, so 3 new calls → 3 inbox rows → 3 pipeline runs, each claiming its own row (FOR UPDATE SKIP LOCKED). Transcripts never mix. The pipeline's 5-min safety sweep catches any leftovers.",
         "height": 260,
         "width": 420
       },
@@ -248,7 +248,7 @@
     },
     {
       "parameters": {
-        "content": "## ⚠️ After importing — 2 clicks\n1. **'Trigger pipeline (per new call)'** → open it and SELECT 'TN Brain · 1 · Main Pipeline' from the list (workflow ids are instance-specific, so the import leaves it blank).\n2. Confirm the 3 HTTP nodes picked up the 'Microsoft Graph API' credential and the 2 Postgres nodes picked up 'TN Azure DB'.\n\n**Window:** pulls the last 2 days each sweep — safe because dedup_key = transcript id (ON CONFLICT DO NOTHING), so already-seen calls insert nothing and don't re-trigger the pipeline.",
+        "content": "## ⚠️ After importing — 2 clicks\n1. **'Trigger pipeline (per new call)'** → open it and SELECT 'TN Brain · 1 · Main Pipeline' from the list (workflow ids are instance-specific, so the import leaves it blank).\n2. Confirm the 3 HTTP nodes picked up the 'Microsoft Graph API' credential and the 2 Postgres nodes picked up 'TN Azure DB'.\n\n**Window:** last 75 min per sweep (30-min schedule × 2.5 safety overlap). If n8n is ever down for more than ~45 min, run the watcher once manually with a wider window (edit `minutes: 75` in the URL) to backfill, then set it back.",
         "height": 300,
         "width": 460
       },
@@ -263,7 +263,7 @@
     }
   ],
   "connections": {
-    "Every 15 min": {
+    "Every 30 min": {
       "main": [
         [
           {
