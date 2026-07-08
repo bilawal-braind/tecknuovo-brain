@@ -58,7 +58,8 @@
               "paginationCompleteWhen": "other",
               "completeExpression": "={{ !$response.body.paging?.next?.link }}",
               "limitPagesFetched": true,
-              "maxRequests": 30
+              "maxRequests": 30,
+              "requestInterval": 2000
             }
           }
         }
@@ -92,7 +93,8 @@
               "paginationCompleteWhen": "other",
               "completeExpression": "={{ !$response.body.paging?.next?.link }}",
               "limitPagesFetched": true,
-              "maxRequests": 30
+              "maxRequests": 30,
+              "requestInterval": 2000
             }
           }
         }
@@ -134,7 +136,14 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ properties: ['name','domain'], inputs: $json.inputs }) }}",
-        "options": {}
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
       },
       "id": "hs10_comp",
       "name": "Read companies (batch)",
