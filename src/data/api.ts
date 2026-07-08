@@ -36,6 +36,8 @@ export type ApiAccount = {
   open_signals: number
   budget_burn_pct: number | string | null
   headroom: number | string | null
+  client_partner_name?: string | null
+  delivery_lead?: string | null
 }
 
 export type ApiProject = {

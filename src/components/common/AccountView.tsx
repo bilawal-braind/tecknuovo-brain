@@ -3,10 +3,11 @@ import { accountById, personName, podName, projectsForAccount } from '../../data
 import { signalsForAccount } from '../../data/signals'
 import { callsForAccount } from '../../data/calls'
 import { complianceFor } from '../../data/delivery'
-import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole } from '../../data/crm'
+import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole, weeklyReports } from '../../data/crm'
 import type { CadenceStatus } from '../../data/types'
 import { RagDot, CoverageBadge } from './primitives'
 import { CallsView } from './CallsView'
+import { ReportCard } from './WeeklyReports'
 
 export function money(n: number) {
   return n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : `£${Math.round(n / 1000)}k`
@@ -99,6 +100,25 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
           {commercial && <CrmPanel accountId={account.id} />}
         </div>
       </div>
+
+      <LatestWeeklyReport accountId={account.id} />
+    </div>
+  )
+}
+
+// The account's most recent weekly-report section (from SharePoint), if it has one.
+function LatestWeeklyReport({ accountId }: { accountId: string }) {
+  const wr = weeklyReports
+    .filter((w) => w.account_id === accountId)
+    .sort((a, b) => b.week_ending.localeCompare(a.week_ending))
+  if (!wr.length) return null
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-[14px] font-semibold">Latest weekly report</h3>
+        <span className="text-[11px] text-muted-2">from SharePoint · w/e {wr[0].week_ending.slice(0, 10)}</span>
+      </div>
+      <ReportCard r={wr[0]} />
     </div>
   )
 }

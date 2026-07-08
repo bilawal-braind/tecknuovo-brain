@@ -80,7 +80,7 @@ export function Delivery() {
               </>
             )}
 
-            {view === 'weekly' && (weeklyReports.length ? <WeeklyReports /> : <WeeklyComingSoon />)}
+            {view === 'weekly' && (weeklyReports.length ? <WeeklyReports onOpenAccount={(id) => { setSelProject(null); setSel(id) }} /> : <WeeklyComingSoon />)}
           </>
         )}
       </div>

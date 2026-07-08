@@ -102,6 +102,21 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
     }
   })
 
+  // Account-level people: Client Partner (from the people table) and the delivery
+  // lead named on the account's latest weekly report — fills the account header.
+  aRows.forEach((a, i) => {
+    const addPerson = (nm: string | null | undefined, role: string, prefix: string) => {
+      if (!nm) return undefined
+      const id = prefix + nm.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      if (!dmPeople.has(id)) dmPeople.set(id, { id, name: nm, role })
+      return id
+    }
+    const cp = addPerson(a.client_partner_name, 'Client Partner', 'cp-')
+    if (cp) liveAccounts[i].clientPartner = cp
+    const dl = addPerson(a.delivery_lead, 'Delivery Manager', 'dl-')
+    if (dl && !liveAccounts[i].deliveryManager) liveAccounts[i].deliveryManager = dl
+  })
+
   // Consultants (associates) -> people + project.advisors (linked by team/programme match).
   const consultantPeople: Person[] = asRows.map((as) => ({ id: 'as-' + as.id, name: as.name, role: 'Associate' }))
   asRows.forEach((as) => {
