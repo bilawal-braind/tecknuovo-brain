@@ -88,7 +88,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
                     <span>{p.phase}</span><span className="text-muted-2">·</span>
                     <span>{p.sprint}</span><span className="text-muted-2">·</span>
-                    <span>{p.deliveryManager ? personName(p.deliveryManager) : 'resource-only'}</span>
+                    <span>{p.deliveryManager ? personName(p.deliveryManager) : account.deliveryManager ? `${personName(account.deliveryManager)} (account DM)` : 'resource-only'}</span>
                   </div>
                   <Cadence projectId={p.id} />
                 </button>
