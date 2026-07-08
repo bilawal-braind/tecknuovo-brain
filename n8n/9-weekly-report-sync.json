@@ -183,6 +183,28 @@
     {
       "parameters": {
         "operation": "executeQuery",
+        "query": "UPDATE calls c SET project_id = p.id FROM projects p WHERE c.project_id IS NULL AND c.account_id = p.account_id AND (SELECT count(*) FROM projects p2 WHERE p2.account_id = c.account_id) = 1; UPDATE signals s SET project_id = p.id FROM projects p WHERE s.project_id IS NULL AND s.account_id = p.account_id AND (SELECT count(*) FROM projects p2 WHERE p2.account_id = s.account_id) = 1;",
+        "options": {}
+      },
+      "id": "wr9_link",
+      "name": "Link account-level calls to the project",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1650,
+        460
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
         "query": "=INSERT INTO run_logs (workflow,status,detail) VALUES ('weekly_report_sync','ok', jsonb_build_object('files', {{ $('Each report file').all().length }}));",
         "options": {}
       },
@@ -308,6 +330,17 @@
       ]
     },
     "Derive projects from reports": {
+      "main": [
+        [
+          {
+            "node": "Link account-level calls to the project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link account-level calls to the project": {
       "main": [
         [
           {
