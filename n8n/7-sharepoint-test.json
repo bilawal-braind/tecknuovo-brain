@@ -1,0 +1,66 @@
+{
+  "name": "7 — SharePoint API test (resolve site + list libraries)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual_trigger",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/tecknuovo.sharepoint.com:/sites/REPLACE_WITH_SITE_NAME",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "id": "resolve_site",
+      "name": "1. Resolve site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": { "oAuth2Api": { "id": "SP_CRED", "name": "MS Graph SharePoint" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/sites/{{ $json.id }}/lists",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "$select", "value": "id,name,displayName,webUrl,list" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "list_lists",
+      "name": "2. List lists & libraries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "credentials": { "oAuth2Api": { "id": "SP_CRED", "name": "MS Graph SharePoint" } }
+    },
+    {
+      "parameters": {
+        "content": "## SharePoint API test\n\n**Setup:**\n1. Create an n8n OAuth2 credential named **MS Graph SharePoint** (Grant Type: **Client Credentials**; Token URL: `https://login.microsoftonline.com/<TENANT>/oauth2/v2.0/token`; the SharePoint app's Client ID + Secret; Scope: `https://graph.microsoft.com/.default`).\n2. On BOTH HTTP nodes, select that credential.\n3. In **1. Resolve site**, replace `REPLACE_WITH_SITE_NAME` with the real site (e.g. the part after `/sites/` in the SharePoint URL). Fix the hostname too if it isn't `tecknuovo.sharepoint.com`.\n4. **Run now.**\n\n**Expect:** node 1 returns the site (with an `id`); node 2 lists the document libraries + lists in it. If node 1 works but node 2 403s, it's a Sites.Selected site-grant issue.",
+        "height": 320,
+        "width": 380
+      },
+      "id": "note",
+      "name": "How to test",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [440, 460]
+    }
+  ],
+  "connections": {
+    "Run now": { "main": [[{ "node": "1. Resolve site", "type": "main", "index": 0 }]] },
+    "1. Resolve site": { "main": [[{ "node": "2. List lists & libraries", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
