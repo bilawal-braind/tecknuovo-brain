@@ -88,7 +88,7 @@ export function Delivery() {
   )
 }
 
-// Weekly reports come from SharePoint, which isn't connected yet — show a polished
+// Weekly reports come from SharePoint, which isn't connected yet - show a polished
 // "coming soon" panel instead of a broken/empty list.
 function WeeklyComingSoon() {
   return (
@@ -118,7 +118,7 @@ function WeeklyComingSoon() {
         </span>
         <h3 className="mt-3 text-[19px] font-bold tracking-tight">Weekly reports</h3>
         <p className="mt-2 text-[13px] leading-relaxed text-muted">
-          Once your <b>SharePoint</b> is connected, each project's weekly report is pulled in and auto-drafted here — what was delivered, the focus for next week, and key risks — so you can scan every delivery in one place without opening them one by one.
+          Once your <b>SharePoint</b> is connected, each project's weekly report is pulled in and auto-drafted here - what was delivered, the focus for next week, and key risks - so you can scan every delivery in one place without opening them one by one.
         </p>
         <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-[12px] text-muted-2">
           <Cloud size={13} /> Waiting on SharePoint access <ArrowRight size={12} /> then this fills in automatically

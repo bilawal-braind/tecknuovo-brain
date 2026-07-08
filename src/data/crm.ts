@@ -1,5 +1,5 @@
 // Weekly reports + CRM mirror (stakeholders, deals), hydrated in live mode by
-// bootstrap.ts exactly like the other shared arrays. Empty in mock mode — views
+// bootstrap.ts exactly like the other shared arrays. Empty in mock mode - views
 // that use these fall back gracefully (weekly tab keeps its "coming soon" panel,
 // the account pipeline panel simply doesn't render).
 import type { ApiWeeklyReport, ApiStakeholder, ApiDeal } from './api'

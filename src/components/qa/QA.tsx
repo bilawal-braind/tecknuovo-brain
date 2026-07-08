@@ -12,7 +12,7 @@ import { evalSummary } from '../../data/evals'
 
 // Standalone QA & Evaluation screen. Transparent by design: every signal shows the
 // exact transcript quote it came from, and a human can mark it Correct / Incorrect.
-// Those reviews feed the live "human agreement" number — the trust metric.
+// Those reviews feed the live "human agreement" number - the trust metric.
 export function QA() {
   const [data, setData] = useState<QaData | null>(null)
   const [verdicts, setVerdicts] = useState<Record<string, 'correct' | 'incorrect'>>({})
@@ -49,7 +49,7 @@ export function QA() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 18 }}>
         <Stat label="Signals captured" value={String(data.totals.signals)} />
         <Stat label="Calls processed" value={String(data.totals.calls)} />
-        <Stat label="Human agreement" value={agreementPct == null ? '—' : `${agreementPct}%`} accent />
+        <Stat label="Human agreement" value={agreementPct == null ? '-' : `${agreementPct}%`} accent />
         <Stat label="Reviewed by humans" value={String(reviewed)} sub={`of ${data.totals.signals}`} />
       </div>
 
@@ -62,15 +62,15 @@ export function QA() {
           <div key={t} style={card}>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>{SIGNAL_META[t].emoji} {SIGNAL_META[t].label}</div>
             <div style={{ fontSize: 26, fontWeight: 700 }}>{byType[t]?.n ?? 0}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted-2)' }}>avg confidence {byType[t]?.avg ?? '—'}%</div>
+            <div style={{ fontSize: 11, color: 'var(--muted-2)' }}>avg confidence {byType[t]?.avg ?? '-'}%</div>
           </div>
         ))}
       </div>
 
       {/* audit trail */}
-      <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Audit trail — every signal, with its source</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Audit trail - every signal, with its source</h3>
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-        Each signal is traceable to the exact words on the call. Mark any one Correct or Incorrect — it updates the agreement score live.
+        Each signal is traceable to the exact words on the call. Mark any one Correct or Incorrect - it updates the agreement score live.
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {data.audit.map((row) => {
@@ -114,20 +114,20 @@ export function QA() {
   )
 }
 
-// Automated evaluation quality — the same checks as Phoenix, shown in the product.
+// Automated evaluation quality - the same checks as Phoenix, shown in the product.
 function EvalQuality() {
   const s = useMemo(() => evalSummary(), [])
   const metrics = [
-    { key: 'Groundedness', v: s.groundedness, def: 'Quote appears in the transcript — no hallucination.' },
+    { key: 'Groundedness', v: s.groundedness, def: 'Quote appears in the transcript - no hallucination.' },
     { key: 'Framework validity', v: s.frameworkValidity, def: 'Scored on TN frameworks (Risk 5×5 / NETWORKS).' },
     { key: 'Calibration', v: s.calibration, def: 'Confidence matches the framework maths.' },
   ]
   const barColor = (v: number) => (v >= 90 ? '#16a34a' : v >= 70 ? '#d97706' : '#dc2626')
   return (
     <div style={{ marginBottom: 22 }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Evaluation quality — automated, on all {s.n} signals</h3>
+      <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Evaluation quality - automated, on all {s.n} signals</h3>
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 12px' }}>
-        Plain-maths checks against the call transcript and Tecknuovo&apos;s own frameworks — not an AI grading an AI.
+        Plain-maths checks against the call transcript and Tecknuovo&apos;s own frameworks - not an AI grading an AI.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {metrics.map((m) => (
@@ -178,7 +178,7 @@ function Shell({ children }: { children: ReactNode }) {
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--muted-2)' }}>Tecknuovo × BraindAI · Second Brain</div>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: '2px 0 0' }}>QA &amp; Evaluation</h2>
-        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>How the AI is performing, in the open — what it captured, how sure it was, and whether humans agree.</p>
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>How the AI is performing, in the open - what it captured, how sure it was, and whether humans agree.</p>
       </div>
       {children}
     </div>

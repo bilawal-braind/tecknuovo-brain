@@ -162,6 +162,10 @@ export const fetchQA = () => get<QaData>('/api/qa')
 // ── Who am I (role + scope from the signed-in token) ──
 export type Me = { email: string; role: string; scope: string; name: string | null }
 export const fetchMe = () => get<Me>('/api/me')
+// Human approval on an opportunity -> queue the HubSpot deal push (workflow 11 pushes).
+export const pushToHubspot = (signalId: string, approve: boolean, givenBy?: string) =>
+  post<{ id: string; status: string }>('/api/hubspot-push', { signal_id: signalId, approve, given_by: givenBy })
+
 export const submitFeedback = (
   signalId: string,
   verdict: 'correct' | 'incorrect' | 'relabel',

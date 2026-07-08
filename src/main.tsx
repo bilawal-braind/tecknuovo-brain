@@ -10,7 +10,7 @@ const mount = () => root.render(<React.StrictMode><App /></React.StrictMode>)
 
 async function start() {
   // SSO mode: complete any sign-in redirect and make sure we hold a token BEFORE
-  // fetching data — otherwise the API (rightly) rejects the request.
+  // fetching data - otherwise the API (rightly) rejects the request.
   if (authEnabled) {
     try { await handleRedirect() } catch { /* fall through to the login screen */ }
     if (!getAuthToken()) {
@@ -22,7 +22,7 @@ async function start() {
 
   const boot = await bootstrap()
 
-  // In SSO mode, a data 401 means the token is stale/invalid — clear it and let the
+  // In SSO mode, a data 401 means the token is stale/invalid - clear it and let the
   // app show the sign-in screen again (rather than the hard "API unreachable" error).
   if (boot.source === 'live' && boot.error) {
     if (authEnabled && /401|unauthorized|invalid|expired|forbidden/i.test(boot.error)) {

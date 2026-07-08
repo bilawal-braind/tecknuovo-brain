@@ -4,7 +4,7 @@ import type { SignalType } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { submitFeedback } from '../../data/api'
 
-// Prominent quality/feedback control shown on every signal, on every dashboard —
+// Prominent quality/feedback control shown on every signal, on every dashboard -
 // the same Correct / Incorrect / Relabel + note flow as the Observability screen.
 // Feeds the feedback loop (silently no-ops if the API isn't reachable, e.g. the mock demo).
 const TYPES: SignalType[] = ['opportunity', 'risk', 'update', 'people']
@@ -29,14 +29,14 @@ export function QAReview({ signalId, value, onSubmit }: { signalId: string; valu
 
   return (
     <div className="rounded-lg border border-line bg-bg-2 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-2">Quality check — is this right?</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-2">Quality check - is this right?</div>
 
       {verdict ? (
         <div className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 text-[12px] font-medium">
           {verdict.kind === 'correct' && <><Check size={14} className="text-[var(--opp)]" /> Marked correct</>}
           {verdict.kind === 'incorrect' && <><X size={14} className="text-[var(--risk)]" /> Marked incorrect</>}
           {verdict.kind === 'relabel' && verdict.newType && <><RefreshCw size={13} className="text-[var(--people)]" /> Relabelled to {SIGNAL_META[verdict.newType].label}</>}
-          <span className="text-[11px] text-muted-2">— logged, the system learns from this.</span>
+          <span className="text-[11px] text-muted-2">- logged, the system learns from this.</span>
         </div>
       ) : relabeling ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">

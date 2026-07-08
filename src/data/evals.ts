@@ -1,4 +1,4 @@
-// Automated quality checks on every signal — the same deterministic maths as the Phoenix
+// Automated quality checks on every signal - the same deterministic maths as the Phoenix
 // eval, but computed in the browser so the dashboard can show it (works live + demo, no API).
 // Basis: the call TRANSCRIPT (groundedness) and TN's own FRAMEWORKS (validity + calibration).
 import { signals as allSignals } from './signals'
@@ -18,7 +18,7 @@ export function groundedness(sig: Signal): number {
   const q = norm(sig.quote)
   if (!q) return 0
   const ctx = transcriptFor(sig)
-  if (!ctx) return 1 // no transcript to check against (built-in demo) — don't penalise
+  if (!ctx) return 1 // no transcript to check against (built-in demo) - don't penalise
   if (ctx.includes(q)) return 1
   const w = q.split(' ').filter((x) => x.length > 3)
   return w.length ? Math.round((w.filter((x) => ctx.includes(x)).length / w.length) * 100) / 100 : 0

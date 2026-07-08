@@ -4,7 +4,7 @@ import { FileText, User, ThumbsUp, ThumbsDown, ArrowRight, AlertTriangle, Search
 import { weeklyReports } from '../../data/crm'
 import type { ApiWeeklyReport } from '../../data/api'
 
-// Live weekly reports — the per-project sections of the Monday portfolio report,
+// Live weekly reports - the per-project sections of the Monday portfolio report,
 // pulled from SharePoint by the Weekly Report Sync.
 // Features: week picker · RAG summary strip (click to filter) · account filter chips ·
 // week-over-week RAG change badges · free-text search across ALL weeks.
@@ -77,7 +77,7 @@ export function WeeklyReports({ onOpenAccount }: { onOpenAccount?: (accountId: s
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search all weeks — risks, summaries…"
+            placeholder="Search all weeks - risks, summaries…"
             className="w-[260px] rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-[12px] outline-none focus:border-[var(--accent)]"
           />
         </div>
@@ -102,7 +102,7 @@ export function WeeklyReports({ onOpenAccount }: { onOpenAccount?: (accountId: s
         </div>
       )}
 
-      {/* RAG summary strip — click to filter */}
+      {/* RAG summary strip - click to filter */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {(['green', 'amber', 'red'] as const).map((k) => (
           <button

@@ -235,7 +235,7 @@ function TranscriptLab() {
               ? { borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent-d)' }
               : { borderColor: 'var(--line)', color: 'var(--muted)' }}
           >
-            {c.title.replace(/\s—\s/g, ' · ').replace(/\s-\s/g, ' · ')}
+            {c.title.replace(/\s-\s/g, ' · ').replace(/\s-\s/g, ' · ')}
           </button>
         ))}
         <button

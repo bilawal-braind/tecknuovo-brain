@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw } from 'lucide-react'
+import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback } from '../../data/api'
+import { submitFeedback, pushToHubspot } from '../../data/api'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
 import type { Verdict } from './QAReview'
@@ -53,19 +53,19 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
 
       {open && (
         <div className="border-t border-line bg-surface-2 p-4">
-          {/* Signal — what it is */}
+          {/* Signal - what it is */}
           <div className="eyebrow text-muted-2">Signal</div>
           <div className="mt-1 flex items-start gap-2 text-[13px] font-medium leading-snug text-text">
             <span style={{ color: m.color }}>{m.emoji}</span>
             <span>{signal.summary}</span>
           </div>
 
-          {/* Reason — why it was flagged */}
+          {/* Reason - why it was flagged */}
           <div className="mt-3 eyebrow text-muted-2">Why it was flagged</div>
           <p className="mt-1 border-l-2 pl-2.5 text-[13px] italic leading-relaxed text-muted" style={{ borderColor: m.color }}>“{signal.quote}”</p>
           <div className="mt-1 text-[11px] text-muted-2">{signal.sourceCall.title} · {signal.sourceCall.type}{signal.sourceCall.speaker ? ` · ${signal.sourceCall.speaker}` : ''} · via Microsoft Teams</div>
 
-          {/* Action — what to do next */}
+          {/* Action - what to do next */}
           <div className="mt-3 eyebrow text-muted-2">Suggested action</div>
           <div className="mt-1 flex items-start gap-2 rounded-lg bg-surface px-3 py-2">
             <ArrowRightCircle size={14} className="mt-0.5 shrink-0" style={{ color: m.color }} />
@@ -76,6 +76,10 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
               )}
             </div>
           </div>
+
+          <FrameworkScore signal={signal} />
+
+          {signal.type === 'opportunity' && !done && <HubspotApproval signal={signal} />}
 
           <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} value={verdict} onSubmit={logFeedback} /></div>
 
@@ -96,7 +100,72 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   )
 }
 
-// Always-visible feedback control on every signal row, on every dashboard — so anyone
+// How the score was computed - always against Tecknuovo's own frameworks, never an
+// AI opinion. Opportunities: NETWORKS (0-40). Risks: the 5x5 matrix (1-25).
+function FrameworkScore({ signal }: { signal: Signal }) {
+  let title = ''
+  let scoreLine = ''
+  let explain = ''
+  if (signal.type === 'opportunity' && signal.networksTotal != null) {
+    title = 'NETWORKS qualification score'
+    scoreLine = `${signal.networksTotal}/40${signal.band ? ` · ${signal.band}` : ''}`
+    explain = `Scored against Tecknuovo's NETWORKS framework (Need, Effort, Time, Who, Originality, Resources, Kompetition, Sign-off). Confidence ${signal.confidence}% = ${signal.networksTotal} out of 40.`
+  } else if (signal.type === 'risk' && signal.likelihood != null && signal.impact != null) {
+    title = '5x5 risk score'
+    scoreLine = `${signal.likelihood} x ${signal.impact} = ${signal.likelihood * signal.impact}/25${signal.band ? ` · ${signal.band}` : ''}`
+    explain = `Scored on Tecknuovo's 5x5 risk matrix (likelihood x impact). Confidence ${signal.confidence}% = ${signal.likelihood * signal.impact} out of 25.`
+  } else {
+    return null
+  }
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-surface px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-2"><Gauge size={12} /> {title}</span>
+        <span className="text-[13px] font-bold" style={{ color: 'var(--accent-d)' }}>{scoreLine}</span>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted">{explain}</p>
+    </div>
+  )
+}
+
+// Human-in-the-loop write-back: an approved opportunity is queued and workflow 11
+// creates the deal in HubSpot (Opportunity Qualification pipeline, mapped to the
+// account's company). Declining records the decision. The ONLY outward write.
+function HubspotApproval({ signal }: { signal: Signal }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'queued' | 'declined' | 'done'>('idle')
+  const decide = (approve: boolean) => {
+    setState('busy')
+    pushToHubspot(signal.id, approve)
+      .then(() => setState(approve ? 'queued' : 'declined'))
+      .catch(() => setState('done'))
+  }
+  if (state === 'queued')
+    return <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 10%, transparent)' }}>Approved. The deal will appear in HubSpot on this account within 15 minutes.</div>
+  if (state === 'declined')
+    return <div className="mt-3 rounded-lg bg-bg-2 px-3 py-2.5 text-[12px] text-muted">Noted as not an opportunity. It will not be pushed.</div>
+  if (state === 'done')
+    return <div className="mt-3 rounded-lg bg-bg-2 px-3 py-2.5 text-[12px] text-muted">A decision was already recorded for this opportunity.</div>
+  return (
+    <div className="mt-3 rounded-lg border px-3 py-2.5" style={{ borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 6%, transparent)' }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[12.5px] font-semibold">Is this a real opportunity?</div>
+          <div className="mt-0.5 text-[11px] text-muted">Approving creates a deal on this account in HubSpot (Opportunity Qualification pipeline). Nothing is pushed without your yes.</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button disabled={state === 'busy'} onClick={() => decide(true)} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--opp)' }}>
+            <Send size={12} /> Yes, push to HubSpot
+          </button>
+          <button disabled={state === 'busy'} onClick={() => decide(false)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-text disabled:opacity-50">
+            No
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Always-visible feedback control on every signal row, on every dashboard - so anyone
 // (not just people with the Observability dashboard) can mark a signal Correct / Incorrect
 // or open it to relabel. Once given, it shows the logged verdict.
 function FeedbackControl({ verdict, onVote, onRelabel }: { verdict: Verdict | null; onVote: (v: Verdict) => void; onRelabel: () => void }) {

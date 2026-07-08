@@ -1,0 +1,232 @@
+{
+  "name": "TN Brain · 11 · HubSpot push (approved opportunities → deals)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "hp11_sched",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/pipelines/deals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hp11_pipes",
+      "name": "Get pipelines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE hubspot_pushes hp SET status='pushing' WHERE hp.id IN (SELECT id FROM hubspot_pushes WHERE status='pending' ORDER BY created_at LIMIT 10) RETURNING hp.id, hp.signal_id, hp.deal_name, hp.account_id, (SELECT s.details->>'networks_total' FROM signals s WHERE s.id=hp.signal_id) AS networks_total, COALESCE((SELECT d.hubspot_company_id FROM deals d WHERE d.account_id=hp.account_id AND d.hubspot_company_id IS NOT NULL LIMIT 1),(SELECT st.hubspot_company_id FROM stakeholders st WHERE st.account_id=hp.account_id AND st.hubspot_company_id IS NOT NULL LIMIT 1)) AS company_id;",
+        "options": {}
+      },
+      "id": "hp11_claim",
+      "name": "Claim approved pushes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// One HubSpot deal per approved opportunity. Pipeline: 'Opportunity Qualification'\n// (the existing-customer 'need pipeline' from the workshops), stage 'Existing'.\nconst pipes=($('Get pipelines').first().json.results)||[];\nlet pipeId='2486071513', stageId=null;\nconst oq=pipes.find(p=>p.id===pipeId)||pipes.find(p=>/opportunity qualification/i.test(p.label))||pipes[0];\nif(oq){pipeId=oq.id;const st=(oq.stages||[]).find(s=>/existing/i.test(s.label))||(oq.stages||[])[0];if(st)stageId=st.id;}\nconst r=$json;\nconst props={dealname:r.deal_name||'Second Brain opportunity',pipeline:pipeId};\nif(stageId)props.dealstage=stageId;\nif(r.networks_total!=null&&r.networks_total!=='')props.networks_score=Number(r.networks_total)||0;\nconst assoc=r.company_id?[{to:{id:String(r.company_id)},types:[{associationCategory:'HUBSPOT_DEFINED',associationTypeId:5}]}]:[];\nreturn {json:{push_id:r.id,payload:{properties:props,associations:assoc}}};"
+      },
+      "id": "hp11_build",
+      "name": "Build deal payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "hp11_create",
+      "name": "Create deal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const pushId=$('Build deal payload').item.json.push_id;\nconst q=s=>\"'\"+String(s).replace(/'/g,\"''\")+\"'\";\nconst dealId=$json.id||null;\nconst sql=dealId\n ? \"UPDATE hubspot_pushes SET status='pushed', hubspot_deal_id=\"+q(dealId)+\", pushed_at=now() WHERE id=\"+q(pushId)+\";\"\n : \"UPDATE hubspot_pushes SET status='failed', error=\"+q(JSON.stringify($json).slice(0,400))+\" WHERE id=\"+q(pushId)+\";\";\nreturn {json:{sql}};"
+      },
+      "id": "hp11_record",
+      "name": "Record result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "hp11_apply",
+      "name": "Apply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Approved opportunity → HubSpot deal\nEvery 15 min: claim queue rows the dashboard approved (a human clicked Yes) → create the deal in the 'Opportunity Qualification' pipeline, stage 'Existing', mapped to the account's company, carrying the NETWORKS score → mark pushed (or failed with the error).\n\nREQUIRES: the HubSpot private-app token needs crm.objects.deals.write (ask IT). Nothing is ever pushed without the on-dashboard approval. Run db/2026-07_hubspot_push.sql before first run.",
+        "height": 300,
+        "width": 520
+      },
+      "id": "hp11_note",
+      "name": "How it works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Every 15 min": {
+      "main": [
+        [
+          {
+            "node": "Get pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get pipelines": {
+      "main": [
+        [
+          {
+            "node": "Claim approved pushes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim approved pushes": {
+      "main": [
+        [
+          {
+            "node": "Build deal payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build deal payload": {
+      "main": [
+        [
+          {
+            "node": "Create deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create deal": {
+      "main": [
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record result": {
+      "main": [
+        [
+          {
+            "node": "Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

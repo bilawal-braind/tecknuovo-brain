@@ -9,7 +9,7 @@ export const router = Router();
 // Returns [ids] = the account ids this person is allowed to see (scope='own').
 // Ownership is DERIVED from the org data (no hand-maintained list): a Client
 // Partner owns the accounts where they're the client_partner; a Delivery Manager
-// owns the accounts of projects they run — matched via people.email = the login.
+// owns the accounts of projects they run - matched via people.email = the login.
 async function allowedAccounts(req: Request): Promise<string[] | null> {
   const user = (req as Request & { user?: { email?: string } }).user;
   if (!user?.email) return null; // token/dev mode → full access
@@ -26,7 +26,7 @@ async function allowedAccounts(req: Request): Promise<string[] | null> {
   return r.rows.map((x) => String(x.id));
 }
 
-// Who am I — role + scope for the signed-in user, so the dashboard shows the right views.
+// Who am I - role + scope for the signed-in user, so the dashboard shows the right views.
 router.get('/me', async (req, res, next) => {
   try {
     const user = (req as Request & { user?: { email?: string; name?: string } }).user;
@@ -38,7 +38,7 @@ router.get('/me', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Portfolio / list view — accounts with a count of open signals (Leadership, Client Partner, Portfolio).
+// Portfolio / list view - accounts with a count of open signals (Leadership, Client Partner, Portfolio).
 router.get('/accounts', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -51,7 +51,7 @@ router.get('/accounts', async (req, res, next) => {
               (SELECT w.customer_lead FROM weekly_reports w WHERE w.account_id = a.id AND w.customer_lead IS NOT NULL
                ORDER BY w.week_ending DESC LIMIT 1) AS delivery_lead,
               CASE
-                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' = 'Critical') THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END AS health,
@@ -66,7 +66,7 @@ router.get('/accounts', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Account drill-down — the account, its projects/SOWs, and recent signals.
+// Account drill-down - the account, its projects/SOWs, and recent signals.
 router.get('/accounts/:id', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -76,11 +76,12 @@ router.get('/accounts/:id', async (req, res, next) => {
     const projects = await q(
       `SELECT p.id, p.name, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
               p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend, p.delivery_manager_name,
+              COALESCE(NULLIF(lower(p.rag), ''),
               CASE
-                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' = 'Critical') THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
-              END AS rag
+              END) AS rag
        FROM projects p WHERE p.account_id = $1 ORDER BY p.sow_value DESC NULLS LAST`,
       [req.params.id]
     );
@@ -93,7 +94,7 @@ router.get('/accounts/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Calls (the source Teams calls) — includes the transcript for the transcript view.
+// Calls (the source Teams calls) - includes the transcript for the transcript view.
 router.get('/calls', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -119,11 +120,12 @@ router.get('/projects', async (req, res, next) => {
     const r = await q(
       `SELECT p.id, p.name, p.account_id, p.sow_value, p.sow_status, p.commercial_model, p.start_date, p.end_date,
               p.budget_remaining, (p.sow_value - p.budget_remaining) AS spend, p.delivery_manager_name,
+              COALESCE(NULLIF(lower(p.rag), ''),
               CASE
-                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' IN ('High','Critical')) THEN 'red'
+                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' = 'Critical') THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
-              END AS rag
+              END) AS rag
        FROM projects p ${filter} ORDER BY p.sow_value DESC NULLS LAST`,
       params
     );
@@ -147,7 +149,7 @@ router.get('/associates', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// QA & Evaluation — transparency metrics + audit trail. Audit is scoped; aggregate counts are not sensitive.
+// QA & Evaluation - transparency metrics + audit trail. Audit is scoped; aggregate counts are not sensitive.
 router.get('/qa', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -180,7 +182,7 @@ router.get('/qa', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Signals feed — filterable by type/status/account, paginated, scoped to the user.
+// Signals feed - filterable by type/status/account, paginated, scoped to the user.
 router.get('/signals', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -209,7 +211,7 @@ router.get('/signals', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Weekly delivery reports — per-project sections parsed from the SharePoint portfolio
+// Weekly delivery reports - per-project sections parsed from the SharePoint portfolio
 // report (workflow 9). Scoped users only see their accounts' sections.
 router.get('/weekly-reports', async (req, res, next) => {
   try {
@@ -228,7 +230,7 @@ router.get('/weekly-reports', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// CRM mirror — client stakeholders and their buying power (HubSpot, read-only).
+// CRM mirror - client stakeholders and their buying power (HubSpot, read-only).
 // No emails exposed through the API; the dashboard only needs name/title/role.
 router.get('/stakeholders', async (req, res, next) => {
   try {
@@ -245,7 +247,7 @@ router.get('/stakeholders', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// CRM mirror — deals (the commercial pipeline per account; HubSpot, read-only).
+// CRM mirror - deals (the commercial pipeline per account; HubSpot, read-only).
 router.get('/deals', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -261,7 +263,29 @@ router.get('/deals', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// The single write path — Observability corrections feed the learning loop.
+// Human approval on an opportunity -> queue a HubSpot deal push (workflow 11 does the
+// actual push). approve=false records the decline so the box doesn't reappear.
+router.post('/hubspot-push', async (req, res, next) => {
+  try {
+    const { signal_id, approve, given_by } = req.body || {};
+    if (!signal_id || typeof approve !== 'boolean') return res.status(400).json({ error: 'signal_id and approve required' });
+    const r = await q(
+      `INSERT INTO hubspot_pushes (signal_id, account_id, deal_name, status, given_by)
+       SELECT s.id, s.account_id,
+              COALESCE(a.name || ' - ', '') || left(COALESCE(s.summary, 'Opportunity'), 120),
+              $2, $3
+       FROM signals s LEFT JOIN accounts a ON a.id = s.account_id
+       WHERE s.id = $1 AND s.type = 'opportunity'
+       ON CONFLICT (signal_id) DO NOTHING
+       RETURNING id, status`,
+      [signal_id, approve ? 'pending' : 'declined', given_by || null]
+    );
+    if (!r.rows.length) return res.status(409).json({ error: 'not an opportunity, or already decided' });
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+// The single write path - Observability corrections feed the learning loop.
 router.post('/feedback', async (req, res, next) => {
   try {
     const { signal_id, verdict, correct_type, reason, given_by } = req.body || {};

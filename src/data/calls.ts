@@ -46,7 +46,7 @@ export const callForSignal = (signal: Signal) => calls.find((c) => c.signals.som
 // framed with natural surrounding turns. In production this is the full Teams transcript. ──
 export type TranscriptLine = { speaker: string; text: string; signalType?: SignalType }
 
-// Prefer the REAL stored transcript (from the DB / snapshot) when present — parse it into
+// Prefer the REAL stored transcript (from the DB / snapshot) when present - parse it into
 // "Speaker: text" lines, skipping metadata/header lines. Falls back to the representative
 // transcript for demo/mock rows that don't carry one.
 export function transcriptLinesFor(call: Call): TranscriptLine[] {
@@ -58,8 +58,12 @@ export function transcriptLinesFor(call: Call): TranscriptLine[] {
       .filter(Boolean)
       .filter((l) => !/^\[.*\]$/.test(l) && !/^(Date|Attendees)\s*:/i.test(l))
       .map((line) => {
-        const m = line.match(/^([A-Za-z0-9 .,'()/&-]{1,60}?):\s*(.+)$/)
-        return m ? { speaker: m[1].trim(), text: m[2].trim() } : { speaker: '', text: line }
+        // Teams speaker labels can carry pronouns ("Horton, Shaun | He/His") and the
+        // odd leading colon from the VTT parse. Match generously, then clean.
+        const m = line.match(/^:?\s*(.{1,70}?):\s+(.+)$/)
+        if (!m) return { speaker: '', text: line.replace(/^:\s*/, '') }
+        const speaker = m[1].replace(/\s*\|.*$/, '').replace(/^:\s*/, '').trim()
+        return { speaker, text: m[2].trim() }
       })
   }
   return transcriptFor(call)

@@ -58,7 +58,7 @@ export default function App() {
     })()
   }, [])
 
-  // No auth (mock demo / current behaviour) — unchanged.
+  // No auth (mock demo / current behaviour) - unchanged.
   if (!authEnabled) return renderDash(route)
 
   // Auth on.

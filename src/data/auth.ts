@@ -10,7 +10,7 @@ let idToken: string | null = typeof sessionStorage !== 'undefined' ? sessionStor
 export const getAuthToken = () => idToken
 
 // Drop the local token (e.g. it was rejected/expired) without redirecting to Microsoft's
-// logout — the app then falls back to the sign-in screen.
+// logout - the app then falls back to the sign-in screen.
 export function clearAuth(): void {
   idToken = null
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('tn_id_token')

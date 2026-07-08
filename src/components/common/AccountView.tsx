@@ -123,7 +123,7 @@ function LatestWeeklyReport({ accountId }: { accountId: string }) {
   )
 }
 
-// Open deals + who holds the budget on this account — from the read-only HubSpot
+// Open deals + who holds the budget on this account - from the read-only HubSpot
 // mirror. Renders nothing until the HubSpot sync has run (mock mode stays clean).
 function CrmPanel({ accountId }: { accountId: string }) {
   const accDeals = dealsForAccount(accountId)

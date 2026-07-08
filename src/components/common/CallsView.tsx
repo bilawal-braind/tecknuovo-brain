@@ -135,27 +135,51 @@ function CallCard({ call }: { call: Call }) {
   )
 }
 
+// Stable colour per speaker so a long transcript is scannable at a glance.
+const SPEAKER_PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E']
+const speakerColor = (name: string) => {
+  let h = 7
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
+  return SPEAKER_PALETTE[Math.abs(h) % SPEAKER_PALETTE.length]
+}
+const initials = (name: string) =>
+  name.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+
 export function CallTranscript({ call }: { call: Call }) {
   const lines = transcriptLinesFor(call)
   return (
     <div>
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">Transcript · captured moments highlighted</div>
-      <div className="space-y-1.5">
-        {lines.map((l, i) =>
-          l.signalType ? (
-            <div key={i} className="rounded-lg bg-surface p-2.5" style={{ borderLeft: `3px solid var(--${l.signalType === 'opportunity' ? 'opp' : l.signalType})` }}>
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold">{l.speaker}</span>
-                <SignalBadge type={l.signalType} size="sm" />
+      <div>
+        {lines.map((l, i) => {
+          const color = l.speaker ? speakerColor(l.speaker) : 'var(--muted-2)'
+          const sameSpeaker = i > 0 && lines[i - 1].speaker === l.speaker && !l.signalType && !lines[i - 1].signalType
+          if (l.signalType) {
+            return (
+              <div key={i} className="my-2 rounded-lg bg-surface p-3" style={{ borderLeft: `3px solid var(--${l.signalType === 'opportunity' ? 'opp' : l.signalType})` }}>
+                <div className="flex items-center gap-2">
+                  {l.speaker && (
+                    <span className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: color }}>{initials(l.speaker)}</span>
+                  )}
+                  {l.speaker && <span className="text-[12px] font-semibold" style={{ color }}>{l.speaker}</span>}
+                  <SignalBadge type={l.signalType} size="sm" />
+                </div>
+                <p className="mt-1 text-[13px] leading-relaxed text-text">“{l.text}”</p>
               </div>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-text">“{l.text}”</p>
+            )
+          }
+          return (
+            <div key={i} className={`flex items-start gap-2.5 px-1 ${sameSpeaker ? 'mt-0.5' : 'mt-2.5'}`}>
+              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold text-white ${sameSpeaker ? 'invisible' : ''}`} style={{ background: color }}>
+                {l.speaker ? initials(l.speaker) : '·'}
+              </span>
+              <div className="min-w-0">
+                {!sameSpeaker && l.speaker && <div className="text-[11.5px] font-semibold leading-tight" style={{ color }}>{l.speaker}</div>}
+                <p className="text-[13px] leading-relaxed text-text">{l.text}</p>
+              </div>
             </div>
-          ) : (
-            <p key={i} className="px-1 text-[13px] leading-relaxed">
-              <span className="font-semibold text-muted">{l.speaker}:</span> <span className="text-text">{l.text}</span>
-            </p>
-          ),
-        )}
+          )
+        })}
       </div>
       <p className="mt-3 text-[10px] uppercase tracking-wide text-muted-2">Captured via Microsoft Teams · transcript stored in your environment</p>
     </div>

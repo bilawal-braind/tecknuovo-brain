@@ -84,7 +84,7 @@ export function ClientPartner() {
               <>
                 <h3 className="text-[15px] font-semibold">Portfolio</h3>
                 <p className="mt-0.5 text-[13px] text-muted">Every account in your portfolio - health, relationship and a commercial snapshot. Click any account to open its full page.</p>
-                <p className="mt-1 text-[11px] text-muted-2">Budget burn is <b>as reported on governance calls</b> — live actuals via Synergist to follow.</p>
+                <p className="mt-1 text-[11px] text-muted-2">Budget burn is <b>as reported on governance calls</b> - live actuals via Synergist to follow.</p>
                 <div className="relative mt-3 max-w-[340px]">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-2" />
                   <input value={acctQ} onChange={(e) => setAcctQ(e.target.value)} placeholder="Search accounts…" className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-[13px] outline-none placeholder:text-muted-2 focus:border-[var(--accent)]" />
@@ -128,7 +128,7 @@ export function ClientPartner() {
               <>
                 <h3 className="text-[15px] font-semibold">Commercials</h3>
                 <p className="mt-0.5 text-[13px] text-muted">Budget burn against SOW, headroom and value-adds per account. Click any to open its full page.</p>
-                <p className="mt-1 text-[11px] text-muted-2">Budget figures are <b>as reported on governance calls</b> — live actuals via Synergist to follow.</p>
+                <p className="mt-1 text-[11px] text-muted-2">Budget figures are <b>as reported on governance calls</b> - live actuals via Synergist to follow.</p>
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {accounts.map((a) => (
                     <button key={a.id} onClick={() => setSel(a.id)} className="rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]">

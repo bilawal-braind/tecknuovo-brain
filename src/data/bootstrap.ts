@@ -78,7 +78,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   const liveSignals = sRows.map(mapSignal)
 
   // Account £ value: HubSpot is the money source (sum of closed-won deals).
-  // Monday's SOW values are used only when the account has no won deals at all —
+  // Monday's SOW values are used only when the account has no won deals at all -
   // Monday still provides projects/context, just not the trusted financials.
   for (const acc of liveAccounts) {
     acc.sowValue = deals
@@ -103,7 +103,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   })
 
   // Account-level people: Client Partner (from the people table) and the delivery
-  // lead named on the account's latest weekly report — fills the account header.
+  // lead named on the account's latest weekly report - fills the account header.
   aRows.forEach((a, i) => {
     const addPerson = (nm: string | null | undefined, role: string, prefix: string) => {
       if (!nm) return undefined
@@ -315,7 +315,7 @@ export async function bootstrap(): Promise<BootResult> {
         fetchStakeholders(),
         fetchDeals(),
       ])
-      // CRM mirror first — hydrate() uses `deals` for the account £ fallback.
+      // CRM mirror first - hydrate() uses `deals` for the account £ fallback.
       replace(weeklyReports, wrRows)
       replace(stakeholders, stRows)
       replace(deals, dlRows)
@@ -328,7 +328,7 @@ export async function bootstrap(): Promise<BootResult> {
 
   // Otherwise (the public build): if a real-data snapshot is bundled, display it exactly
   // like normal data across every tab. If the snapshot is empty or unreadable, fall back
-  // silently to the built-in dataset — nothing visible changes either way.
+  // silently to the built-in dataset - nothing visible changes either way.
   try {
     const rows = await loadSnapshotRows()
     if (!rows.aRows.length) return { source: 'mock' }
