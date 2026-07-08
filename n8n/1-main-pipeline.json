@@ -333,6 +333,28 @@
     {
       "parameters": {
         "operation": "executeQuery",
+        "query": "UPDATE weekly_reports w SET account_id = a.id FROM accounts a WHERE w.account_id IS NULL AND (w.project_title ILIKE '%'||a.name||'%' OR (w.account_name IS NOT NULL AND (w.account_name ILIKE '%'||a.name||'%' OR a.name ILIKE '%'||w.account_name||'%'))); UPDATE deals dl SET account_id = a.id FROM accounts a WHERE dl.account_id IS NULL AND ((dl.company_name IS NOT NULL AND (lower(dl.company_name)=lower(a.name) OR dl.company_name ILIKE '%'||a.name||'%' OR a.name ILIKE '%'||dl.company_name||'%')) OR (length(split_part(dl.name,' - ',1)) BETWEEN 3 AND 40 AND (split_part(dl.name,' - ',1) ILIKE a.name OR a.name ILIKE '%'||split_part(dl.name,' - ',1)||'%'))); UPDATE stakeholders st SET account_id = a.id FROM accounts a WHERE st.account_id IS NULL AND st.company_name IS NOT NULL AND (lower(st.company_name)=lower(a.name) OR st.company_name ILIKE '%'||a.name||'%' OR a.name ILIKE '%'||st.company_name||'%'); INSERT INTO projects (monday_item_id, name, account_id, account_name, phase, rag, delivery_manager_name, last_verified) SELECT 'wr:'||w.project_title, NULLIF(trim(regexp_replace(w.project_title,'(Weekly )?(Delivery )?Summary\\s*$','','i')),''), w.account_id, w.account_name, w.phase, w.rag, w.customer_lead, now() FROM weekly_reports w WHERE w.week_ending=(SELECT max(week_ending) FROM weekly_reports) AND w.account_id IS NOT NULL ON CONFLICT (monday_item_id) DO UPDATE SET account_id=COALESCE(EXCLUDED.account_id, projects.account_id), phase=EXCLUDED.phase, rag=EXCLUDED.rag, delivery_manager_name=EXCLUDED.delivery_manager_name, last_verified=now(); UPDATE calls c SET project_id=p.id FROM projects p WHERE c.project_id IS NULL AND c.account_id=p.account_id AND (SELECT count(*) FROM projects p2 WHERE p2.account_id=c.account_id)=1; UPDATE signals sg SET project_id=p.id FROM projects p WHERE sg.project_id IS NULL AND sg.account_id=p.account_id AND (SELECT count(*) FROM projects p2 WHERE p2.account_id=sg.account_id)=1;",
+        "options": {}
+      },
+      "id": "mp_link",
+      "name": "Link account context (event-driven)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
         "query": "=UPDATE inbox SET status='done', processed_at=now() WHERE id = '{{ $('Prep').first().json.inbox_id }}';",
         "options": {}
       },
@@ -526,6 +548,17 @@
       ]
     },
     "Store": {
+      "main": [
+        [
+          {
+            "node": "Link account context (event-driven)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link account context (event-driven)": {
       "main": [
         [
           {
