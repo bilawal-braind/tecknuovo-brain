@@ -1,0 +1,76 @@
+{
+  "name": "8 — HubSpot API test (deals + contacts)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual_trigger",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/deals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "limit", "value": "10" },
+            { "name": "properties", "value": "dealname,amount,dealstage,pipeline,closedate" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "list_deals",
+      "name": "1. List deals (pipeline)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 220],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "limit", "value": "10" },
+            { "name": "properties", "value": "firstname,lastname,email,jobtitle,company" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "list_contacts",
+      "name": "2. List contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400],
+      "credentials": { "httpHeaderAuth": { "id": "HS_CRED", "name": "HubSpot" } }
+    },
+    {
+      "parameters": {
+        "content": "## HubSpot API test\n\n**Setup:** create an n8n credential of type **Header Auth**, named **HubSpot**:\n- Name: `Authorization`\n- Value: `Bearer <your HubSpot private-app token>`\n\nThen select it on both HTTP nodes and **Run now**.\n\n**Expect:** node 1 returns your deals (pipeline) with dealname/amount/stage; node 2 returns contacts. This shows how deals + contacts are structured, so we can map the opportunity write-back later.\n\nDocs: HubSpot CRM v3 — /crm/v3/objects/deals and /contacts.",
+        "height": 280,
+        "width": 360
+      },
+      "id": "note",
+      "name": "How to test",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [800, 240]
+    }
+  ],
+  "connections": {
+    "Run now": { "main": [[
+      { "node": "1. List deals (pipeline)", "type": "main", "index": 0 },
+      { "node": "2. List contacts", "type": "main", "index": 0 }
+    ]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
