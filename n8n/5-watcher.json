@@ -45,22 +45,10 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts",
+        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}')",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "startDateTime",
-              "value": "={{ $now.minus({minutes: 35}).toISO() }}"
-            },
-            {
-              "name": "endDateTime",
-              "value": "={{ $now.toISO() }}"
-            }
-          ]
-        },
+        "sendQuery": false,
         "options": {}
       },
       "id": "w_getall",
