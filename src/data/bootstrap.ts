@@ -77,11 +77,17 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   const liveProjects = pRows.map(mapProject)
   const liveSignals = sRows.map(mapSignal)
 
-  // SOW value lives on projects in the DB; roll it up to the account for the UI.
+  // Account £ value: projects' SOW value when present, otherwise the sum of
+  // closed-won HubSpot deals (Monday decommissioned — HubSpot is the money source).
   for (const acc of liveAccounts) {
     acc.sowValue = pRows
       .filter((p) => p.account_id === acc.id)
       .reduce((sum, p) => sum + (typeof p.sow_value === 'string' ? Number(p.sow_value) || 0 : p.sow_value ?? 0), 0)
+    if (!acc.sowValue) {
+      acc.sowValue = deals
+        .filter((d) => d.account_id === acc.id && !d.is_open && /won/i.test(d.stage || ''))
+        .reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+    }
   }
 
   // People: synthesise a person per Delivery Manager name (from Monday).
@@ -293,11 +299,11 @@ export async function bootstrap(): Promise<BootResult> {
         fetchStakeholders(),
         fetchDeals(),
       ])
-      const counts = hydrate({ aRows, pRows, sRows, cRows, asRows })
-      // Weekly reports + CRM mirror (fetchers are tolerant — empty on older APIs).
+      // CRM mirror first — hydrate() uses `deals` for the account £ fallback.
       replace(weeklyReports, wrRows)
       replace(stakeholders, stRows)
       replace(deals, dlRows)
+      const counts = hydrate({ aRows, pRows, sRows, cRows, asRows })
       return { source: 'live', counts }
     } catch (e) {
       return { source: 'live', error: e instanceof Error ? e.message : String(e) }
