@@ -17,4 +17,10 @@ CREATE TABLE IF NOT EXISTS hubspot_pushes (
 );
 
 -- The Read API may queue approvals (alongside feedback, its only other write).
-GRANT INSERT ON hubspot_pushes TO tn_api_read;
+-- Grant only if the least-privilege role exists (the API currently connects as
+-- admin; when db/api_role.sql is applied at hardening time, re-run this file).
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tn_api_read') THEN
+    GRANT INSERT ON hubspot_pushes TO tn_api_read;
+  END IF;
+END $$;
