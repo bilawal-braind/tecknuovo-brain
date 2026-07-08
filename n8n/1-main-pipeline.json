@@ -1,5 +1,5 @@
 {
-  "name": "TN Brain \u00b7 1 \u00b7 Main Pipeline (inbox-driven)",
+  "name": "TN Brain · 1 · Main Pipeline (inbox-driven)",
   "nodes": [
     {
       "parameters": {
@@ -55,7 +55,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const all=$input.all();if(!all.length||!all[0].json||!all[0].json.id){return [];}const item=all[0].json;let pl=item.payload;if(typeof pl==='string'){try{pl=JSON.parse(pl);}catch(e){pl={};}}pl=pl||{};const inbox_id=item.id||null;const account=pl.account||'UNKNOWN';const title=pl.title||('Call '+(pl.dedup_key||''));const dedup_key=pl.dedup_key||('call-'+inbox_id);const transcript=pl.transcript||'';const e=s=>String(s).replace(/'/g,\"''\");const ensureSql=\"WITH a AS (INSERT INTO accounts (name,last_verified) VALUES ('\"+e(account)+\"',now()) ON CONFLICT (name) DO UPDATE SET last_verified=now() RETURNING id) SELECT a.id AS account_id,(SELECT count(*) FROM projects p WHERE p.account_id=a.id) AS project_count FROM a;\";const ctxSql=\"SELECT a.id AS account_id, a.name AS account, COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'value',p.sow_value,'status',p.sow_status)) FROM projects p WHERE p.account_id=a.id),'[]'::json) AS projects, a.feedback_summary FROM accounts a WHERE lower(a.name)=lower('\"+e(account)+\"');\";return [{json:{account,title,dedup_key,transcript,ensureSql,ctxSql,inbox_id}}];"
+        "jsCode": "const all=$input.all();if(!all.length||!all[0].json||!all[0].json.id){return [];}const item=all[0].json;let pl=item.payload;if(typeof pl==='string'){try{pl=JSON.parse(pl);}catch(e){pl={};}}pl=pl||{};const inbox_id=item.id||null;const account=pl.account||'UNKNOWN';const title=pl.title||('Call '+(pl.dedup_key||''));const dedup_key=pl.dedup_key||('call-'+inbox_id);const transcript=pl.transcript||'';const e=s=>String(s).replace(/'/g,\"''\");const unknown=(account==='UNKNOWN');const ensureSql=unknown?\"SELECT NULL::uuid AS account_id, 1 AS project_count;\":\"WITH a AS (INSERT INTO accounts (name,last_verified) VALUES ('\"+e(account)+\"',now()) ON CONFLICT (name) DO UPDATE SET last_verified=now() RETURNING id) SELECT a.id AS account_id,(SELECT count(*) FROM projects p WHERE p.account_id=a.id) AS project_count FROM a;\";const ctxSql=unknown?\"SELECT NULL::uuid AS account_id, 'UNKNOWN'::text AS account, '[]'::json AS projects, NULL::text AS feedback_summary;\":\"SELECT a.id AS account_id, a.name AS account, COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'value',p.sow_value,'status',p.sow_status)) FROM projects p WHERE p.account_id=a.id),'[]'::json) AS projects, a.feedback_summary FROM accounts a WHERE lower(a.name)=lower('\"+e(account)+\"');\";return [{json:{account,title,dedup_key,transcript,ensureSql,ctxSql,inbox_id}}];"
       },
       "id": "6d90f8ab-13c0-45b4-b77b-32b84c1d16c8",
       "name": "Prep",
