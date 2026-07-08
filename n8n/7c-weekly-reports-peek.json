@@ -1,0 +1,100 @@
+{
+  "name": "7c — Weekly reports peek (ReportingEfficiency / Generated Report)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "wp_run",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/tecknuovo.sharepoint.com,7202e9f9-56b6-45df-9662-4c8e0b2c0c44,4d350e3c-ab00-43d4-b5c7-31dda8c66413/drives?$select=id,name,webUrl",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "id": "wp_drives",
+      "name": "1. Libraries on Reporting Efficiency",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick the 'Generated Report' library (fall back to the first drive if renamed).\nconst drives=($input.first().json.value)||[];\nconst hit=drives.find(d=>(d.name||'').toLowerCase().includes('generated'))||drives[0]||null;\nif(!hit) return [{json:{error:'no drives found on the site'}}];\nreturn [{json:{driveId:hit.id, driveName:hit.name, all:drives.map(d=>d.name)}}];"
+      },
+      "id": "wp_pick",
+      "name": "2. Pick 'Generated Report'",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $json.driveId }}/root/children?$top=200&$select=id,name,lastModifiedDateTime,size,webUrl,file,folder",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "id": "wp_list",
+      "name": "3. What's inside (files & folders)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Readable listing: name · type · child count / size · modified.\nconst items=($input.first().json.value)||[];\nconst rows=items.map(x=>({\n  name:x.name,\n  type:x.folder?'folder ('+(x.folder.childCount??'?')+' items)':((x.file&&x.file.mimeType)||'file'),\n  modified:(x.lastModifiedDateTime||'').slice(0,16).replace('T',' '),\n  sizeKB:x.size?Math.round(x.size/1024):null,\n  id:x.id,\n  url:x.webUrl\n}));\nrows.sort((a,b)=>String(b.modified).localeCompare(String(a.modified)));\nreturn rows.length?rows.map(r=>({json:r})):[{json:{note:'library is empty'}}];"
+      },
+      "id": "wp_rows",
+      "name": "4. Listing (newest first)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Peek inside the weekly-reports library\nTargets the client-shared location directly:\nsite **Reporting Efficiency** → library **Generated Report**.\n\nRun it and paste node 4's output back to BraindAI:\n- If it's FILES → we see naming pattern (account? date?) + file type (docx/pdf) → ingest gets built against it.\n- If it's FOLDERS (e.g. one per account or per week) → next step lists inside them.\n\n403 on node 1? The app can see the tenant but this site may be restricted — ask IT to check the app has access (or grant via Sites.Selected).",
+        "height": 300,
+        "width": 460
+      },
+      "id": "wp_note",
+      "name": "How to use",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -60]
+    }
+  ],
+  "connections": {
+    "Run now": {
+      "main": [[{ "node": "1. Libraries on Reporting Efficiency", "type": "main", "index": 0 }]]
+    },
+    "1. Libraries on Reporting Efficiency": {
+      "main": [[{ "node": "2. Pick 'Generated Report'", "type": "main", "index": 0 }]]
+    },
+    "2. Pick 'Generated Report'": {
+      "main": [[{ "node": "3. What's inside (files & folders)", "type": "main", "index": 0 }]]
+    },
+    "3. What's inside (files & folders)": {
+      "main": [[{ "node": "4. Listing (newest first)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
