@@ -1,0 +1,292 @@
+{
+  "name": "TN Brain · 9 · Weekly report sync (SharePoint → weekly_reports)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "wr9_sched",
+      "name": "Every Monday 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/tecknuovo.sharepoint.com,7202e9f9-56b6-45df-9662-4c8e0b2c0c44,4d350e3c-ab00-43d4-b5c7-31dda8c66413/drives?$select=id,name",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "id": "wr9_drives",
+      "name": "Get libraries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick the 'Generated Report' library.\nconst drives=($input.first().json.value)||[];\nconst hit=drives.find(d=>(d.name||'').toLowerCase().includes('generated'))||drives[0]||null;\nif(!hit) return [{json:{error:'no drives found'}}];\nreturn [{json:{driveId:hit.id, driveName:hit.name}}];"
+      },
+      "id": "wr9_pick",
+      "name": "Pick 'Generated Report'",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $json.driveId }}/root/children?$top=200&$select=id,name,lastModifiedDateTime",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      },
+      "id": "wr9_list",
+      "name": "List report files",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per WeeklyStatus_YYYY-MM-DD.html (skips the template + anything else).\nconst out=[];\nfor(const it of $input.all()){\n  for(const f of (it.json.value||[])){\n    const m=String(f.name||'').match(/^WeeklyStatus_(\\d{4}-\\d{2}-\\d{2})\\.html$/i);\n    if(m) out.push({json:{id:f.id,name:f.name,week_ending:m[1]}});\n  }\n}\nreturn out;"
+      },
+      "id": "wr9_files",
+      "name": "Each report file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $(\"Pick 'Generated Report'\").first().json.driveId }}/items/{{ $json.id }}/content",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "wr9_dl",
+      "name": "Download report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "ieNwdcRlBlCL0EM0",
+          "name": "SharePoint API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the report HTML: one row per <section class='project'>, then one idempotent\n// upsert. Account matching happens in SQL: accounts name -> projects fallback; the raw\n// client_directory name match is stored alongside for later linking.\nconst html=$json.data||'';\nconst meta=$('Each report file').item.json;\nfunction strip(h){return String(h||'').replace(/<[^>]+>/g,' ').replace(/&middot;/g,' - ').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/&#39;/g,\"'\").replace(/\\s+/g,' ').trim();}\nconst q=s=>(s===null||s===undefined||s==='')?'NULL':\"'\"+String(s).replace(/'/g,\"''\")+\"'\";\nconst secs=String(html).split(/<section class=['\\\"]project['\\\"]>/).slice(1);\nconst rows=[];\nfor(const s of secs){\n  const title=strip((s.match(/<h2>([\\s\\S]*?)<\\/h2>/)||[])[1]);\n  if(!title)continue;\n  const rag=((s.match(/pill pill-(red|amber|green|grey)/)||[])[1])||null;\n  const lead=strip((s.match(/Customer lead:<\\/span>([\\s\\S]*?)&middot;/)||[])[1]);\n  const phase=strip((s.match(/Phase:([\\s\\S]*?)<\\/p>/)||[])[1]);\n  const summary=strip((s.match(/<div class=['\\\"]summary['\\\"]>([\\s\\S]*?)<\\/div>/)||[])[1]);\n  const block=t=>{const m=s.match(new RegExp('<h3>'+t+'<\\\\/h3>\\\\s*<p>([\\\\s\\\\S]*?)<\\\\/p>','i'));return m?strip(m[1]):null;};\n  rows.push([meta.id,meta.week_ending,title,rag,lead,phase,summary,block('Highlights'),block('Lowlights'),block('Next week'),block('Risks and issues')]);\n}\nif(!rows.length)return {json:{sql:\"SELECT 'no sections parsed' AS note;\",file:meta.name,sections:0}};\nconst vals=rows.map(r=>'('+r.map((x,i)=>i===1?(q(x)+'::date'):q(x)).join(',')+')').join(',');\nconst sql=\"INSERT INTO weekly_reports (file_id,week_ending,project_title,account_id,account_name,rag,customer_lead,phase,summary,highlights,lowlights,next_week,risks) \"+\n\"SELECT v.fid, v.week, v.title, \"+\n\"COALESCE((SELECT id FROM accounts WHERE v.title ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1),(SELECT p.account_id FROM projects p WHERE p.account_id IS NOT NULL AND (v.title ILIKE '%'||p.name||'%' OR p.name ILIKE '%'||split_part(v.title,' ',1)||'%') ORDER BY length(p.name) DESC LIMIT 1)), \"+\n\"(SELECT name FROM client_directory WHERE v.title ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), \"+\n\"v.rag, v.lead, v.phase, v.summary, v.hi, v.lo, v.nx, v.rk \"+\n\"FROM (VALUES \"+vals+\") AS v(fid,week,title,rag,lead,phase,summary,hi,lo,nx,rk) \"+\n\"ON CONFLICT (week_ending,project_title) DO UPDATE SET rag=EXCLUDED.rag, customer_lead=EXCLUDED.customer_lead, phase=EXCLUDED.phase, summary=EXCLUDED.summary, highlights=EXCLUDED.highlights, lowlights=EXCLUDED.lowlights, next_week=EXCLUDED.next_week, risks=EXCLUDED.risks, account_id=COALESCE(EXCLUDED.account_id, weekly_reports.account_id), account_name=COALESCE(EXCLUDED.account_name, weekly_reports.account_name);\";\nreturn {json:{sql,file:meta.name,sections:rows.length}};"
+      },
+      "id": "wr9_parse",
+      "name": "Parse & build upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "wr9_apply",
+      "name": "Apply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO run_logs (workflow,status,detail) VALUES ('weekly_report_sync','ok', jsonb_build_object('files', {{ $('Each report file').all().length }}));",
+        "options": {}
+      },
+      "id": "wr9_log",
+      "name": "Run log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1760,
+        300
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Weekly report sync\nMondays 08:00 (their Power Automate generator runs 07:05): list the 'Generated Report' library → download every WeeklyStatus_*.html → split into per-project sections → upsert into `weekly_reports` (idempotent on week+project, so re-runs and backfills are free — the FIRST manual run ingests all past weeks).\n\nAccount matching: section title vs accounts → projects fallback (GVMS/EMCS → HMRC via SOW names); raw client_directory match stored in account_name. Unmatched rows keep account_id NULL — check with:\nSELECT project_title, account_id, account_name FROM weekly_reports WHERE week_ending=(SELECT max(week_ending) FROM weekly_reports);\n\nRun db/2026-07_weekly_reports.sql BEFORE first run.",
+        "height": 330,
+        "width": 520
+      },
+      "id": "wr9_note",
+      "name": "How it works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Every Monday 08:00": {
+      "main": [
+        [
+          {
+            "node": "Get libraries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get libraries": {
+      "main": [
+        [
+          {
+            "node": "Pick 'Generated Report'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick 'Generated Report'": {
+      "main": [
+        [
+          {
+            "node": "List report files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List report files": {
+      "main": [
+        [
+          {
+            "node": "Each report file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Each report file": {
+      "main": [
+        [
+          {
+            "node": "Download report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download report": {
+      "main": [
+        [
+          {
+            "node": "Parse & build upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & build upsert": {
+      "main": [
+        [
+          {
+            "node": "Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply": {
+      "main": [
+        [
+          {
+            "node": "Run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
