@@ -90,7 +90,7 @@ function CallCard({ call }: { call: Call }) {
               <span className="text-[13px] font-semibold">{call.title}</span>
               <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-medium text-muted">{call.type}</span>
             </div>
-            <div className="mt-0.5 text-[11px] text-muted">{accountName(call.accountId)}{call.projectId ? ` · ${projectById(call.projectId)?.name}` : ''} · {call.speaker} · {fmt(call.date)}</div>
+            <div className="mt-0.5 text-[11px] text-muted">{[accountName(call.accountId), call.projectId ? projectById(call.projectId)?.name : null, call.speaker || null, fmt(call.date)].filter(Boolean).join(' · ')}</div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
