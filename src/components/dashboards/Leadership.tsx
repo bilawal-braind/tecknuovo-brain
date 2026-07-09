@@ -13,6 +13,18 @@ import { AccountView, money } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 
 type View = 'overview' | 'signals' | 'pods' | 'sales'
+
+// Live accounts carry Monday pod names (strings), not the demo pod ids — group by
+// whatever the accounts actually have. Falls back to the demo pods in mock mode.
+function livePods() {
+  const names = [...new Set(accounts.map((a) => a.pod).filter(Boolean))]
+  const mockIds = new Set<string>(pods.map((p) => p.id))
+  const liveNaming = names.some((n) => !mockIds.has(n))
+  if (!liveNaming) return pods.map((p) => ({ id: p.id as string, name: p.name as string, owner: p.owner as string }))
+  const list = names.sort().map((n) => ({ id: n, name: n, owner: '' }))
+  if (accounts.some((a) => !a.pod)) list.push({ id: '', name: 'No pod assigned yet', owner: '' })
+  return list
+}
 const TREND_ORDER = ['opportunity', 'risk', 'update', 'people'] as const
 
 // Sales reporting - illustrative demo data (real version draws from HubSpot + call transcripts)
@@ -63,7 +75,7 @@ export function Leadership() {
           { id: 'overview', label: 'Portfolio health', icon: LayoutDashboard },
           { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
           { id: 'sales', label: 'Sales', icon: PoundSterling },
-          { id: 'pods', label: 'Pods', icon: Layers, count: pods.length },
+          { id: 'pods', label: 'Pods', icon: Layers, count: livePods().length },
         ]}
       >
         <div className="px-7 py-6">
@@ -142,7 +154,7 @@ export function Leadership() {
 
           {view === 'pods' && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {pods.map((p) => {
+              {livePods().map((p) => {
                 const accts = accounts.filter((a) => a.pod === p.id)
                 const red = accts.filter((a) => a.health === 'red').length
                 return (
@@ -150,7 +162,7 @@ export function Leadership() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-[15px] font-semibold">{p.name}</h3>
-                        <div className="text-[11px] text-muted">Owner: {personName(p.owner)} · {accts.length} accounts</div>
+                        <div className="text-[11px] text-muted">{p.owner ? `Owner: ${personName(p.owner)} · ` : ''}{accts.length} account{accts.length !== 1 ? 's' : ''}</div>
                       </div>
                       {red > 0 ? <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ color: 'var(--risk)', background: 'color-mix(in srgb, var(--risk) 12%, transparent)' }}>{red} at risk</span> : <RagDot health="green" />}
                     </div>
