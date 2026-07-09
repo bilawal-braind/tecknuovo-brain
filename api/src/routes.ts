@@ -10,9 +10,16 @@ export const router = Router();
 // Ownership is DERIVED from the org data (no hand-maintained list): a Client
 // Partner owns the accounts where they're the client_partner; a Delivery Manager
 // owns the accounts of projects they run - matched via people.email = the login.
+// Members of the leadership Entra group (IT-managed, like the transcription group)
+// get full visibility without any app-side row. Optional: unset = feature off.
+const LEADERSHIP_GROUP = (process.env.ENTRA_LEADERSHIP_GROUP_ID || '').toLowerCase();
+const inLeadershipGroup = (user?: { groups?: string[] }) =>
+  !!LEADERSHIP_GROUP && !!user?.groups?.some((g) => g.toLowerCase() === LEADERSHIP_GROUP);
+
 async function allowedAccounts(req: Request): Promise<string[] | null> {
-  const user = (req as Request & { user?: { email?: string } }).user;
+  const user = (req as Request & { user?: { email?: string; groups?: string[] } }).user;
   if (!user?.email) return null; // token/dev mode → full access
+  if (inLeadershipGroup(user)) return null; // leadership group → full access
   const email = user.email.toLowerCase();
   const u = await q('SELECT role, scope FROM app_users WHERE lower(email) = lower($1)', [email]);
   const row = u.rows[0];
@@ -36,6 +43,12 @@ router.get('/me', async (req, res, next) => {
     if (!user?.email) return res.json({ email: null, role: 'admin', scope: 'all', name: 'dev' }); // token mode
     const r = await q('SELECT email, role, scope, name FROM app_users WHERE lower(email) = lower($1)', [user.email]);
     if (r.rows.length) return res.json(r.rows[0]);
+
+    // Leadership Entra group -> full visibility, lands on Leadership (an app_users
+    // row still wins above, so individual landing pages can be customised).
+    if (inLeadershipGroup(user as { groups?: string[] })) {
+      return res.json({ email: user.email, role: 'leadership', scope: 'all', name: user.name || null });
+    }
 
     // Unlisted TN user -> zero-admin self-wiring, then least-privilege default.
     // 1. Bind their login email to their person record (matched by display name,

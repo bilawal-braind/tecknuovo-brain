@@ -15,7 +15,7 @@ const JWKS = TENANT
   ? createRemoteJWKSet(new URL(`https://login.microsoftonline.com/${TENANT}/discovery/v2.0/keys`))
   : null;
 
-export type AuthedUser = { email: string; oid?: string; name?: string };
+export type AuthedUser = { email: string; oid?: string; name?: string; groups?: string[] };
 
 export async function auth(req: Request, res: Response, next: NextFunction) {
   const mode = process.env.AUTH_MODE || 'token';
@@ -43,6 +43,10 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
         email,
         oid: typeof payload.oid === 'string' ? payload.oid : undefined,
         name: typeof payload.name === 'string' ? payload.name : undefined,
+        // Entra security-group ids (emitted when the app registration's Token
+        // configuration includes the groups claim) — lets IT govern dashboard
+        // access via group membership, same as they govern transcription scope.
+        groups: Array.isArray(payload.groups) ? (payload.groups as string[]) : undefined,
       };
       return next();
     } catch (e) {
