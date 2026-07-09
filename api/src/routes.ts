@@ -20,7 +20,10 @@ async function allowedAccounts(req: Request): Promise<string[] | null> {
   const r = await q(
     `SELECT a.id FROM accounts a JOIN people pe ON pe.id = a.client_partner WHERE lower(pe.email) = lower($1)
      UNION
-     SELECT pr.account_id FROM projects pr JOIN people pe ON pe.id = pr.delivery_manager WHERE lower(pe.email) = lower($1) AND pr.account_id IS NOT NULL`,
+     SELECT pr.account_id FROM projects pr JOIN people pe ON pe.id = pr.delivery_manager WHERE lower(pe.email) = lower($1) AND pr.account_id IS NOT NULL
+     UNION
+     SELECT pr.account_id FROM projects pr WHERE pr.account_id IS NOT NULL AND pr.delivery_manager_name IS NOT NULL
+       AND lower(pr.delivery_manager_name) = (SELECT lower(p2.name) FROM people p2 WHERE lower(p2.email) = lower($1) LIMIT 1)`,
     [email]
   );
   return r.rows.map((x) => String(x.id));
@@ -33,8 +36,26 @@ router.get('/me', async (req, res, next) => {
     if (!user?.email) return res.json({ email: null, role: 'admin', scope: 'all', name: 'dev' }); // token mode
     const r = await q('SELECT email, role, scope, name FROM app_users WHERE lower(email) = lower($1)', [user.email]);
     if (r.rows.length) return res.json(r.rows[0]);
-    // Unlisted TN user → safe least-privilege default (their own accounts only).
-    return res.json({ email: user.email, role: 'delivery', scope: 'own', name: user.name || null });
+
+    // Unlisted TN user -> zero-admin self-wiring, then least-privilege default.
+    // 1. Bind their login email to their person record (matched by display name,
+    //    only when exactly one person has that name), so own-scope filtering works.
+    if (user.name) {
+      await q(
+        `UPDATE people SET email = $1
+         WHERE email IS NULL AND lower(name) = lower($2)
+           AND (SELECT count(*) FROM people WHERE lower(name) = lower($2)) = 1`,
+        [user.email, user.name]
+      );
+    }
+    // 2. Derive their landing dashboard from the org data: Client Partner on any
+    //    account -> partner view; otherwise delivery.
+    const cp = await q(
+      `SELECT 1 FROM accounts a JOIN people p ON p.id = a.client_partner
+       WHERE lower(p.email) = lower($1) LIMIT 1`,
+      [user.email]
+    );
+    return res.json({ email: user.email, role: cp.rows.length ? 'partner' : 'delivery', scope: 'own', name: user.name || null });
   } catch (e) { next(e); }
 });
 
