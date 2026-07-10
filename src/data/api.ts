@@ -163,8 +163,32 @@ export const fetchQA = () => get<QaData>('/api/qa')
 export type Me = { email: string; role: string; scope: string; name: string | null }
 export const fetchMe = () => get<Me>('/api/me')
 // Human approval on an opportunity -> queue the HubSpot deal push (workflow 11 pushes).
-export const pushToHubspot = (signalId: string, approve: boolean, givenBy?: string) =>
-  post<{ id: string; status: string }>('/api/hubspot-push', { signal_id: signalId, approve, given_by: givenBy })
+// Approval requires the deal value + close date (the dashboard form enforces this too).
+export const pushToHubspot = (
+  signalId: string,
+  approve: boolean,
+  fields?: { dealName?: string; amount?: number; closeDate?: string; givenBy?: string },
+) =>
+  post<{ id: string; status: string }>('/api/hubspot-push', {
+    signal_id: signalId,
+    approve,
+    deal_name: fields?.dealName,
+    amount: fields?.amount,
+    close_date: fields?.closeDate,
+    given_by: fields?.givenBy,
+  })
+
+// ── Team notes on signals (human log; not model feedback) ──
+export type ApiSignalNote = {
+  id: string
+  signal_id: string
+  note: string
+  author: string | null
+  created_at: string
+}
+export const fetchSignalNotes = () => get<ApiSignalNote[]>('/api/signal-notes').catch(() => [] as ApiSignalNote[])
+export const addSignalNote = (signalId: string, note: string) =>
+  post<ApiSignalNote>('/api/signal-notes', { signal_id: signalId, note })
 
 export const submitFeedback = (
   signalId: string,

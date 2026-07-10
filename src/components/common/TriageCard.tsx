@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge } from 'lucide-react'
+import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback, pushToHubspot } from '../../data/api'
+import { submitFeedback, pushToHubspot, addSignalNote } from '../../data/api'
+import { signalNotes, notesForSignal } from '../../data/crm'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
 import type { Verdict } from './QAReview'
@@ -20,6 +21,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   const status = statusOf(signal)
   const done = status === 'actioned' || status === 'dismissed'
   const scope = riskScope(signal)
+  const noteCount = notesForSignal(signal.id).length
 
   // One shared verdict for the row control and the fuller panel in the expanded card.
   const logFeedback = (v: Verdict, note?: string) => {
@@ -40,6 +42,11 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
         <div className="flex shrink-0 items-center gap-2">
           {scope && <span className="hidden rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:inline" style={{ color: scope === 'account' ? 'var(--accent-d)' : 'var(--muted)', borderColor: 'var(--line)' }}>{scope === 'account' ? 'Account' : 'Delivery'}</span>}
           <SeverityTag severity={signal.severity} />
+          {noteCount > 0 && (
+            <span className="hidden items-center gap-1 text-[10px] font-semibold text-muted-2 sm:inline-flex" title={`${noteCount} team note${noteCount > 1 ? 's' : ''}`}>
+              <MessageSquare size={11} /> {noteCount}
+            </span>
+          )}
           {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
           <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
           {done ? (
@@ -80,6 +87,8 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
           <FrameworkScore signal={signal} />
 
           {signal.type === 'opportunity' && !done && <HubspotApproval signal={signal} />}
+
+          <NotesSection signalId={signal.id} />
 
           <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} value={verdict} onSubmit={logFeedback} /></div>
 
@@ -130,36 +139,148 @@ function FrameworkScore({ signal }: { signal: Signal }) {
 
 // Human-in-the-loop write-back: an approved opportunity is queued and workflow 11
 // creates the deal in HubSpot (Opportunity Qualification pipeline, mapped to the
-// account's company). Declining records the decision. The ONLY outward write.
+// account's company). Approval REQUIRES the deal value + close date, so a half-empty
+// deal can never be created. Declining records the decision. The ONLY outward write.
 function HubspotApproval({ signal }: { signal: Signal }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'queued' | 'declined' | 'done'>('idle')
-  const decide = (approve: boolean) => {
+  const [state, setState] = useState<'idle' | 'form' | 'busy' | 'queued' | 'declined' | 'done'>('idle')
+  const [dealName, setDealName] = useState(() => {
+    const acct = accountName(signal.accountId)
+    return `${acct && acct !== signal.accountId ? acct + ' - ' : ''}${(signal.summary || 'Opportunity').slice(0, 90)}`
+  })
+  const [amount, setAmount] = useState('')
+  const [closeDate, setCloseDate] = useState('')
+  const valid = Number(amount) > 0 && !!closeDate
+
+  const decline = () => {
     setState('busy')
-    pushToHubspot(signal.id, approve)
-      .then(() => setState(approve ? 'queued' : 'declined'))
+    pushToHubspot(signal.id, false).then(() => setState('declined')).catch(() => setState('done'))
+  }
+  const confirm = () => {
+    if (!valid) return
+    setState('busy')
+    pushToHubspot(signal.id, true, { dealName, amount: Number(amount), closeDate })
+      .then(() => setState('queued'))
       .catch(() => setState('done'))
   }
+
   if (state === 'queued')
     return <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 10%, transparent)' }}>Approved. The deal will appear in HubSpot on this account within 15 minutes.</div>
   if (state === 'declined')
     return <div className="mt-3 rounded-lg bg-bg-2 px-3 py-2.5 text-[12px] text-muted">Noted as not an opportunity. It will not be pushed.</div>
   if (state === 'done')
     return <div className="mt-3 rounded-lg bg-bg-2 px-3 py-2.5 text-[12px] text-muted">A decision was already recorded for this opportunity.</div>
+
+  const inputCls = 'w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]'
+  const labelCls = 'mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-2'
+
   return (
     <div className="mt-3 rounded-lg border px-3 py-2.5" style={{ borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 6%, transparent)' }}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {state === 'idle' && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[12.5px] font-semibold">Is this a real opportunity?</div>
+            <div className="mt-0.5 text-[11px] text-muted">Approving creates a deal on this account in HubSpot. You will be asked for the value and close date first.</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button onClick={() => setState('form')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white" style={{ background: 'var(--opp)' }}>
+              <Send size={12} /> Yes, push to HubSpot
+            </button>
+            <button onClick={decline} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-text">
+              No
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(state === 'form' || state === 'busy') && (
         <div>
-          <div className="text-[12.5px] font-semibold">Is this a real opportunity?</div>
-          <div className="mt-0.5 text-[11px] text-muted">Approving creates a deal on this account in HubSpot (Opportunity Qualification pipeline). Nothing is pushed without your yes.</div>
+          <div className="text-[12.5px] font-semibold">Create the HubSpot deal</div>
+          <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-[2fr_1fr_1fr]">
+            <div>
+              <label className={labelCls}>Deal name</label>
+              <input value={dealName} onChange={(e) => setDealName(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Value (£) *</label>
+              <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250000" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Expected close *</label>
+              <input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[10.5px] text-muted-2">* required - the deal is not created without a value and close date.</span>
+            <div className="flex items-center gap-1.5">
+              <button disabled={state === 'busy'} onClick={() => setState('idle')} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-text disabled:opacity-50">Back</button>
+              <button disabled={!valid || state === 'busy'} onClick={confirm} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--opp)' }}>
+                <Send size={12} /> {state === 'busy' ? 'Creating...' : 'Create deal'}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button disabled={state === 'busy'} onClick={() => decide(true)} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--opp)' }}>
-            <Send size={12} /> Yes, push to HubSpot
-          </button>
-          <button disabled={state === 'busy'} onClick={() => decide(false)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-text disabled:opacity-50">
-            No
-          </button>
+      )}
+    </div>
+  )
+}
+
+// Team notes: the human log alongside each signal - offline chats, decisions, next
+// steps that the transcripts can't capture. Visible on every dashboard, persists
+// after the signal is actioned. NOT model feedback (that's the quality check below).
+function NotesSection({ signalId }: { signalId: string }) {
+  const [items, setItems] = useState(() => notesForSignal(signalId))
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = () => {
+    const text = draft.trim()
+    if (!text || busy) return
+    setBusy(true)
+    addSignalNote(signalId, text)
+      .then((n) => {
+        signalNotes.push(n)
+        setItems(notesForSignal(signalId))
+        setDraft('')
+      })
+      .catch(() => {})
+      .finally(() => setBusy(false))
+  }
+  const fmtWhen = (ts: string) => {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-surface p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-2">
+        <MessageSquare size={12} /> Notes
+        <span className="font-medium normal-case tracking-normal text-muted-2">· team log, visible to everyone</span>
+      </div>
+      {items.length > 0 && (
+        <div className="mb-2.5 space-y-2">
+          {items.map((n) => (
+            <div key={n.id} className="rounded-lg bg-bg-2 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-2 text-[10.5px] text-muted-2">
+                <span className="font-semibold text-muted">{n.author || 'team'}</span>
+                <span>{fmtWhen(n.created_at)}</span>
+              </div>
+              <p className="mt-0.5 text-[12.5px] leading-relaxed text-text">{n.note}</p>
+            </div>
+          ))}
         </div>
+      )}
+      <div className="flex items-start gap-1.5">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={1}
+          placeholder="Add context the call couldn't capture - offline chats, decisions, next steps..."
+          className="min-h-[34px] flex-1 resize-y rounded-lg border border-line bg-bg-2 px-3 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
+        />
+        <button disabled={busy || !draft.trim()} onClick={submit} className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--accent)' }}>
+          Add
+        </button>
       </div>
     </div>
   )

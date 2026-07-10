@@ -2,11 +2,15 @@
 // bootstrap.ts exactly like the other shared arrays. Empty in mock mode - views
 // that use these fall back gracefully (weekly tab keeps its "coming soon" panel,
 // the account pipeline panel simply doesn't render).
-import type { ApiWeeklyReport, ApiStakeholder, ApiDeal } from './api'
+import type { ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote } from './api'
 
 export const weeklyReports: ApiWeeklyReport[] = []
 export const stakeholders: ApiStakeholder[] = []
 export const deals: ApiDeal[] = []
+
+// Team notes on signals (human log, shown on every dashboard).
+export const signalNotes: ApiSignalNote[] = []
+export const notesForSignal = (signalId: string) => signalNotes.filter((n) => n.signal_id === signalId)
 
 export const stakeholdersForAccount = (accountId: string) =>
   stakeholders.filter((s) => s.account_id === accountId)

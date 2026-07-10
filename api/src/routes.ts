@@ -298,23 +298,62 @@ router.get('/deals', async (req, res, next) => {
 });
 
 // Human approval on an opportunity -> queue a HubSpot deal push (workflow 11 does the
-// actual push). approve=false records the decline so the box doesn't reappear.
+// actual push). Approval requires the deal's value + close date (entered in the form),
+// so a half-empty deal can never be created. approve=false records the decline.
 router.post('/hubspot-push', async (req, res, next) => {
   try {
-    const { signal_id, approve, given_by } = req.body || {};
+    const { signal_id, approve, given_by, deal_name, amount, close_date } = req.body || {};
     if (!signal_id || typeof approve !== 'boolean') return res.status(400).json({ error: 'signal_id and approve required' });
+    if (approve) {
+      if (!(Number(amount) > 0)) return res.status(400).json({ error: 'a deal value (amount) is required' });
+      if (!close_date || isNaN(Date.parse(String(close_date)))) return res.status(400).json({ error: 'a close date is required' });
+    }
     const r = await q(
-      `INSERT INTO hubspot_pushes (signal_id, account_id, deal_name, status, given_by)
+      `INSERT INTO hubspot_pushes (signal_id, account_id, deal_name, amount, close_date, status, given_by)
        SELECT s.id, s.account_id,
-              COALESCE(a.name || ' - ', '') || left(COALESCE(s.summary, 'Opportunity'), 120),
-              $2, $3
+              COALESCE(NULLIF($4, ''), COALESCE(a.name || ' - ', '') || left(COALESCE(s.summary, 'Opportunity'), 120)),
+              $5, $6, $2, $3
        FROM signals s LEFT JOIN accounts a ON a.id = s.account_id
        WHERE s.id = $1 AND s.type = 'opportunity'
        ON CONFLICT (signal_id) DO NOTHING
        RETURNING id, status`,
-      [signal_id, approve ? 'pending' : 'declined', given_by || null]
+      [signal_id, approve ? 'pending' : 'declined', given_by || null,
+       deal_name || '', approve ? Number(amount) : null, approve ? close_date : null]
     );
     if (!r.rows.length) return res.status(409).json({ error: 'not an opportunity, or already decided' });
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+// Team notes on signals - a human log alongside each signal ("caught up with Ryan,
+// mitigated, next steps..."). Visible on all dashboards; NOT fed to the classifier.
+router.get('/signal-notes', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `WHERE n.account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `SELECT n.id, n.signal_id, n.note, n.author, n.created_at
+       FROM signal_notes n ${filter} ORDER BY n.created_at ASC LIMIT 2000`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
+router.post('/signal-notes', async (req, res, next) => {
+  try {
+    const { signal_id, note, author } = req.body || {};
+    if (!signal_id || !note || !String(note).trim()) return res.status(400).json({ error: 'signal_id and note required' });
+    const user = (req as Request & { user?: { email?: string } }).user;
+    const r = await q(
+      `INSERT INTO signal_notes (signal_id, account_id, note, author)
+       SELECT s.id, s.account_id, $2, $3 FROM signals s WHERE s.id = $1
+       RETURNING id, signal_id, note, author, created_at`,
+      [signal_id, String(note).trim(), user?.email || author || 'dashboard']
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'signal not found' });
     res.status(201).json(r.rows[0]);
   } catch (e) { next(e); }
 });

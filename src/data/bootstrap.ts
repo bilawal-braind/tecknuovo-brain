@@ -9,8 +9,8 @@
 // Note: compliance, weekly reports, trends and observability are not produced by the
 // pipeline yet, so they stay as demo data in all modes.
 import { isLive } from './source'
-import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals } from './api'
-import { weeklyReports, stakeholders, deals } from './crm'
+import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals, fetchSignalNotes } from './api'
+import { weeklyReports, stakeholders, deals, signalNotes } from './crm'
 import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
 import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
@@ -305,7 +305,7 @@ export async function bootstrap(): Promise<BootResult> {
   // Live: fetch from the Read API (the VM build).
   if (isLive) {
     try {
-      const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows] = await Promise.all([
+      const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows] = await Promise.all([
         fetchAccounts(),
         fetchProjects(),
         fetchSignals(),
@@ -314,11 +314,13 @@ export async function bootstrap(): Promise<BootResult> {
         fetchWeeklyReports(),
         fetchStakeholders(),
         fetchDeals(),
+        fetchSignalNotes(),
       ])
       // CRM mirror first - hydrate() uses `deals` for the account £ fallback.
       replace(weeklyReports, wrRows)
       replace(stakeholders, stRows)
       replace(deals, dlRows)
+      replace(signalNotes, noteRows)
       const counts = hydrate({ aRows, pRows, sRows, cRows, asRows })
       return { source: 'live', counts }
     } catch (e) {

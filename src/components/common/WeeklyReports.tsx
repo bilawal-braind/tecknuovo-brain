@@ -157,6 +157,10 @@ export function WeeklyReports({ onOpenAccount }: { onOpenAccount?: (accountId: s
   )
 }
 
+// The source file in SharePoint is deterministic from the week-ending date.
+const SP_REPORT_BASE = 'https://tecknuovo.sharepoint.com/sites/ReportingEfficiency/Generated%20Report/WeeklyStatus_'
+const sharepointUrl = (weekEnding: string) => `${SP_REPORT_BASE}${weekEnding.slice(0, 10)}.html`
+
 export function ReportCard({
   r, showWeek = false, wasRag, onOpenAccount,
 }: {
@@ -212,6 +216,10 @@ export function ReportCard({
         ) : (
           r.account_name && (<><span className="text-muted-2">·</span><span>{r.account_name}</span></>)
         )}
+        <span className="text-muted-2">·</span>
+        <a href={sharepointUrl(r.week_ending)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-text hover:underline">
+          SharePoint <ExternalLink size={10} />
+        </a>
       </div>
 
       {r.summary && <p className="mt-2.5 text-[13px] leading-relaxed">{r.summary}</p>}
