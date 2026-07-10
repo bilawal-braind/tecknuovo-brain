@@ -346,12 +346,12 @@ router.post('/signal-notes', async (req, res, next) => {
   try {
     const { signal_id, note, author } = req.body || {};
     if (!signal_id || !note || !String(note).trim()) return res.status(400).json({ error: 'signal_id and note required' });
-    const user = (req as Request & { user?: { email?: string } }).user;
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
     const r = await q(
       `INSERT INTO signal_notes (signal_id, account_id, note, author)
        SELECT s.id, s.account_id, $2, $3 FROM signals s WHERE s.id = $1
        RETURNING id, signal_id, note, author, created_at`,
-      [signal_id, String(note).trim(), user?.email || author || 'dashboard']
+      [signal_id, String(note).trim(), user?.name || user?.email || author || 'dashboard']
     );
     if (!r.rows.length) return res.status(404).json({ error: 'signal not found' });
     res.status(201).json(r.rows[0]);

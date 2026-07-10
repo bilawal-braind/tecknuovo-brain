@@ -253,6 +253,10 @@ function NotesSection({ signalId }: { signalId: string }) {
   const [items, setItems] = useState(() => notesForSignal(signalId))
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const RECENT = 3
+  const visible = showAll ? items : items.slice(-RECENT)
+  const hidden = items.length - visible.length
 
   const submit = () => {
     const text = draft.trim()
@@ -290,7 +294,12 @@ function NotesSection({ signalId }: { signalId: string }) {
 
       {items.length > 0 && (
         <div className="mb-3 space-y-2">
-          {items.map((n) => (
+          {hidden > 0 && (
+            <button onClick={() => setShowAll(true)} className="w-full rounded-lg border border-dashed border-line bg-bg-2 px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+              Show {hidden} earlier note{hidden > 1 ? 's' : ''}
+            </button>
+          )}
+          {visible.map((n) => (
             <div key={n.id} className="rounded-lg bg-bg-2 px-3.5 py-2.5">
               <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-2">
                 <span className="font-semibold text-muted">{n.author || 'team'}</span>
@@ -299,6 +308,11 @@ function NotesSection({ signalId }: { signalId: string }) {
               <p className="mt-1 text-[13px] leading-relaxed text-text">{n.note}</p>
             </div>
           ))}
+          {showAll && items.length > RECENT && (
+            <button onClick={() => setShowAll(false)} className="w-full rounded-lg border border-dashed border-line bg-bg-2 px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+              Show recent only
+            </button>
+          )}
         </div>
       )}
 
