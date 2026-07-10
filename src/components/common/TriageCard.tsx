@@ -73,14 +73,22 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
           <p className="mt-1 border-l-2 pl-2.5 text-[13px] italic leading-relaxed text-muted" style={{ borderColor: m.color }}>“{signal.quote}”</p>
           <div className="mt-1 text-[11px] text-muted-2">{signal.sourceCall.title} · {signal.sourceCall.type}{signal.sourceCall.speaker ? ` · ${signal.sourceCall.speaker}` : ''} · via Microsoft Teams</div>
 
-          {/* Action - what to do next */}
-          <div className="mt-3 eyebrow text-muted-2">Suggested action</div>
-          <div className="mt-1 flex items-start gap-2 rounded-lg bg-surface px-3 py-2">
-            <ArrowRightCircle size={14} className="mt-0.5 shrink-0" style={{ color: m.color }} />
-            <div className="text-[12.5px] leading-snug text-text">
+          {/* Action - what to do next. The "so what" of the signal, so it carries the
+              signal's own colour as a callout without shouting over the rest of the card. */}
+          <div className="mt-3 eyebrow" style={{ color: m.color }}>Suggested action</div>
+          <div
+            className="mt-1 flex items-start gap-2.5 rounded-lg px-3.5 py-2.5"
+            style={{
+              borderLeft: `3px solid ${m.color}`,
+              background: `color-mix(in srgb, ${m.color} 7%, var(--surface))`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${m.color} 18%, transparent)`,
+            }}
+          >
+            <ArrowRightCircle size={15} className="mt-0.5 shrink-0" style={{ color: m.color }} />
+            <div className="text-[13px] font-medium leading-relaxed text-text">
               {signal.suggestedAction || 'No action suggested.'}
               {signal.suggestedOwner.person && signal.suggestedOwner.person !== '-' && (
-                <span className="mt-0.5 block text-[11px] text-muted">Owner: {signal.suggestedOwner.person}{signal.suggestedOwner.role ? ` · ${signal.suggestedOwner.role}` : ''}</span>
+                <span className="mt-1 block text-[11px] font-normal text-muted">Owner: {signal.suggestedOwner.person}{signal.suggestedOwner.role ? ` · ${signal.suggestedOwner.role}` : ''}</span>
               )}
             </div>
           </div>
