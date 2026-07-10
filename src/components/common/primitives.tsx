@@ -17,6 +17,27 @@ export function RagDot({ health, withLabel = false }: { health: Health; withLabe
   )
 }
 
+// One filter chip design for every dashboard: coloured dot + label + count.
+// Counts come from the FULL list (they never change when a filter is applied);
+// active state fills in the signal's own colour.
+export function FilterChip({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color?: string }) {
+  const c = color ?? 'var(--accent)'
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors"
+      style={
+        active
+          ? { background: c, borderColor: c, color: '#fff' }
+          : { background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--muted)' }
+      }
+    >
+      {color && <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: active ? '#fff' : color }} />}
+      {label}
+    </button>
+  )
+}
+
 export function SignalBadge({ type, size = 'md' }: { type: SignalType; size?: 'sm' | 'md' }) {
   const m = SIGNAL_META[type]
   const pad = size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'

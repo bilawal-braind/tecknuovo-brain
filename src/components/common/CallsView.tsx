@@ -4,11 +4,12 @@ import type { Call } from '../../data/calls'
 import { transcriptLinesFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
-import { SignalBadge, ConfidenceBar, SeverityTag } from './primitives'
+import { SignalBadge, ConfidenceBar, SeverityTag, FilterChip } from './primitives'
+import { SIGNAL_META } from '../../data/types'
 import { QAReview } from './QAReview'
 import { fmt } from './SignalLayer'
 
-const TODAY = '2026-06-18'
+const TODAY = new Date().toISOString().slice(0, 10)
 type Filter = 'all' | SignalType
 type DateRange = 'all' | '30' | '7'
 
@@ -61,11 +62,11 @@ export function CallsView({ calls, title = 'Calls', subtitle }: { calls: Call[];
         </select>
       </div>
       <div className="mt-2.5 flex flex-wrap gap-2">
-        <Chip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${counts.all})`} />
-        <Chip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} type="opportunity" label={`Opportunities (${counts.opportunity})`} />
-        <Chip active={filter === 'risk'} onClick={() => setFilter('risk')} type="risk" label={`Risks (${counts.risk})`} />
-        <Chip active={filter === 'update'} onClick={() => setFilter('update')} type="update" label={`Updates (${counts.update})`} />
-        <Chip active={filter === 'people'} onClick={() => setFilter('people')} type="people" label={`People (${counts.people})`} />
+        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${counts.all})`} />
+        <FilterChip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} color={SIGNAL_META.opportunity.color} label={`Opportunities (${counts.opportunity})`} />
+        <FilterChip active={filter === 'risk'} onClick={() => setFilter('risk')} color={SIGNAL_META.risk.color} label={`Risks (${counts.risk})`} />
+        <FilterChip active={filter === 'update'} onClick={() => setFilter('update')} color={SIGNAL_META.update.color} label={`Updates (${counts.update})`} />
+        <FilterChip active={filter === 'people'} onClick={() => setFilter('people')} color={SIGNAL_META.people.color} label={`People (${counts.people})`} />
       </div>
 
       <div className="mt-3 space-y-2.5">
@@ -186,11 +187,3 @@ export function CallTranscript({ call }: { call: Call }) {
   )
 }
 
-function Chip({ active, onClick, label, type }: { active: boolean; onClick: () => void; label: string; type?: SignalType }) {
-  return (
-    <button onClick={onClick} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${active ? 'border-transparent bg-[var(--accent)] text-white' : 'border-line bg-surface text-muted hover:text-text'}`}>
-      {type && !active && <SignalBadge type={type} size="sm" />}
-      {label}
-    </button>
-  )
-}

@@ -85,7 +85,8 @@ export function WeeklyReports({ onOpenAccount }: { onOpenAccount?: (accountId: s
 
       {!searching && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {weeks.slice(0, 8).map((w) => (
+          {/* latest 4 weeks as chips; everything older lives in the dropdown so the row never grows */}
+          {weeks.slice(0, 4).map((w) => (
             <button
               key={w}
               onClick={() => setWeek(w)}
@@ -99,6 +100,23 @@ export function WeeklyReports({ onOpenAccount }: { onOpenAccount?: (accountId: s
               w/e {fmtWeek(w)}
             </button>
           ))}
+          {weeks.length > 4 && !weeks.slice(0, 4).includes(week) && (
+            <span className="rounded-lg border px-2.5 py-1.5 text-[12px] font-medium" style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}>
+              w/e {fmtWeek(week)}
+            </span>
+          )}
+          {weeks.length > 4 && (
+            <select
+              value={weeks.slice(0, 4).includes(week) ? '' : week}
+              onChange={(e) => e.target.value && setWeek(e.target.value)}
+              className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-muted outline-none"
+            >
+              <option value="">Older weeks…</option>
+              {weeks.slice(4).map((w) => (
+                <option key={w} value={w}>w/e {fmtWeek(w)}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 

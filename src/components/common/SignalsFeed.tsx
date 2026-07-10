@@ -3,7 +3,8 @@ import { ArrowRight } from 'lucide-react'
 import type { Signal, SignalType } from '../../data/types'
 import { rankByImpact, riskScope } from '../../data/signals'
 import { accountById, podName } from '../../data/org'
-import { SignalBadge, RagDot } from './primitives'
+import { SignalBadge, RagDot, FilterChip } from './primitives'
+import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
 
 const CALL_TYPES = ['Daily standup', 'Weekly report', 'Monthly governance', 'Check-in', 'Client kickoff']
@@ -45,18 +46,18 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
   return (
     <>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Chip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${signals.length})`} />
-        <Chip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} type="opportunity" label={`Opportunities (${count('opportunity')})`} />
-        <Chip active={filter === 'risk'} onClick={() => setFilter('risk')} type="risk" label={`Risks (${count('risk')})`} />
-        <Chip active={filter === 'update'} onClick={() => setFilter('update')} type="update" label={`Updates (${count('update')})`} />
-        <Chip active={filter === 'people'} onClick={() => setFilter('people')} type="people" label={`People (${count('people')})`} />
+        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${signals.length})`} />
+        <FilterChip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} color={SIGNAL_META.opportunity.color} label={`Opportunities (${count('opportunity')})`} />
+        <FilterChip active={filter === 'risk'} onClick={() => setFilter('risk')} color={SIGNAL_META.risk.color} label={`Risks (${count('risk')})`} />
+        <FilterChip active={filter === 'update'} onClick={() => setFilter('update')} color={SIGNAL_META.update.color} label={`Updates (${count('update')})`} />
+        <FilterChip active={filter === 'people'} onClick={() => setFilter('people')} color={SIGNAL_META.people.color} label={`People (${count('people')})`} />
       </div>
       {filter === 'risk' && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[11px] text-muted-2">Risk level</span>
-          <Chip active={riskLevel === 'all'} onClick={() => setRiskLevel('all')} label="All risks" />
-          <Chip active={riskLevel === 'account'} onClick={() => setRiskLevel('account')} label="Account" />
-          <Chip active={riskLevel === 'delivery'} onClick={() => setRiskLevel('delivery')} label="Delivery" />
+          <FilterChip active={riskLevel === 'all'} onClick={() => setRiskLevel('all')} label="All risks" />
+          <FilterChip active={riskLevel === 'account'} onClick={() => setRiskLevel('account')} label="Account" />
+          <FilterChip active={riskLevel === 'delivery'} onClick={() => setRiskLevel('delivery')} label="Delivery" />
         </div>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -129,11 +130,3 @@ function Select({ label, value, onChange, options }: { label: string; value: str
   )
 }
 
-function Chip({ active, onClick, label, type }: { active: boolean; onClick: () => void; label: string; type?: SignalType }) {
-  return (
-    <button onClick={onClick} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${active ? 'border-transparent bg-[var(--accent)] text-white' : 'border-line bg-surface text-muted hover:text-text'}`}>
-      {type && !active && <SignalBadge type={type} size="sm" />}
-      {label}
-    </button>
-  )
-}
