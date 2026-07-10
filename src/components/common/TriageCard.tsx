@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
@@ -170,12 +171,12 @@ function HubspotApproval({ signal }: { signal: Signal }) {
   if (state === 'done')
     return <div className="mt-3 rounded-lg bg-bg-2 px-3 py-2.5 text-[12px] text-muted">A decision was already recorded for this opportunity.</div>
 
-  const inputCls = 'w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]'
+  const inputCls = 'w-full rounded-lg border border-line bg-bg-2 px-3 py-2 text-[13px] outline-none focus:border-[var(--accent)]'
   const labelCls = 'mb-1 block text-[10px] font-bold uppercase tracking-wide text-muted-2'
 
   return (
-    <div className="mt-3 rounded-lg border px-3 py-2.5" style={{ borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 6%, transparent)' }}>
-      {state === 'idle' && (
+    <>
+      <div className="mt-3 rounded-lg border px-3 py-2.5" style={{ borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 6%, transparent)' }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[12.5px] font-semibold">Is this a real opportunity?</div>
@@ -190,37 +191,58 @@ function HubspotApproval({ signal }: { signal: Signal }) {
             </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {(state === 'form' || state === 'busy') && (
-        <div>
-          <div className="text-[12.5px] font-semibold">Create the HubSpot deal</div>
-          <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-[2fr_1fr_1fr]">
-            <div>
-              <label className={labelCls}>Deal name</label>
-              <input value={dealName} onChange={(e) => setDealName(e.target.value)} className={inputCls} />
+      {(state === 'form' || state === 'busy') &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+            onClick={() => state !== 'busy' && setState('idle')}
+          >
+            <div
+              className="w-full max-w-[540px] rounded-2xl border border-line bg-surface p-6"
+              style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[16px] font-bold tracking-tight">Create the HubSpot deal</h3>
+                  <p className="mt-0.5 text-[12px] text-muted">Pushed to the Opportunity Qualification pipeline on {accountName(signal.accountId)}.</p>
+                </div>
+                <button disabled={state === 'busy'} onClick={() => setState('idle')} aria-label="Close" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text disabled:opacity-50"><X size={16} /></button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className={labelCls}>Deal name</label>
+                  <input value={dealName} onChange={(e) => setDealName(e.target.value)} className={inputCls} />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className={labelCls}>Value (£) *</label>
+                    <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250000" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Expected close *</label>
+                    <input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3.5">
+                <span className="text-[11px] text-muted-2">* required - no deal is created without a value and close date.</span>
+                <div className="flex items-center gap-2">
+                  <button disabled={state === 'busy'} onClick={() => setState('idle')} className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[12px] font-semibold text-muted transition-colors hover:text-text disabled:opacity-50">Cancel</button>
+                  <button disabled={!valid || state === 'busy'} onClick={confirm} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--opp)' }}>
+                    <Send size={13} /> {state === 'busy' ? 'Creating...' : 'Create deal'}
+                  </button>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Value (£) *</label>
-              <input type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 250000" className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Expected close *</label>
-              <input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} className={inputCls} />
-            </div>
-          </div>
-          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[10.5px] text-muted-2">* required - the deal is not created without a value and close date.</span>
-            <div className="flex items-center gap-1.5">
-              <button disabled={state === 'busy'} onClick={() => setState('idle')} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-text disabled:opacity-50">Back</button>
-              <button disabled={!valid || state === 'busy'} onClick={confirm} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--opp)' }}>
-                <Send size={12} /> {state === 'busy' ? 'Creating...' : 'Create deal'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 
@@ -252,34 +274,44 @@ function NotesSection({ signalId }: { signalId: string }) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-surface p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-2">
-        <MessageSquare size={12} /> Notes
-        <span className="font-medium normal-case tracking-normal text-muted-2">· team log, visible to everyone</span>
+    <div className="mt-3.5 rounded-xl border border-line bg-surface p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+          <MessageSquare size={14} style={{ color: 'var(--accent-d)' }} />
+        </span>
+        <div>
+          <div className="text-[13px] font-semibold leading-tight">Notes</div>
+          <div className="text-[11px] text-muted-2">Team log · visible to everyone · offline chats, decisions, next steps</div>
+        </div>
+        {items.length > 0 && (
+          <span className="ml-auto rounded-full bg-bg-2 px-2 py-0.5 text-[10.5px] font-semibold text-muted">{items.length}</span>
+        )}
       </div>
+
       {items.length > 0 && (
-        <div className="mb-2.5 space-y-2">
+        <div className="mb-3 space-y-2">
           {items.map((n) => (
-            <div key={n.id} className="rounded-lg bg-bg-2 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-x-2 text-[10.5px] text-muted-2">
+            <div key={n.id} className="rounded-lg bg-bg-2 px-3.5 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-2">
                 <span className="font-semibold text-muted">{n.author || 'team'}</span>
                 <span>{fmtWhen(n.created_at)}</span>
               </div>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-text">{n.note}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-text">{n.note}</p>
             </div>
           ))}
         </div>
       )}
-      <div className="flex items-start gap-1.5">
+
+      <div className="flex items-end gap-2">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          rows={1}
+          rows={2}
           placeholder="Add context the call couldn't capture - offline chats, decisions, next steps..."
-          className="min-h-[34px] flex-1 resize-y rounded-lg border border-line bg-bg-2 px-3 py-1.5 text-[12.5px] outline-none focus:border-[var(--accent)]"
+          className="min-h-[60px] flex-1 resize-y rounded-lg border border-line bg-bg-2 px-3.5 py-2.5 text-[13px] leading-relaxed outline-none focus:border-[var(--accent)]"
         />
-        <button disabled={busy || !draft.trim()} onClick={submit} className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--accent)' }}>
-          Add
+        <button disabled={busy || !draft.trim()} onClick={submit} className="rounded-lg px-4 py-2.5 text-[12px] font-semibold text-white disabled:opacity-40" style={{ background: 'var(--accent)' }}>
+          {busy ? 'Adding...' : 'Add note'}
         </button>
       </div>
     </div>

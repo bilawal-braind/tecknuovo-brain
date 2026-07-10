@@ -195,6 +195,16 @@ export function ReportCard({
           >
             {rag}
           </span>
+          <a
+            href={sharepointUrl(r.week_ending)}
+            target="_blank"
+            rel="noreferrer"
+            title="Open the source report in SharePoint"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors hover:underline"
+            style={{ color: 'var(--accent-d)', borderColor: 'color-mix(in srgb, var(--accent) 35%, transparent)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}
+          >
+            <ExternalLink size={12} /> Open in SharePoint
+          </a>
         </div>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
@@ -216,10 +226,6 @@ export function ReportCard({
         ) : (
           r.account_name && (<><span className="text-muted-2">·</span><span>{r.account_name}</span></>)
         )}
-        <span className="text-muted-2">·</span>
-        <a href={sharepointUrl(r.week_ending)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-text hover:underline">
-          SharePoint <ExternalLink size={10} />
-        </a>
       </div>
 
       {r.summary && <p className="mt-2.5 text-[13px] leading-relaxed">{r.summary}</p>}
