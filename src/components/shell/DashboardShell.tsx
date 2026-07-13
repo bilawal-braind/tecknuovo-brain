@@ -1,8 +1,13 @@
+import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { BrandLockup } from '../common/Brand'
 import { CoPilot } from '../common/CoPilot'
+import { fetchMe } from '../../data/api'
+import type { Me } from '../../data/api'
+import { authEnabled, logout } from '../../data/auth'
 
 export type Section = { id: string; label: string; icon: LucideIcon; count?: number }
 
@@ -61,6 +66,7 @@ export function DashboardShell({
             )
           })}
         </nav>
+        <UserFooter />
       </aside>
 
       <header className="flex items-center gap-3 border-b border-line bg-surface px-6">
@@ -77,6 +83,41 @@ export function DashboardShell({
         </motion.div>
       </main>
       <CoPilot onOpenAccount={onOpenAccount} />
+    </div>
+  )
+}
+
+// Who's signed in, bottom of the sidebar. The role label comes from /api/me (the same
+// call that scopes what they can see), so what's shown always matches what's enforced.
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Admin · all dashboards',
+  leadership: 'Leadership',
+  partner: 'Client Partner',
+  delivery: 'Delivery',
+  observability: 'Observability',
+}
+
+function UserFooter() {
+  const [me, setMe] = useState<Me | null>(null)
+  useEffect(() => {
+    fetchMe().then(setMe).catch(() => {})
+  }, [])
+  if (!me) return null
+
+  const display = me.name || me.email || 'Signed in'
+  const initials = display.split(/[\s.@_-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  return (
+    <div className="flex flex-shrink-0 items-center gap-2.5 border-t border-line px-4 py-3">
+      <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ background: 'var(--accent)' }}>{initials}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12.5px] font-semibold leading-tight">{display}</div>
+        <div className="truncate text-[10.5px] text-muted-2">{ROLE_LABEL[me.role] ?? me.role}{me.scope === 'all' && me.role !== 'admin' ? ' · all accounts' : ''}</div>
+      </div>
+      {authEnabled && (
+        <button onClick={logout} title="Sign out" aria-label="Sign out" className="rounded-md border border-line p-1.5 text-muted-2 transition-colors hover:text-text">
+          <LogOut size={13} />
+        </button>
+      )}
     </div>
   )
 }
