@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, Video, ChevronDown, FileText, X } from 'lucide-react'
+import { fetchTranscript } from '../../data/api'
 import type { Call } from '../../data/calls'
 import { transcriptLinesFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
@@ -129,6 +130,20 @@ function CallCard({ call }: { call: Call }) {
 }
 
 function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void }) {
+  // Live calls carry only metadata in the list; the full transcript loads here, on
+  // demand, and is cached back onto the call so reopening is instant. Mock/demo
+  // calls (non-UUID ids) keep their built-in representative transcript.
+  const [loading, setLoading] = useState(false)
+  const [, bump] = useState(0)
+  useEffect(() => {
+    if (call.transcript || !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(call.id)) return
+    setLoading(true)
+    fetchTranscript(call.id)
+      .then((r) => { if (r.transcript) call.transcript = r.transcript })
+      .catch(() => {})
+      .finally(() => { setLoading(false); bump((n) => n + 1) })
+  }, [call])
+
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
@@ -144,7 +159,11 @@ function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void })
           <button onClick={onClose} aria-label="Close transcript" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
         </div>
         <div className="overflow-y-auto px-5 py-4">
-          <CallTranscript call={call} />
+          {loading ? (
+            <p className="py-10 text-center text-[12.5px] text-muted">Loading the transcript…</p>
+          ) : (
+            <CallTranscript call={call} />
+          )}
         </div>
       </div>
     </div>,

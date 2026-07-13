@@ -24,7 +24,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT f.account_id, a.name AS account, string_agg(('- was '''||f.verdict||''''||COALESCE(', should be '''||f.correct_type||'''','')||COALESCE(': '||f.reason,'')), E'\\n' ORDER BY f.created_at DESC) AS notes FROM feedback f JOIN accounts a ON a.id=f.account_id WHERE f.account_id IS NOT NULL GROUP BY f.account_id, a.name;",
+        "query": "SELECT f.account_id, a.name AS account, string_agg(('- was '''||f.verdict||''''||COALESCE(', should be '''||f.correct_type||'''','')||COALESCE(': '||f.reason,'')), E'\\n' ORDER BY f.created_at DESC) AS notes FROM feedback f JOIN accounts a ON a.id=f.account_id WHERE f.account_id IS NOT NULL AND f.created_at > now() - interval '90 days' GROUP BY f.account_id, a.name;",
         "options": {}
       },
       "id": "fb_acc",

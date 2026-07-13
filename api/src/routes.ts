@@ -16,6 +16,24 @@ const LEADERSHIP_GROUP = (process.env.ENTRA_LEADERSHIP_GROUP_ID || '').toLowerCa
 const inLeadershipGroup = (user?: { groups?: string[] }) =>
   !!LEADERSHIP_GROUP && !!user?.groups?.some((g) => g.toLowerCase() === LEADERSHIP_GROUP);
 
+// Ids arrive from the URL/body; anything that isn't a UUID would otherwise reach
+// Postgres and fail as a type error (a 500). Reject it as the bad request it is.
+const isUuid = (v: unknown): v is string =>
+  typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+// A write is only valid inside the caller's visibility: the signal must exist and,
+// for scoped users, sit on one of their accounts. Same rule as the read endpoints.
+async function checkSignalWrite(req: Request, signalId: unknown): Promise<{ status: number; error: string } | null> {
+  if (!isUuid(signalId)) return { status: 400, error: 'invalid signal_id' };
+  const s = await q('SELECT account_id FROM signals WHERE id = $1', [signalId]);
+  if (!s.rows.length) return { status: 404, error: 'signal not found' };
+  const allowed = await allowedAccounts(req);
+  if (allowed !== null && !(s.rows[0].account_id && allowed.includes(String(s.rows[0].account_id)))) {
+    return { status: 403, error: 'forbidden' };
+  }
+  return null;
+}
+
 async function allowedAccounts(req: Request): Promise<string[] | null> {
   const user = (req as Request & { user?: { email?: string; groups?: string[] } }).user;
   if (!user?.email) return null; // token/dev mode → full access
@@ -107,6 +125,7 @@ router.get('/accounts', async (req, res, next) => {
 // Account drill-down - the account, its projects/SOWs, and recent signals.
 router.get('/accounts/:id', async (req, res, next) => {
   try {
+    if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid account id' });
     const allowed = await allowedAccounts(req);
     if (allowed !== null && !allowed.includes(req.params.id)) return res.status(403).json({ error: 'forbidden' });
     const acc = await q('SELECT * FROM accounts WHERE id = $1', [req.params.id]);
@@ -132,7 +151,9 @@ router.get('/accounts/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Calls (the source Teams calls) - includes the transcript for the transcript view.
+// Calls (the source Teams calls). Metadata only - transcripts are fetched one at a
+// time via /calls/:id/transcript when someone opens one, so this list stays small
+// no matter how many months of calls accumulate.
 router.get('/calls', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
@@ -140,11 +161,26 @@ router.get('/calls', async (req, res, next) => {
     let filter = '';
     if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
-      `SELECT id, account_id, project_id, title, call_date, transcript, source
+      `SELECT id, account_id, project_id, title, call_date, source,
+              (transcript IS NOT NULL AND transcript <> '') AS has_transcript
        FROM calls ${filter} ORDER BY call_date DESC NULLS LAST LIMIT 500`,
       params
     );
     res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
+// One call's transcript, on demand, with the same account scoping as the list.
+router.get('/calls/:id/transcript', async (req, res, next) => {
+  try {
+    if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid call id' });
+    const r = await q('SELECT id, account_id, transcript FROM calls WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'not found' });
+    const allowed = await allowedAccounts(req);
+    if (allowed !== null && !(r.rows[0].account_id && allowed.includes(String(r.rows[0].account_id)))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    res.json({ id: r.rows[0].id, transcript: r.rows[0].transcript || '' });
   } catch (e) { next(e); }
 });
 
@@ -226,12 +262,14 @@ router.get('/signals', async (req, res, next) => {
     const allowed = await allowedAccounts(req);
     const where: string[] = [];
     const params: unknown[] = [];
+    if (req.query.account_id && !isUuid(req.query.account_id)) return res.status(400).json({ error: 'invalid account_id' });
     for (const [key, col] of [['type', 'type'], ['status', 'status'], ['account_id', 'account_id']] as const) {
       if (req.query[key]) { params.push(req.query[key]); where.push(`s.${col} = $${params.length}`); }
     }
     if (allowed !== null) { params.push(allowed); where.push(`s.account_id = ANY($${params.length}::uuid[])`); }
-    const limit = Math.min(Number(req.query.limit || 50), 200);
-    const offset = Number(req.query.offset || 0);
+    // NaN-proof paging: ?limit=abc must not become a 500.
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
     params.push(limit); const lp = params.length;
     params.push(offset); const op = params.length;
     const r = await q(
@@ -308,10 +346,15 @@ router.post('/hubspot-push', async (req, res, next) => {
   try {
     const { signal_id, approve, given_by, deal_name, amount, close_date } = req.body || {};
     if (!signal_id || typeof approve !== 'boolean') return res.status(400).json({ error: 'signal_id and approve required' });
+    const denied = await checkSignalWrite(req, signal_id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
     if (approve) {
       if (!(Number(amount) > 0)) return res.status(400).json({ error: 'a deal value (amount) is required' });
       if (!close_date || isNaN(Date.parse(String(close_date)))) return res.status(400).json({ error: 'a close date is required' });
     }
+    // The approver is whoever is signed in - a body value can't impersonate anyone.
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
+    const approver = user?.name || user?.email || String(given_by || 'dashboard').slice(0, 120);
     const r = await q(
       `INSERT INTO hubspot_pushes (signal_id, account_id, deal_name, amount, close_date, status, given_by)
        SELECT s.id, s.account_id,
@@ -321,8 +364,8 @@ router.post('/hubspot-push', async (req, res, next) => {
        WHERE s.id = $1 AND s.type = 'opportunity'
        ON CONFLICT (signal_id) DO NOTHING
        RETURNING id, status`,
-      [signal_id, approve ? 'pending' : 'declined', given_by || null,
-       deal_name || '', approve ? Number(amount) : null, approve ? close_date : null]
+      [signal_id, approve ? 'pending' : 'declined', approver,
+       String(deal_name || '').slice(0, 200), approve ? Number(amount) : null, approve ? close_date : null]
     );
     if (!r.rows.length) return res.status(409).json({ error: 'not an opportunity, or already decided' });
     res.status(201).json(r.rows[0]);
@@ -350,12 +393,14 @@ router.post('/signal-notes', async (req, res, next) => {
   try {
     const { signal_id, note, author } = req.body || {};
     if (!signal_id || !note || !String(note).trim()) return res.status(400).json({ error: 'signal_id and note required' });
+    const denied = await checkSignalWrite(req, signal_id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
     const user = (req as Request & { user?: { email?: string; name?: string } }).user;
     const r = await q(
       `INSERT INTO signal_notes (signal_id, account_id, note, author)
        SELECT s.id, s.account_id, $2, $3 FROM signals s WHERE s.id = $1
        RETURNING id, signal_id, note, author, created_at`,
-      [signal_id, String(note).trim(), user?.name || user?.email || author || 'dashboard']
+      [signal_id, String(note).trim().slice(0, 4000), (user?.name || user?.email || String(author || 'dashboard')).slice(0, 120)]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'signal not found' });
     res.status(201).json(r.rows[0]);
@@ -368,10 +413,15 @@ router.post('/feedback', async (req, res, next) => {
     const { signal_id, verdict, correct_type, reason, given_by } = req.body || {};
     if (!signal_id || !verdict) return res.status(400).json({ error: 'signal_id and verdict required' });
     if (!['correct', 'incorrect', 'relabel'].includes(String(verdict))) return res.status(400).json({ error: 'invalid verdict' });
+    const denied = await checkSignalWrite(req, signal_id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
     const r = await q(
       `INSERT INTO feedback (signal_id, account_id, verdict, correct_type, reason, given_by)
        SELECT $1, s.account_id, $2, $3, $4, $5 FROM signals s WHERE s.id = $1 RETURNING id`,
-      [signal_id, verdict, correct_type || null, reason || null, given_by || null]
+      [signal_id, verdict, correct_type ? String(correct_type).slice(0, 40) : null,
+       reason ? String(reason).slice(0, 2000) : null,
+       user?.name || user?.email || (given_by ? String(given_by).slice(0, 120) : null)]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'signal not found' });
     res.status(201).json({ id: r.rows[0].id });

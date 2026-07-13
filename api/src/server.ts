@@ -26,6 +26,10 @@ app.use(auth);
 app.use('/api', router);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Client-side errors (e.g. malformed JSON from body-parser carries status 400)
+  // answer as such; anything else is a 500 with no internals leaked.
+  const status = Number(err?.status || err?.statusCode);
+  if (status >= 400 && status < 500) return res.status(status).json({ error: 'bad request' });
   console.error(err);
   res.status(500).json({ error: 'internal' });
 });

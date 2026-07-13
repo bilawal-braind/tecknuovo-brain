@@ -60,7 +60,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $json.driveId }}/root/children?$top=200&$select=id,name,lastModifiedDateTime",
+        "url": "=https://graph.microsoft.com/v1.0/drives/{{ $json.driveId }}/root/children?$top=999&$select=id,name,lastModifiedDateTime",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
         "options": {}

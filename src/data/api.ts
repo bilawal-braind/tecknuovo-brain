@@ -79,7 +79,8 @@ export type ApiCall = {
   project_id: string | null
   title: string | null
   call_date: string | null
-  transcript: string | null
+  transcript?: string | null // present in snapshot exports; the live list omits it
+  has_transcript?: boolean
   source: string | null
 }
 
@@ -95,6 +96,9 @@ export const fetchAccounts = () => get<ApiAccount[]>('/api/accounts')
 export const fetchProjects = () => get<ApiProject[]>('/api/projects')
 export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
 export const fetchCalls = () => get<ApiCall[]>('/api/calls')
+// Transcripts load one call at a time when someone opens one - the calls list stays
+// light no matter how much history accumulates.
+export const fetchTranscript = (callId: string) => get<{ id: string; transcript: string }>(`/api/calls/${callId}/transcript`)
 export const fetchAssociates = () => get<ApiAssociate[]>('/api/associates')
 
 // ── Weekly reports + CRM mirror (HubSpot, read-only) ──
