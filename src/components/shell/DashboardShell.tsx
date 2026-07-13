@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { LogOut } from 'lucide-react'
+import { LogOut, RefreshCw } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { BrandLockup } from '../common/Brand'
@@ -75,6 +75,7 @@ export function DashboardShell({
           <span className="text-muted-2">/</span>
           <span className="font-semibold text-text">{activeLabel}</span>
         </div>
+        <FreshDataPill />
       </header>
 
       <main className="main-scroll overflow-y-auto">
@@ -84,6 +85,28 @@ export function DashboardShell({
       </main>
       <CoPilot onOpenAccount={onOpenAccount} />
     </div>
+  )
+}
+
+// The background poll found new activity while this dashboard was open. Data is
+// already refreshed in memory - the pill just offers a clean repaint, so nobody's
+// view ever changes underneath them without asking.
+function FreshDataPill() {
+  const [fresh, setFresh] = useState(false)
+  useEffect(() => {
+    const onUpdate = (e: Event) => { if ((e as CustomEvent).detail?.reason === 'poll') setFresh(true) }
+    window.addEventListener('tn-data-updated', onUpdate)
+    return () => window.removeEventListener('tn-data-updated', onUpdate)
+  }, [])
+  if (!fresh) return null
+  return (
+    <button
+      onClick={() => window.location.reload()}
+      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-semibold text-white transition-transform hover:scale-[1.03]"
+      style={{ background: 'var(--accent)' }}
+    >
+      <RefreshCw size={12} /> New activity · Refresh
+    </button>
   )
 }
 

@@ -6,7 +6,24 @@ import { bootstrap } from './data/bootstrap'
 import { authEnabled, handleRedirect, getAuthToken, clearAuth } from './data/auth'
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
-const mount = () => root.render(<React.StrictMode><App /></React.StrictMode>)
+// Remounting with a fresh key re-reads the in-memory data arrays everywhere - used
+// once, right after load, if the background refresh found newer data than the cache.
+let gen = 0
+const mount = () => root.render(<React.StrictMode><App key={gen++} /></React.StrictMode>)
+
+// Never a blank page: paint a splash before any network work starts.
+root.render(
+  <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', font: '500 14px system-ui, sans-serif', color: '#64748b' }}>
+    Loading the Second Brain…
+  </div>,
+)
+
+window.addEventListener('tn-data-updated', (e) => {
+  // 'boot' = the catch-up fetch just after an instant cache paint (safe to remount:
+  // the user has barely arrived). Later 'poll' updates show a gentle refresh pill
+  // in the shell instead - never yank a view out from under someone mid-read.
+  if ((e as CustomEvent).detail?.reason === 'boot') mount()
+})
 
 async function start() {
   // SSO mode: complete any sign-in redirect and make sure we hold a token BEFORE

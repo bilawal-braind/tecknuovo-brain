@@ -16,8 +16,9 @@ import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
 import { calls } from './calls'
 import type { Call } from './calls'
-import type { ApiAccount, ApiProject, ApiSignal, ApiCall, ApiAssociate } from './api'
+import type { ApiAccount, ApiProject, ApiSignal, ApiCall, ApiAssociate, ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote } from './api'
 import type { Person, Health, Signal } from './types'
+import { getAuthToken } from './auth'
 
 // Replace an array's contents while keeping the same reference (live ESM binding).
 function replace<T>(target: T[], next: T[]) {
@@ -303,27 +304,100 @@ async function loadSnapshotRows(): Promise<Rows> {
   return { aRows, pRows, sRows, cRows, asRows }
 }
 
+// ── Live-mode speed & freshness ──────────────────────────────────────────────
+// Stale-while-revalidate: the last good payload is kept in sessionStorage (keyed
+// to the signed-in token, so it can never bleed across users). A reload paints
+// instantly from that snapshot while a background fetch brings it up to date, and
+// a gentle poll keeps a dashboard that's left open all day current. The rest of
+// the app stays untouched: it reads the same in-memory arrays as always.
+type LivePayload = {
+  aRows: ApiAccount[]; pRows: ApiProject[]; sRows: ApiSignal[]; cRows: ApiCall[]; asRows: ApiAssociate[]
+  wrRows: ApiWeeklyReport[]; stRows: ApiStakeholder[]; dlRows: ApiDeal[]; noteRows: ApiSignalNote[]
+}
+const CACHE_KEY = () => 'tn_boot_v1_' + (getAuthToken() || 'token').slice(-24)
+const REFRESH_MS = 5 * 60_000
+
+async function fetchLive(): Promise<LivePayload> {
+  const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows] = await Promise.all([
+    fetchAccounts(), fetchProjects(), fetchSignals(), fetchCalls(), fetchAssociates(),
+    fetchWeeklyReports(), fetchStakeholders(), fetchDeals(), fetchSignalNotes(),
+  ])
+  return { aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows }
+}
+
+function applyLive(p: LivePayload): BootResult['counts'] {
+  // CRM mirror first - hydrate() uses `deals` for the account £ fallback.
+  replace(weeklyReports, p.wrRows)
+  replace(stakeholders, p.stRows)
+  replace(deals, p.dlRows)
+  replace(signalNotes, p.noteRows)
+  return hydrate(p)
+}
+
+// Cheap change detector: row counts + the newest signal id (the feed is newest-first).
+const fingerprint = (p: LivePayload) =>
+  [p.aRows.length, p.pRows.length, p.sRows.length, p.sRows[0]?.id ?? '', p.cRows.length, p.noteRows.length, p.wrRows.length, p.dlRows.length, p.stRows.length].join('|')
+
+function readCache(): { t: number; p: LivePayload } | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY())
+    if (!raw) return null
+    const v = JSON.parse(raw) as { t: number; p: LivePayload }
+    return v && v.p && Array.isArray(v.p.aRows) ? v : null
+  } catch { return null }
+}
+function writeCache(p: LivePayload) {
+  try { sessionStorage.setItem(CACHE_KEY(), JSON.stringify({ t: Date.now(), p })) } catch { /* quota/private mode - fine */ }
+}
+
+let currentFp = ''
+let refreshing = false
+async function refreshLive(reason: 'boot' | 'poll') {
+  if (refreshing) return
+  refreshing = true
+  try {
+    const p = await fetchLive()
+    writeCache(p)
+    const fp = fingerprint(p)
+    if (fp !== currentFp) {
+      currentFp = fp
+      applyLive(p)
+      window.dispatchEvent(new CustomEvent('tn-data-updated', { detail: { reason } }))
+    }
+  } catch { /* offline blip - keep showing what we have */ } finally { refreshing = false }
+}
+
+let loopStarted = false
+function startFreshnessLoop() {
+  if (loopStarted || typeof window === 'undefined') return
+  loopStarted = true
+  setInterval(() => { if (document.visibilityState === 'visible') void refreshLive('poll') }, REFRESH_MS)
+  // Coming back to a dashboard tab that's been in the background: catch up straight away.
+  document.addEventListener('visibilitychange', () => {
+    const c = readCache()
+    if (document.visibilityState === 'visible' && (!c || Date.now() - c.t > REFRESH_MS)) void refreshLive('poll')
+  })
+}
+
 export async function bootstrap(): Promise<BootResult> {
   // Live: fetch from the Read API (the VM build).
   if (isLive) {
+    const cached = readCache()
+    if (cached) {
+      // Instant paint from the last snapshot; the background refresh + a remount
+      // (handled in main.tsx) bring in anything new within a second or two.
+      currentFp = fingerprint(cached.p)
+      const counts = applyLive(cached.p)
+      void refreshLive('boot')
+      startFreshnessLoop()
+      return { source: 'live', counts }
+    }
     try {
-      const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows] = await Promise.all([
-        fetchAccounts(),
-        fetchProjects(),
-        fetchSignals(),
-        fetchCalls(),
-        fetchAssociates(),
-        fetchWeeklyReports(),
-        fetchStakeholders(),
-        fetchDeals(),
-        fetchSignalNotes(),
-      ])
-      // CRM mirror first - hydrate() uses `deals` for the account £ fallback.
-      replace(weeklyReports, wrRows)
-      replace(stakeholders, stRows)
-      replace(deals, dlRows)
-      replace(signalNotes, noteRows)
-      const counts = hydrate({ aRows, pRows, sRows, cRows, asRows })
+      const p = await fetchLive()
+      writeCache(p)
+      currentFp = fingerprint(p)
+      const counts = applyLive(p)
+      startFreshnessLoop()
       return { source: 'live', counts }
     } catch (e) {
       return { source: 'live', error: e instanceof Error ? e.message : String(e) }
