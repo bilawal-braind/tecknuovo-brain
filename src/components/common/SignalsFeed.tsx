@@ -21,14 +21,22 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
   const [callType, setCallType] = useState('all')
   const [sort, setSort] = useState<Sort>('urgent')
   const [groupBy, setGroupBy] = useState<GroupBy>('account')
+  const [range, setRange] = useState<'all' | '30' | '7'>('all')
+  const [shownAll, setShownAll] = useState<Record<string, boolean>>({})
+  const [flatCount, setFlatCount] = useState(20)
+  const GROUP_CAP = 5
   const count = (t: SignalType) => signals.filter((s) => s.type === t).length
 
   const feed = useMemo(() => {
     let list = filter === 'all' ? signals : signals.filter((s) => s.type === filter)
     if (filter === 'risk' && riskLevel !== 'all') list = list.filter((s) => riskScope(s) === riskLevel)
     if (callType !== 'all') list = list.filter((s) => s.sourceCall.type === callType)
+    if (range !== 'all') {
+      const cutoff = Date.now() - Number(range) * 86400000
+      list = list.filter((s) => new Date(s.createdAt).getTime() >= cutoff)
+    }
     return sort === 'newest' ? [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : rankByImpact(list)
-  }, [filter, riskLevel, callType, sort, signals])
+  }, [filter, riskLevel, callType, sort, range, signals])
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
@@ -64,6 +72,7 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         <Select label="Group by" value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={[['account', 'Account'], ['type', 'Signal type'], ['none', 'No grouping']]} />
         <Select label="Call type" value={callType} onChange={setCallType} options={[['all', 'All call types'], ...CALL_TYPES.map((c) => [c, c] as [string, string])]} />
         <Select label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[['urgent', 'Most urgent'], ['newest', 'Newest first']]} />
+        <Select label="Time" value={range} onChange={(v) => setRange(v as 'all' | '30' | '7')} options={[['all', 'All time'], ['30', 'Last 30 days'], ['7', 'Last 7 days']]} />
       </div>
 
       {feed.length === 0 && <p className="mt-3 rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No signals match these filters.</p>}
@@ -71,7 +80,12 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
       {/* flat */}
       {groupBy === 'none' && (
         <div className="mt-3 space-y-2">
-          {feed.map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+          {feed.slice(0, flatCount).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+          {feed.length > flatCount && (
+            <button onClick={() => setFlatCount((c) => c + 20)} className="w-full rounded-lg border border-dashed border-line bg-surface px-3 py-2 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+              Show 20 more ({feed.length - flatCount} remaining)
+            </button>
+          )}
         </div>
       )}
 
@@ -102,7 +116,8 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
                   {a && <button onClick={() => onOpenAccount(g.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent-d)] hover:underline">Open account <ArrowRight size={12} /></button>}
                 </div>
                 <div className="space-y-2">
-                  {g.items.map((s) => <TriageCard key={s.id} signal={s} onOpenAccount={onOpenAccount} />)}
+                  {(shownAll[g.key] ? g.items : g.items.slice(0, GROUP_CAP)).map((s) => <TriageCard key={s.id} signal={s} onOpenAccount={onOpenAccount} />)}
+                  <ShowMore total={g.items.length} cap={GROUP_CAP} open={!!shownAll[g.key]} onToggle={() => setShownAll((m) => ({ ...m, [g.key]: !m[g.key] }))} />
                 </div>
               </div>
             )
@@ -120,13 +135,25 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
                 <span className="text-[11px] text-muted-2">{g.items.length} signal{g.items.length !== 1 ? 's' : ''}</span>
               </div>
               <div className="space-y-2">
-                {g.items.map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+                {(shownAll[g.key] ? g.items : g.items.slice(0, GROUP_CAP)).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+                <ShowMore total={g.items.length} cap={GROUP_CAP} open={!!shownAll[g.key]} onToggle={() => setShownAll((m) => ({ ...m, [g.key]: !m[g.key] }))} />
               </div>
             </div>
           ))}
         </div>
       )}
     </>
+  )
+}
+
+// Groups cap at GROUP_CAP rows with a show-more toggle, so the feed stays scannable
+// as months of signals accumulate.
+function ShowMore({ total, cap, open, onToggle }: { total: number; cap: number; open: boolean; onToggle: () => void }) {
+  if (total <= cap) return null
+  return (
+    <button onClick={onToggle} className="w-full rounded-lg border border-dashed border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+      {open ? 'Show fewer' : `Show ${total - cap} more`}
+    </button>
   )
 }
 

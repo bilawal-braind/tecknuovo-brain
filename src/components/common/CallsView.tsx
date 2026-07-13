@@ -4,9 +4,9 @@ import type { Call } from '../../data/calls'
 import { transcriptLinesFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
-import { SignalBadge, ConfidenceBar, SeverityTag, FilterChip } from './primitives'
+import { SignalBadge, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
-import { QAReview } from './QAReview'
+import { TriageCard } from './TriageCard'
 import { fmt } from './SignalLayer'
 
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -112,20 +112,9 @@ function CallCard({ call }: { call: Call }) {
 
           {tab === 'signals' ? (
             <div className="space-y-2">
-              {call.signals.map((s) => (
-                <div key={s.id} className="rounded-lg border border-line bg-surface p-3" style={{ borderLeft: `3px solid var(--${s.type === 'opportunity' ? 'opp' : s.type})` }}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <SignalBadge type={s.type} size="sm" />
-                    <SeverityTag severity={s.severity} />
-                    {s.value && <span className="text-[11px] text-muted">{s.value}</span>}
-                    <span className="ml-auto"><ConfidenceBar value={s.confidence} /></span>
-                  </div>
-                  <p className="mt-2 text-[13px] font-medium leading-snug">{s.summary}</p>
-                  <p className="mt-1 text-[12px] italic leading-relaxed text-muted">“{s.quote}”</p>
-                  <p className="mt-1.5 text-[11px] text-muted">→ {s.suggestedAction} <span className="text-muted-2">({s.suggestedOwner.person} · {s.suggestedOwner.role})</span></p>
-                  <div className="mt-2.5"><QAReview signalId={s.id} /></div>
-                </div>
-              ))}
+              {/* Same full signal card as everywhere else - framework score, notes,
+                  feedback and the HubSpot approval all work inside the account view too. */}
+              {call.signals.map((s) => <TriageCard key={s.id} signal={s} />)}
             </div>
           ) : (
             <CallTranscript call={call} />
