@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Search, Video, ChevronDown } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Search, Video, ChevronDown, FileText, X } from 'lucide-react'
 import type { Call } from '../../data/calls'
 import { transcriptLinesFor } from '../../data/calls'
 import type { SignalType } from '../../data/types'
@@ -79,7 +80,7 @@ export function CallsView({ calls, title = 'Calls', subtitle }: { calls: Call[];
 
 function CallCard({ call }: { call: Call }) {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'signals' | 'transcript'>('signals')
+  const [showTranscript, setShowTranscript] = useState(false)
   const types = Array.from(new Set(call.signals.map((s) => s.type)))
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -105,23 +106,49 @@ function CallCard({ call }: { call: Call }) {
 
       {open && (
         <div className="border-t border-line bg-surface-2 p-3.5">
-          <div className="mb-3 inline-flex rounded-lg border border-line bg-surface p-0.5 text-[11px] font-semibold">
-            <button onClick={() => setTab('signals')} className={`rounded-md px-3 py-1 transition-colors ${tab === 'signals' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>Signals ({call.signals.length})</button>
-            <button onClick={() => setTab('transcript')} className={`rounded-md px-3 py-1 transition-colors ${tab === 'transcript' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>Transcript</button>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">Signals from this call ({call.signals.length})</span>
+            <button onClick={() => setShowTranscript(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+              <FileText size={13} /> View transcript
+            </button>
           </div>
 
-          {tab === 'signals' ? (
-            <div className="space-y-2">
-              {/* Same full signal card as everywhere else - framework score, notes,
-                  feedback and the HubSpot approval all work inside the account view too. */}
-              {call.signals.map((s) => <TriageCard key={s.id} signal={s} />)}
-            </div>
-          ) : (
-            <CallTranscript call={call} />
-          )}
+          <div className="space-y-2">
+            {/* Same full signal card as everywhere else - framework score, notes,
+                feedback and the HubSpot approval all work inside the account view too. */}
+            {call.signals.map((s) => <TriageCard key={s.id} signal={s} />)}
+          </div>
         </div>
       )}
+
+      {/* The transcript opens as an overlay rather than inline - a full call can run to
+          hundreds of lines, which would stretch the dashboard page unusably. */}
+      {showTranscript && <TranscriptModal call={call} onClose={() => setShowTranscript(false)} />}
     </div>
+  )
+}
+
+function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[85vh] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl border border-line bg-surface"
+        style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-bold tracking-tight">{call.title}</h3>
+            <div className="mt-0.5 text-[11.5px] text-muted">{[accountName(call.accountId), call.projectId ? projectById(call.projectId)?.name : null, call.type, fmt(call.date)].filter(Boolean).join(' · ')}</div>
+          </div>
+          <button onClick={onClose} aria-label="Close transcript" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">
+          <CallTranscript call={call} />
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
