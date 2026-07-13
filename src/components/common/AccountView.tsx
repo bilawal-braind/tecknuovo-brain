@@ -22,7 +22,15 @@ const CAD_LABEL: Record<CadenceStatus, string> = {
 
 export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Back', commercial = true }: { accountId: string; onBack: () => void; onOpenProject?: (projectId: string) => void; backLabel?: string; commercial?: boolean }) {
   const account = accountById(accountId)
-  if (!account) return null
+  if (!account)
+    return (
+      <div>
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-text">
+          <ArrowLeft size={14} /> {backLabel}
+        </button>
+        <p className="mt-6 rounded-xl border border-line bg-surface p-8 text-center text-[13px] text-muted">That account isn't in the brain yet.</p>
+      </div>
+    )
   const projects = projectsForAccount(account.id)
   const calls = callsForAccount(account.id)
   const openCount = signalsForAccount(account.id).filter((s) => s.status === 'new' || s.status === 'routed').length

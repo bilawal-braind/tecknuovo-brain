@@ -7,7 +7,7 @@ export function RagDot({ health, withLabel = false }: { health: Health; withLabe
   const c = HEALTH_COLOR[health]
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c, boxShadow: `0 0 8px ${c}66` }} />
+      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c, boxShadow: `0 0 8px color-mix(in srgb, ${c} 40%, transparent)` }} />
       {withLabel && (
         <span className="text-[12px] font-semibold" style={{ color: c }}>
           {HEALTH_LABEL[health]}
@@ -44,7 +44,7 @@ export function SignalBadge({ type, size = 'md' }: { type: SignalType; size?: 's
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-semibold uppercase tracking-wide ${pad}`}
-      style={{ color: m.color, backgroundColor: `${m.color}15`, border: `1px solid ${m.color}33` }}
+      style={{ color: m.color, backgroundColor: `color-mix(in srgb, ${m.color} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${m.color} 20%, transparent)` }}
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: m.color }} />
       {m.label}

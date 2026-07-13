@@ -85,8 +85,13 @@ export const recent = (limit?: number) => {
 
 // Risk scope: account-level (relationship / commercial / contract) vs delivery-level (execution).
 const ACCOUNT_RISK_IDS = new Set(['s01', 's02', 's05', 's22', 's25'])
-export const riskScope = (s: Signal): 'account' | 'delivery' | null =>
-  s.type !== 'risk' ? null : ACCOUNT_RISK_IDS.has(s.id) ? 'account' : 'delivery'
+export const riskScope = (s: Signal): 'account' | 'delivery' | null => {
+  if (s.type !== 'risk') return null
+  // Mock signals (ids like s01) use the curated set; live signals (DB UUIDs)
+  // derive scope from the data: tied to a project = delivery, else account-level.
+  if (/^s\d+$/.test(s.id)) return ACCOUNT_RISK_IDS.has(s.id) ? 'account' : 'delivery'
+  return s.projectId ? 'delivery' : 'account'
+}
 export const accountRisks = () => signals.filter((s) => riskScope(s) === 'account')
 export const deliveryRisks = () => signals.filter((s) => riskScope(s) === 'delivery')
 

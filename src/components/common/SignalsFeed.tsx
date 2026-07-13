@@ -79,16 +79,27 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
       {groupBy === 'account' && groups && (
         <div className="mt-3 space-y-5">
           {groups.map((g) => {
-            const a = accountById(g.key)!
+            // A signal not yet linked to an account must not crash the whole tab -
+            // it gets an "Unlinked" group until the pipeline's linker attaches it.
+            const a = accountById(g.key)
             return (
-              <div key={g.key}>
+              <div key={g.key || 'unlinked'}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <RagDot health={a.health} withLabel />
-                    <span className="text-[14px] font-semibold">{a.name}</span>
-                    <span className="text-[11px] text-muted-2">{podName(a.pod)} · {g.items.length} signal{g.items.length !== 1 ? 's' : ''}</span>
+                    {a ? (
+                      <>
+                        <RagDot health={a.health} withLabel />
+                        <span className="text-[14px] font-semibold">{a.name}</span>
+                        <span className="text-[11px] text-muted-2">{podName(a.pod)} · {g.items.length} signal{g.items.length !== 1 ? 's' : ''}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[14px] font-semibold text-muted">Unlinked</span>
+                        <span className="text-[11px] text-muted-2">not yet matched to an account · {g.items.length} signal{g.items.length !== 1 ? 's' : ''}</span>
+                      </>
+                    )}
                   </div>
-                  <button onClick={() => onOpenAccount(g.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent-d)] hover:underline">Open account <ArrowRight size={12} /></button>
+                  {a && <button onClick={() => onOpenAccount(g.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent-d)] hover:underline">Open account <ArrowRight size={12} /></button>}
                 </div>
                 <div className="space-y-2">
                   {g.items.map((s) => <TriageCard key={s.id} signal={s} onOpenAccount={onOpenAccount} />)}

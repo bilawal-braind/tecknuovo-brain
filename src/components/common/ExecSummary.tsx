@@ -48,7 +48,7 @@ export function ExecSummary({ items, onOpen }: { items: Signal[]; onOpen: (accou
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--opp)]" /> Generated just now
           </span>
         )}
-        <span className="ml-auto text-[11px] text-muted-2">{fmt('2026-06-18')}</span>
+        <span className="ml-auto text-[11px] text-muted-2">{fmt(new Date().toISOString().slice(0, 10))}</span>
       </div>
 
       {phase === 'thinking' ? (

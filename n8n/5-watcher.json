@@ -69,6 +69,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// One watchlist member failing (404/permission blip) must not kill everyone's sweep:\n// keep only responses that actually contain a transcript array.\nconst ok=$input.all().filter(i=>Array.isArray(i.json&&i.json.value));\nconst dropped=$input.all().length-ok.length;\nif(dropped>0)console.log('watcher: skipped '+dropped+' failed Graph response(s)');\nreturn ok;"
+      },
+      "id": "w_valid",
+      "name": "Keep valid responses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "fieldToSplitOut": "value",
         "options": {}
       },
@@ -303,7 +316,7 @@
       "main": [
         [
           {
-            "node": "Each transcript",
+            "node": "Keep valid responses",
             "type": "main",
             "index": 0
           }
@@ -381,6 +394,17 @@
         [
           {
             "node": "Get transcript content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep valid responses": {
+      "main": [
+        [
+          {
+            "node": "Each transcript",
             "type": "main",
             "index": 0
           }

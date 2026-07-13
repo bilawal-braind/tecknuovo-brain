@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, X, ArrowUp, ArrowRight } from 'lucide-react'
-import { accountName } from '../../data/org'
+import { accountById, accountName } from '../../data/org'
 
 type Msg = { role: 'user' | 'ai'; text: string; accounts?: string[] }
 
@@ -63,9 +63,9 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className="max-w-[88%]">
                   <div className={`rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed ${m.role === 'user' ? 'text-white' : 'bg-bg-2 text-text'}`} style={m.role === 'user' ? { background: 'var(--accent)' } : undefined}>{m.text}</div>
-                  {m.accounts && m.accounts.length > 0 && (
+                  {m.accounts && m.accounts.filter((id) => accountById(id)).length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {m.accounts.map((id) => (
+                      {m.accounts.filter((id) => accountById(id)).map((id) => (
                         <button key={id} onClick={() => openAccount(id)} disabled={!onOpenAccount} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-d)] transition-colors hover:border-[var(--accent)] disabled:text-muted-2 disabled:hover:border-line">
                           {accountName(id)} <ArrowRight size={11} />
                         </button>
