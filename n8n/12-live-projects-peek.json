@@ -1,0 +1,91 @@
+{
+  "name": "TEMP - peek Live Projects and Allocations board",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "lp_run",
+      "name": "Run now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1599188575]){ name items_page(limit:10){ items { name group{ title } column_values { id text column { title type } } } } } }\"}",
+        "options": {}
+      },
+      "id": "lp_fetch",
+      "name": "Fetch board sample",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "MONDAY_CRED",
+          "name": "Monday API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Digest: board name, group names, column titles+types, and 3 sample rows.\nconst b=((($input.first().json||{}).data||{}).boards||[])[0]||{};\nconst items=(b.items_page&&b.items_page.items)||[];\nconst cols={};\nfor(const it of items){for(const c of (it.column_values||[])){const t=(c.column&&c.column.title)||c.id;if(!cols[t])cols[t]=(c.column&&c.column.type)||'?';}}\nconst samples=items.slice(0,3).map(it=>({item:it.name,group:(it.group||{}).title,values:Object.fromEntries((it.column_values||[]).filter(c=>c.text).map(c=>[(c.column&&c.column.title)||c.id,c.text]))}));\nreturn [{json:{board:b.name||'(not found - check board access)',rows_sampled:items.length,columns:cols,samples}}];"
+      },
+      "id": "lp_digest",
+      "name": "Digest (paste this back)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Run now": {
+      "main": [
+        [
+          {
+            "node": "Fetch board sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch board sample": {
+      "main": [
+        [
+          {
+            "node": "Digest (paste this back)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
