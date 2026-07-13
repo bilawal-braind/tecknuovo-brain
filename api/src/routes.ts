@@ -316,7 +316,7 @@ router.get('/stakeholders', async (req, res, next) => {
     if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT id, name, job_title, buying_role, seniority, account_id, company_name
-       FROM stakeholders ${filter} ORDER BY (buying_role IS NULL), name LIMIT 1000`,
+       FROM stakeholders ${filter} ORDER BY (buying_role IS NULL), name LIMIT 5000`,
       params
     );
     res.json(r.rows);
@@ -332,7 +332,7 @@ router.get('/deals', async (req, res, next) => {
     if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT id, name, amount, pipeline, stage, is_open, networks_score, close_date, account_id, company_name
-       FROM deals ${filter} ORDER BY is_open DESC, amount DESC NULLS LAST LIMIT 500`,
+       FROM deals ${filter} ORDER BY is_open DESC, amount DESC NULLS LAST LIMIT 5000`,
       params
     );
     res.json(r.rows);
