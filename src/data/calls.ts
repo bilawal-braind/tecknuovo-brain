@@ -52,7 +52,7 @@ export type TranscriptLine = { speaker: string; text: string; signalType?: Signa
 export function transcriptLinesFor(call: Call): TranscriptLine[] {
   const raw = call.transcript
   if (raw && raw.trim()) {
-    return raw
+    const lines = raw
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)
@@ -65,8 +65,34 @@ export function transcriptLinesFor(call: Call): TranscriptLine[] {
         const speaker = m[1].replace(/\s*\|.*$/, '').replace(/^:\s*/, '').trim()
         return { speaker, text: m[2].trim() }
       })
+    return attachSignalMoments(lines, call.signals)
   }
   return transcriptFor(call)
+}
+
+// Find the transcript line each signal's quote was captured from and mark it, so the
+// transcript view highlights the exact moment in the flow of the conversation.
+// Matching is on normalised text (case/punctuation/em-dash-proof) with shrinking
+// probes, because the classifier may trim a quote and the VTT parse merges turns.
+const normText = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+function attachSignalMoments(lines: TranscriptLine[], sigs: Signal[]): TranscriptLine[] {
+  const normed = lines.map((l) => normText(l.text))
+  for (const s of sigs) {
+    const nq = normText(s.quote)
+    if (nq.length < 12) continue
+    let idx = -1
+    for (const len of [96, 56, 32, 18]) {
+      const probe = nq.slice(0, len)
+      if (probe.length < 12) break
+      idx = normed.findIndex((t) => t.includes(probe))
+      if (idx >= 0) break
+    }
+    // Quote spans several short lines -> highlight the line the quote starts on.
+    if (idx === -1) idx = normed.findIndex((t) => t.length >= 20 && nq.includes(t))
+    if (idx >= 0 && !lines[idx].signalType) lines[idx] = { ...lines[idx], signalType: s.type }
+  }
+  return lines
 }
 
 const ACK: Record<SignalType, string> = {
