@@ -141,7 +141,43 @@
     },
     {
       "parameters": {
-        "jsCode": "const org=$('Read org').all().map(r=>r.json);const cadB=(($('Monday cadence').first().json||{}).data||{}).boards||[];const cadItems=(cadB[0]&&cadB[0].items_page&&cadB[0].items_page.items)?cadB[0].items_page.items:[];const asB=(($('Monday associates').first().json||{}).data||{}).boards||[];const asItems=(asB[0]&&asB[0].items_page&&asB[0].items_page.items)?asB[0].items_page.items:[];const SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};const groups={};for(const it of cadItems){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}const gkeys=Object.keys(groups);const stmts=[];for(const acc of org){const an=(acc.account_name||'').toLowerCase();let projs=acc.projects;if(typeof projs==='string'){try{projs=JSON.parse(projs);}catch(e){projs=[];}}if(!Array.isArray(projs))projs=[];const gpod=gkeys.find(k=>an&&k.toLowerCase().includes(an)&&groups[k].pod);if(gpod){stmts.push('UPDATE accounts SET pod='+qq(groups[gpod].pod)+' WHERE id='+qq(acc.account_id)+';');}for(const p of projs){const toks=(p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);let gk=gkeys.find(k=>{const kl=k.toLowerCase();return an&&kl.includes(an)&&toks.some(t=>kl.includes(t));});if(!gk)gk=gkeys.find(k=>{const kl=k.toLowerCase();return toks.some(t=>kl.includes(t));});if(gk&&groups[gk].dm){stmts.push('UPDATE projects SET delivery_manager_name='+qq(groups[gk].dm)+', last_verified=now() WHERE id='+qq(p.id)+';');}}}for(const it of asItems){const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const team=col(cv,'team');const placement=col(cv,'status0');const acc=org.find(a=>a.account_name&&cname.toLowerCase().includes(String(a.account_name).toLowerCase()));const accId=acc?acc.account_id:null;stmts.push('INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES ('+qq(it.id)+','+qq(it.name)+','+(accId?qq(accId):'NULL')+','+qq(cname)+','+(team?qq(team):'NULL')+','+(placement?qq(placement):'NULL')+',now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now();');}const stB=((($('Monday stakeholders').first().json)||{}).data||{}).boards||[];const stItems=(stB[0]&&stB[0].items_page&&stB[0].items_page.items)?stB[0].items_page.items:[];const ownerOf=it=>{const cvs=it.column_values||[];let acct=null,owner=null;for(const c of cvs){const t=((c.column&&c.column.title)||'').toLowerCase();const tn=t.replace(/[^a-z]/g,'');if(!c.text)continue;if(!acct&&t.includes('account'))acct=c.text;if(!owner&&(t.includes('owner')||t.includes('client partner')||tn==='cp'||tn.includes('dcdm')))owner=c.text;}return {acct,owner,item:it.name||''};};let cpLinks=0;for(const acc of org){const an=(acc.account_name||'').toLowerCase();if(!an)continue;let owner=null;for(const it of stItems){const o=ownerOf(it);if(!o.owner)continue;const acctTxt=(o.acct||'').toLowerCase();const hay=(acctTxt+' '+o.item.toLowerCase());if(hay.includes(an)||(acctTxt&&an.includes(acctTxt))){owner=o.owner.split(',')[0].trim();break;}}if(owner){cpLinks++;stmts.push(\"WITH pe AS (INSERT INTO people (name, role, is_internal) SELECT \"+qq(owner)+\", 'Client Partner', true WHERE NOT EXISTS (SELECT 1 FROM people WHERE lower(name)=lower(\"+qq(owner)+\")) RETURNING id) UPDATE accounts SET client_partner=COALESCE((SELECT id FROM pe),(SELECT id FROM people WHERE lower(name)=lower(\"+qq(owner)+\") LIMIT 1)) WHERE id=\"+qq(acc.account_id)+\";\");}}const stakCols=[...new Set(stItems.flatMap(it=>(it.column_values||[]).map(c=>(c.column&&c.column.title)||'')))].filter(Boolean);const sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';return [{json:{sql,statements:stmts.length,cp_links:cpLinks,stakeholder_board_columns:stakCols,stakeholder_rows:stItems.length}}];"
+        "method": "POST",
+        "url": "https://api.monday.com/v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "API-Version",
+              "value": "2026-04"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\":\"query { boards(ids:[1599188575]){ items_page(limit:200){ items { name group{ title } column_values { id text column { title } } } } } }\"}",
+        "options": {}
+      },
+      "id": "m4_liveproj",
+      "name": "Monday live projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        620
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "yDd9RQMyxouZTh46",
+          "name": "Monday API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const org=$('Read org').all().map(r=>r.json);const cadB=(($('Monday cadence').first().json||{}).data||{}).boards||[];const cadItems=(cadB[0]&&cadB[0].items_page&&cadB[0].items_page.items)?cadB[0].items_page.items:[];const asB=(($('Monday associates').first().json||{}).data||{}).boards||[];const asItems=(asB[0]&&asB[0].items_page&&asB[0].items_page.items)?asB[0].items_page.items:[];const SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;const col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};const groups={};for(const it of cadItems){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}const gkeys=Object.keys(groups);const stmts=[];for(const acc of org){const an=(acc.account_name||'').toLowerCase();let projs=acc.projects;if(typeof projs==='string'){try{projs=JSON.parse(projs);}catch(e){projs=[];}}if(!Array.isArray(projs))projs=[];const gpod=gkeys.find(k=>an&&k.toLowerCase().includes(an)&&groups[k].pod);if(gpod){stmts.push('UPDATE accounts SET pod='+qq(groups[gpod].pod)+' WHERE id='+qq(acc.account_id)+';');}for(const p of projs){const toks=(p.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);let gk=gkeys.find(k=>{const kl=k.toLowerCase();return an&&kl.includes(an)&&toks.some(t=>kl.includes(t));});if(!gk)gk=gkeys.find(k=>{const kl=k.toLowerCase();return toks.some(t=>kl.includes(t));});if(gk&&groups[gk].dm){stmts.push('UPDATE projects SET delivery_manager_name='+qq(groups[gk].dm)+', last_verified=now() WHERE id='+qq(p.id)+';');}}}for(const it of asItems){const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const team=col(cv,'team');const placement=col(cv,'status0');const acc=org.find(a=>a.account_name&&cname.toLowerCase().includes(String(a.account_name).toLowerCase()));const accId=acc?acc.account_id:null;stmts.push('INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES ('+qq(it.id)+','+qq(it.name)+','+(accId?qq(accId):'NULL')+','+qq(cname)+','+(team?qq(team):'NULL')+','+(placement?qq(placement):'NULL')+',now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now();');}const stB=((($('Monday stakeholders').first().json)||{}).data||{}).boards||[];const stItems=(stB[0]&&stB[0].items_page&&stB[0].items_page.items)?stB[0].items_page.items:[];const ownerOf=it=>{const cvs=it.column_values||[];let acct=null,owner=null;for(const c of cvs){const t=((c.column&&c.column.title)||'').toLowerCase();const tn=t.replace(/[^a-z]/g,'');if(!c.text)continue;if(!acct&&t.includes('account'))acct=c.text;if(!owner&&(t.includes('owner')||t.includes('client partner')||tn==='cp'||tn.includes('dcdm')))owner=c.text;}return {acct,owner,item:it.name||''};};let cpLinks=0;for(const acc of org){const an=(acc.account_name||'').toLowerCase();if(!an)continue;let owner=null;for(const it of stItems){const o=ownerOf(it);if(!o.owner)continue;const acctTxt=(o.acct||'').toLowerCase();const hay=(acctTxt+' '+o.item.toLowerCase());if(hay.includes(an)||(acctTxt&&an.includes(acctTxt))){owner=o.owner.split(',')[0].trim();break;}}if(owner){cpLinks++;stmts.push(\"WITH pe AS (INSERT INTO people (name, role, is_internal) SELECT \"+qq(owner)+\", 'Client Partner', true WHERE NOT EXISTS (SELECT 1 FROM people WHERE lower(name)=lower(\"+qq(owner)+\")) RETURNING id) UPDATE accounts SET client_partner=COALESCE((SELECT id FROM pe),(SELECT id FROM people WHERE lower(name)=lower(\"+qq(owner)+\") LIMIT 1)) WHERE id=\"+qq(acc.account_id)+\";\");}}const stakCols=[...new Set(stItems.flatMap(it=>(it.column_values||[]).map(c=>(c.column&&c.column.title)||'')))].filter(Boolean);// Live Projects & Allocations board: the account-level RACI. Commercial Accountable ->\n// Client Director, Commercial Responsible -> Client Partner (their column title has a\n// typo, so we match normalised fragments), Delivery Responsible -> account delivery lead,\n// Pod -> proper pod names. Runs AFTER the stakeholder-board pass so this cleaner source wins.\nconst lpB=((($('Monday live projects').first().json)||{}).data||{}).boards||[];\nconst lpItems=(lpB[0]&&lpB[0].items_page&&lpB[0].items_page.items)?lpB[0].items_page.items:[];\nconst colByTitle=(it,frag1,frag2)=>{for(const c of (it.column_values||[])){const t=((c.column&&c.column.title)||'').toLowerCase().replace(/[^a-z]/g,'');if(t.includes(frag1)&&(!frag2||t.includes(frag2))&&c.text)return c.text;}return null;};\nconst firstName=v=>String(v).split(',')[0].trim();\nconst linkPerson=(nm,role,col,accId)=>{const n1=firstName(nm);stmts.push(\"WITH pe AS (INSERT INTO people (name, role, is_internal) SELECT \"+qq(n1)+\", \"+qq(role)+\", true WHERE NOT EXISTS (SELECT 1 FROM people WHERE lower(name)=lower(\"+qq(n1)+\")) RETURNING id) UPDATE accounts SET \"+col+\"=COALESCE((SELECT id FROM pe),(SELECT id FROM people WHERE lower(name)=lower(\"+qq(n1)+\") LIMIT 1)) WHERE id=\"+qq(accId)+\";\");};\nlet lpLinks=0;\nfor(const acc of org){const an=(acc.account_name||'').toLowerCase();if(!an)continue;\nconst it=lpItems.find(x=>{const nm=(x.name||'').toLowerCase();if(!nm)return false;if(nm.includes(an)||an.includes(nm))return true;const paren=nm.match(/\\(([^)]+)\\)/);return !!(paren&&an.includes(paren[1].trim()));});\nif(!it)continue;lpLinks++;\nconst pod=colByTitle(it,'pod');\nconst cd=colByTitle(it,'accountable');\nconst cpR=colByTitle(it,'respons','commer');\nconst dl=colByTitle(it,'respons','delivery');\nif(pod)stmts.push('UPDATE accounts SET pod='+qq(pod)+' WHERE id='+qq(acc.account_id)+';');\nif(cd)linkPerson(cd,'Client Director','client_director',acc.account_id);\nif(cpR)linkPerson(cpR,'Client Partner','client_partner',acc.account_id);\nif(dl)stmts.push('UPDATE accounts SET delivery_lead_name='+qq(firstName(dl))+' WHERE id='+qq(acc.account_id)+';');\n}\nconst sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';return [{json:{sql,statements:stmts.length,cp_links:cpLinks,lp_links:lpLinks,stakeholder_board_columns:stakCols,stakeholder_rows:stItems.length}}];"
       },
       "id": "psbuild",
       "name": "Build SQL",
@@ -231,6 +267,17 @@
       ]
     },
     "Monday stakeholders": {
+      "main": [
+        [
+          {
+            "node": "Monday live projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monday live projects": {
       "main": [
         [
           {

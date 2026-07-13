@@ -82,8 +82,10 @@ router.get('/accounts', async (req, res, next) => {
     const r = await q(
       `SELECT a.id, a.name, a.pod,
               cp.name AS client_partner_name,
-              (SELECT w.customer_lead FROM weekly_reports w WHERE w.account_id = a.id AND w.customer_lead IS NOT NULL
-               ORDER BY w.week_ending DESC LIMIT 1) AS delivery_lead,
+              cd.name AS client_director_name,
+              COALESCE(a.delivery_lead_name,
+                       (SELECT w.customer_lead FROM weekly_reports w WHERE w.account_id = a.id AND w.customer_lead IS NOT NULL
+                        ORDER BY w.week_ending DESC LIMIT 1)) AS delivery_lead,
               CASE
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' = 'Critical') THEN 'red'
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
@@ -93,7 +95,9 @@ router.get('/accounts', async (req, res, next) => {
               COALESCE((SELECT round(100.0 * (sum(p.sow_value) - sum(p.budget_remaining)) / NULLIF(sum(p.sow_value), 0))
                         FROM projects p WHERE p.account_id = a.id AND p.budget_remaining IS NOT NULL), 0) AS budget_burn_pct,
               COALESCE((SELECT sum(p.budget_remaining) FROM projects p WHERE p.account_id = a.id), 0) AS headroom
-       FROM accounts a LEFT JOIN people cp ON cp.id = a.client_partner ${filter} ORDER BY a.name`,
+       FROM accounts a
+       LEFT JOIN people cp ON cp.id = a.client_partner
+       LEFT JOIN people cd ON cd.id = a.client_director ${filter} ORDER BY a.name`,
       params
     );
     res.json(r.rows);

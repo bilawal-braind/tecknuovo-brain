@@ -37,6 +37,7 @@ export type ApiAccount = {
   budget_burn_pct: number | string | null
   headroom: number | string | null
   client_partner_name?: string | null
+  client_director_name?: string | null
   delivery_lead?: string | null
 }
 

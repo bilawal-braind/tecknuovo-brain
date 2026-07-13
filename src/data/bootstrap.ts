@@ -113,6 +113,8 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
     }
     const cp = addPerson(a.client_partner_name, 'Client Partner', 'cp-')
     if (cp) liveAccounts[i].clientPartner = cp
+    const cd = addPerson(a.client_director_name, 'Client Director', 'cd-')
+    if (cd) liveAccounts[i].clientDirector = cd
     const dl = addPerson(a.delivery_lead, 'Delivery Manager', 'dl-')
     if (dl && !liveAccounts[i].deliveryManager) liveAccounts[i].deliveryManager = dl
   })
