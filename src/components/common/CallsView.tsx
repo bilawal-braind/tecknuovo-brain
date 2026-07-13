@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, Video, ChevronDown, FileText, X } from 'lucide-react'
 import { fetchTranscript } from '../../data/api'
@@ -183,24 +183,65 @@ const initials = (name: string) =>
 
 export function CallTranscript({ call }: { call: Call }) {
   const lines = transcriptLinesFor(call)
+  const moments = lines.map((l, i) => ({ type: l.signalType, i })).filter((m): m is { type: NonNullable<typeof m.type>; i: number } => !!m.type)
+  const blockRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const [flash, setFlash] = useState<number | null>(null)
+  const jump = (i: number) => {
+    blockRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlash(i)
+    window.setTimeout(() => setFlash((f) => (f === i ? null : f)), 1800)
+  }
   return (
     <div>
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">Transcript · captured moments highlighted</div>
+      {/* Sticky wayfinder: one chip per captured moment - click to scroll straight to
+          it (and pulse it), so nobody hunts through a long transcript by hand. */}
+      {moments.length > 0 ? (
+        <div className="sticky top-0 z-10 -mx-1 mb-2 flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-1 pb-2.5 pt-1">
+          <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted-2">{moments.length} captured moment{moments.length > 1 ? 's' : ''}</span>
+          {moments.map((m, n) => (
+            <button
+              key={m.i}
+              onClick={() => jump(m.i)}
+              title={`Jump to this ${SIGNAL_META[m.type].label.toLowerCase()} in the conversation`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-text"
+              style={{ borderColor: `color-mix(in srgb, ${SIGNAL_META[m.type].color} 45%, transparent)` }}
+            >
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: SIGNAL_META[m.type].color }} />
+              {SIGNAL_META[m.type].label}{moments.filter((x) => x.type === m.type).length > 1 ? ` ${moments.filter((x, j) => x.type === m.type && j <= n).length}` : ''}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">Transcript</div>
+      )}
       <div>
         {lines.map((l, i) => {
           const color = l.speaker ? speakerColor(l.speaker) : 'var(--muted-2)'
           const sameSpeaker = i > 0 && lines[i - 1].speaker === l.speaker && !l.signalType && !lines[i - 1].signalType
           if (l.signalType) {
+            const sc = SIGNAL_META[l.signalType].color
             return (
-              <div key={i} className="my-2 rounded-lg bg-surface p-3" style={{ borderLeft: `3px solid var(--${l.signalType === 'opportunity' ? 'opp' : l.signalType})` }}>
+              <div
+                key={i}
+                ref={(el) => { blockRefs.current[i] = el }}
+                className="my-2.5 rounded-xl p-3.5 transition-all duration-500"
+                style={{
+                  borderLeft: `3px solid ${sc}`,
+                  background: `color-mix(in srgb, ${sc} 7%, var(--surface))`,
+                  boxShadow: flash === i
+                    ? `0 0 0 2.5px ${sc}, 0 8px 24px color-mix(in srgb, ${sc} 30%, transparent)`
+                    : `inset 0 0 0 1px color-mix(in srgb, ${sc} 22%, transparent)`,
+                }}
+              >
                 <div className="flex items-center gap-2">
                   {l.speaker && (
                     <span className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: color }}>{initials(l.speaker)}</span>
                   )}
                   {l.speaker && <span className="text-[12px] font-semibold" style={{ color }}>{l.speaker}</span>}
                   <SignalBadge type={l.signalType} size="sm" />
+                  <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide" style={{ color: sc }}>Captured</span>
                 </div>
-                <p className="mt-1 text-[13px] leading-relaxed text-text">“{l.text}”</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-text">“{l.text}”</p>
               </div>
             )
           }
