@@ -2,12 +2,9 @@ import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { BrandLockup } from '../common/Brand'
-import { LiveBadge, InTenantBadge } from '../common/primitives'
 import { CoPilot } from '../common/CoPilot'
 
 export type Section = { id: string; label: string; icon: LucideIcon; count?: number }
-
-const INTEGRATIONS = ['MS Teams · live', 'Monday.com', 'SharePoint', 'Confluence', 'HubSpot', 'Azure · in tenant']
 
 export function DashboardShell({
   role,
@@ -64,17 +61,6 @@ export function DashboardShell({
             )
           })}
         </nav>
-        <div className="flex-shrink-0 border-t border-line px-4 py-3">
-          <div className="mb-2 text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-2">Sources</div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {INTEGRATIONS.map((i) => (
-              <div key={i} className="flex items-center gap-1.5 rounded-md bg-bg-2 px-2 py-1.5">
-                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
-                <span className="truncate text-[10px] font-medium text-muted">{i}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </aside>
 
       <header className="flex items-center gap-3 border-b border-line bg-surface px-6">
@@ -83,8 +69,6 @@ export function DashboardShell({
           <span className="text-muted-2">/</span>
           <span className="font-semibold text-text">{activeLabel}</span>
         </div>
-        <LiveBadge />
-        <InTenantBadge />
       </header>
 
       <main className="main-scroll overflow-y-auto">
