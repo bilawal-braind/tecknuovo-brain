@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { DashboardShell } from '../shell/DashboardShell'
 import { projects, accountName } from '../../data/org'
 import { signals, rankByImpact } from '../../data/signals'
+import { calls } from '../../data/calls'
 import { TriageCard } from '../common/TriageCard'
 import { ExecSummary } from '../common/ExecSummary'
 import { SignalsDonut } from '../common/SignalsDonut'
@@ -25,6 +26,10 @@ export function Delivery() {
 
   const offTrack = useMemo(() => projects.filter((p) => p.rag !== 'green').length, [])
   const toAction = useMemo(() => signals.filter((s) => s.status === 'new').length, [])
+  const callsThisWeek = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86_400_000
+    return calls.filter((c) => Date.parse(c.date) >= cutoff).length
+  }, [])
   const keySignals = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')).slice(0, 5), [])
 
   const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null) }
@@ -59,7 +64,7 @@ export function Delivery() {
                   <Kpi label="Active deliveries" value={`${projects.length}`} sub="across the team" />
                   <Kpi label="Off track" value={`${offTrack}`} sub="amber or red" color="var(--risk)" />
                   <Kpi label="Signals to action" value={`${toAction}`} sub="new this week" color="var(--people)" />
-                  <Kpi label="Call capture" value="96%" sub="of calls captured" color="var(--accent)" />
+                  <Kpi label="Calls this week" value={`${callsThisWeek}`} sub="captured from Teams" color="var(--accent)" />
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3">

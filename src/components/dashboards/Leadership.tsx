@@ -106,7 +106,7 @@ export function Leadership() {
                   </div>
                   <div className="mt-4 h-[190px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={weeklyTrend} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
+                      <BarChart data={weeklyTrend()} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
                         <CartesianGrid stroke="var(--line)" vertical={false} />
                         <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
