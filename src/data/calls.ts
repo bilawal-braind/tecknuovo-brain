@@ -14,6 +14,7 @@ export type Call = {
   projectId?: string
   signals: Signal[]
   transcript?: string
+  speakers?: Record<string, number>
 }
 
 const byKey = new Map<string, Call>()

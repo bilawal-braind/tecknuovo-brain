@@ -81,6 +81,7 @@ export type ApiCall = {
   call_date: string | null
   transcript?: string | null // present in snapshot exports; the live list omits it
   has_transcript?: boolean
+  speaker_stats?: Record<string, number> | null
   source: string | null
 }
 

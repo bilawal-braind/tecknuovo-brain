@@ -164,6 +164,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
         projectId: meta?.project_id || liveSignals[i].projectId || undefined,
         signals: [],
         transcript: meta?.transcript || undefined,
+        speakers: meta?.speaker_stats || undefined,
       }
       byCall.set(cid, call)
     }

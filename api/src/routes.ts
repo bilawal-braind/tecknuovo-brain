@@ -161,7 +161,7 @@ router.get('/calls', async (req, res, next) => {
     let filter = '';
     if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
-      `SELECT id, account_id, project_id, title, call_date, source,
+      `SELECT id, account_id, project_id, title, call_date, source, speaker_stats,
               (transcript IS NOT NULL AND transcript <> '') AS has_transcript
        FROM calls ${filter} ORDER BY call_date DESC NULLS LAST LIMIT 500`,
       params

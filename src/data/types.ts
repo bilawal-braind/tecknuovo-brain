@@ -66,6 +66,7 @@ export type Signal = {
   status: SignalStatus
   createdAt: string // ISO
   // Framework scores carried through for the QA / evaluation layer (from the classifier).
+  riskCategory?: string
   likelihood?: number
   impact?: number
   networksTotal?: number

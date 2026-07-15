@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { LayoutDashboard, Layers, Radio, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight, PoundSterling, BarChart3, Percent } from 'lucide-react'
+import { LayoutDashboard, Layers, Radio, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight, PoundSterling, BarChart3, Percent, Sparkles, Users } from 'lucide-react'
+import { LeadershipHome } from '../leadership/Home'
+import { OpsOS } from '../leadership/OpsOS'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts, pods, podName, personName, accountById, accountName } from '../../data/org'
 import { signals, signalsByType, rankByImpact } from '../../data/signals'
@@ -12,7 +14,7 @@ import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView, money } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 
-type View = 'overview' | 'signals' | 'pods' | 'sales'
+type View = 'home' | 'overview' | 'signals' | 'pods' | 'sales' | 'opsos'
 
 // Live accounts carry Monday pod names (strings), not the demo pod ids — group by
 // whatever the accounts actually have. Falls back to the demo pods in mock mode.
@@ -48,7 +50,7 @@ const SALES = {
 }
 
 export function Leadership() {
-  const [view, setView] = useState<View>('overview')
+  const [view, setView] = useState<View>('home')
   const [sel, setSel] = useState<string | null>(null)
   const [selProject, setSelProject] = useState<string | null>(null)
 
@@ -72,6 +74,8 @@ export function Leadership() {
       <DashboardShell
         role="Leadership" persona="Katie Carruthers · Managing Director" active={view} onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null) }} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
         sections={[
+          { id: 'home', label: 'Overview', icon: Sparkles },
+          { id: 'opsos', label: 'Ops OS', icon: Users },
           { id: 'overview', label: 'Portfolio health', icon: LayoutDashboard },
           { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
           { id: 'sales', label: 'Sales', icon: PoundSterling },
@@ -85,6 +89,8 @@ export function Leadership() {
             <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
           ) : (
           <>
+          {view === 'home' && <LeadershipHome onOpenAccount={(id) => setSel(id)} />}
+          {view === 'opsos' && <OpsOS />}
           {view === 'overview' && (
             <>
               <div className="mb-4"><ExecSummary items={execItems} onOpen={(id) => setSel(id)} /></div>
