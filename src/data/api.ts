@@ -195,6 +195,27 @@ export const fetchSignalNotes = () => get<ApiSignalNote[]>('/api/signal-notes').
 export const addSignalNote = (signalId: string, note: string) =>
   post<ApiSignalNote>('/api/signal-notes', { signal_id: signalId, note })
 
+// ── Leadership OS ──
+export type ApiBrief = {
+  id: string
+  audience: string
+  period_start: string
+  period_end: string
+  content: { whats_happening: string; why: string; needs_you: string[] }
+  created_at: string
+}
+export type ApiPersonMetrics = {
+  name: string
+  calls: number
+  accounts: number
+  signals: number
+  talk_share: number
+}
+export const fetchBrief = (audience = 'leadership') =>
+  get<ApiBrief | null>(`/api/brief?audience=${audience}`).catch(() => null)
+export const fetchPeopleMetrics = (days = 30) =>
+  get<ApiPersonMetrics[]>(`/api/people-metrics?days=${days}`).catch(() => [] as ApiPersonMetrics[])
+
 export const submitFeedback = (
   signalId: string,
   verdict: 'correct' | 'incorrect' | 'relabel',

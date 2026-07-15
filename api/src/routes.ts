@@ -407,6 +407,58 @@ router.post('/signal-notes', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── Leadership OS ──────────────────────────────────────────────────────────
+// The latest tnAI brief for an audience (workflow 13 writes them, Mondays 07:50).
+router.get('/brief', async (req, res, next) => {
+  try {
+    const audience = String(req.query.audience || 'leadership').slice(0, 40);
+    const r = await q(
+      'SELECT id, audience, period_start, period_end, content, created_at FROM briefs WHERE audience = $1 ORDER BY created_at DESC LIMIT 1',
+      [audience]
+    );
+    res.json(r.rows[0] || null);
+  } catch (e) { next(e); }
+});
+
+// Engagement metrics per person, from calls.speaker_stats (who spoke, how much).
+// Coverage telemetry for the Ops OS view - calls attended, accounts covered,
+// signals surfaced from their calls, share of the recorded airtime.
+router.get('/people-metrics', async (req, res, next) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 120);
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [String(days)];
+    let scope = '';
+    if (allowed !== null) { params.push(allowed); scope = ` AND account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `WITH recent AS (
+         SELECT id, account_id, speaker_stats FROM calls
+         WHERE call_date > now() - ($1 || ' days')::interval AND speaker_stats IS NOT NULL${scope}
+       ),
+       per AS (
+         SELECT key AS name, count(*) AS calls, count(DISTINCT account_id) AS accounts, sum(value::int) AS lines
+         FROM recent, jsonb_each_text(speaker_stats) GROUP BY key
+       ),
+       tot AS (SELECT COALESCE(sum(value::int), 0) AS all_lines FROM recent, jsonb_each_text(speaker_stats)),
+       sigs AS (
+         SELECT j.key AS name, count(s.id) AS signals
+         FROM recent r
+         JOIN signals s ON s.call_id = r.id
+         CROSS JOIN LATERAL jsonb_each_text(r.speaker_stats) j
+         GROUP BY j.key
+       )
+       SELECT p.name, p.calls::int, p.accounts::int,
+              COALESCE(sg.signals, 0)::int AS signals,
+              COALESCE(round(100.0 * p.lines / NULLIF(t.all_lines, 0)), 0)::int AS talk_share
+       FROM per p CROSS JOIN tot t
+       LEFT JOIN sigs sg ON sg.name = p.name
+       ORDER BY p.calls DESC, p.name LIMIT 50`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
 // The single write path - Observability corrections feed the learning loop.
 router.post('/feedback', async (req, res, next) => {
   try {

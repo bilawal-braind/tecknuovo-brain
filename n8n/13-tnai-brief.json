@@ -1,0 +1,240 @@
+{
+ "name": "TN Brain \u00b7 13 \u00b7 tnAI Brief (Mondays 07:50)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "50 7 * * 1"
+      }
+     ]
+    }
+   },
+   "id": "tb_sched",
+   "name": "Mondays 07:50",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    220,
+    260
+   ]
+  },
+  {
+   "parameters": {},
+   "id": "tb_manual",
+   "name": "Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    220,
+    460
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT jsonb_build_object(\n 'period_start', (now()::date - 7),\n 'period_end', now()::date,\n 'signals', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'type', s.type, 'summary', s.summary, 'quote', left(s.quote, 240),\n     'band', s.details->>'band', 'category', s.details->>'risk_category',\n     'networks', s.details->>'networks_total', 'account', a.name,\n     'status', s.status, 'created', s.created_at::date))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.created_at > now() - interval '7 days'), '[]'::jsonb),\n 'unresolved_risks', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'summary', s.summary, 'account', a.name, 'age_days', (now()::date - s.created_at::date)))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.type = 'risk' AND s.status = 'new' AND s.created_at < now() - interval '14 days'), '[]'::jsonb),\n 'calls_this_week', (SELECT count(*) FROM calls WHERE call_date > now() - interval '7 days'),\n 'accounts_active', (SELECT count(DISTINCT account_id) FROM calls WHERE call_date > now() - interval '7 days' AND account_id IS NOT NULL),\n 'weekly_report_rags', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'project', w.project_title, 'account', w.account_name, 'rag', w.rag))\n   FROM weekly_reports w WHERE w.week_ending > now() - interval '10 days'), '[]'::jsonb),\n 'open_pipeline', (SELECT jsonb_build_object('deals', count(*), 'value', COALESCE(sum(amount),0)) FROM deals WHERE is_open)\n) AS ctx;",
+    "options": {}
+   },
+   "id": "tb_gather",
+   "name": "Gather the week",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    460,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const ctx=$json.ctx;\nconst rules='You are tnAI, the weekly analyst for the Managing Director of Tecknuovo (a UK digital-delivery consultancy). You have analysed every client call, weekly delivery report and the CRM for the past 7 days. Write HER weekly brief. Rules: she thinks ZOOMED OUT - never mention routine day-to-day delivery detail; roll things up into patterns. Only genuinely MD-level items go in needs_you: critical risks, account/relationship risks, risks sitting unresolved for 2+ weeks (call these out with their age - the system does not forget), or commercial moves worth her weight. If nothing needs her, say so plainly - that is a good week. Mention early warnings: the same risk theme recurring on one account, opportunity chatter accelerating, an account going quiet. Be concrete: name accounts and amounts. Plain UK business English, no jargon, no flattery. Never use em dashes; use commas or hyphens. Return ONLY JSON: {\"whats_happening\":\"3-4 sentences\",\"why\":\"2-3 sentences on the pattern behind the week\",\"needs_you\":[\"max 3 short items, or an empty array if nothing genuinely needs her\"]}';\nconst prompt=rules+'\\n\\nTHIS WEEK\\'S DATA:\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
+   },
+   "id": "tb_prompt",
+   "name": "Build prompt",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    680,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "promptType": "define",
+    "text": "={{ $json.prompt }}",
+    "messages": {},
+    "batching": {}
+   },
+   "id": "tb_chain",
+   "name": "Write brief (Azure)",
+   "type": "@n8n/n8n-nodes-langchain.chainLlm",
+   "typeVersion": 1.5,
+   "position": [
+    900,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "model": "gpt-4o-mini",
+    "options": {
+     "temperature": 0.3
+    }
+   },
+   "id": "tb_model",
+   "name": "Azure OpenAI Chat Model",
+   "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+   "typeVersion": 1,
+   "position": [
+    900,
+    560
+   ],
+   "credentials": {
+    "azureOpenAiApi": {
+     "id": "W7KKkeJLvjngHgZA",
+     "name": "Azure Open AI account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const raw=($json.text||$json.response||$json.output||'').trim();\nconst m=raw.match(/\\{[\\s\\S]*\\}/); if(!m){return [];}\nlet obj; try{obj=JSON.parse(m[0]);}catch(e){return [];}\nconst out={\n whats_happening:String(obj.whats_happening||'').slice(0,1500),\n why:String(obj.why||'').slice(0,1200),\n needs_you:Array.isArray(obj.needs_you)?obj.needs_you.slice(0,3).map(function(x){return String(x).slice(0,300)}):[]\n};\nif(!out.whats_happening){return [];}\nconst e=function(s){return String(s).replace(/'/g,\"''\")};\nconst sql=\"INSERT INTO briefs (audience,period_start,period_end,content) VALUES ('leadership', now()::date-7, now()::date, '\"+e(JSON.stringify(out))+\"'::jsonb);\";\nreturn [{json:{sql,preview:out}}];"
+   },
+   "id": "tb_save_sql",
+   "name": "Build save SQL",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1140,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "={{ $json.sql }}",
+    "options": {}
+   },
+   "id": "tb_save",
+   "name": "Save brief",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    1360,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "content": "## tnAI weekly brief (Leadership OS)\nEvery Monday 07:50 (after recon 07:00, org sync 07:10, HubSpot 07:30): rolls up the past 7 days - signals with quotes, unresolved 14+ day risks, RAG mix, call volume, open pipeline - and writes the MD's three-section brief (what's happening / why / what needs you). Stored in `briefs`; the dashboard reads the latest via /api/brief.\n\n**Run the db/2026-07_leadership_os.sql migration first.** Manual 'Run' trigger = regenerate on demand.",
+    "height": 250,
+    "width": 420
+   },
+   "id": "tb_note",
+   "name": "How it works",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    20
+   ]
+  }
+ ],
+ "connections": {
+  "Mondays 07:50": {
+   "main": [
+    [
+     {
+      "node": "Gather the week",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run": {
+   "main": [
+    [
+     {
+      "node": "Gather the week",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gather the week": {
+   "main": [
+    [
+     {
+      "node": "Build prompt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build prompt": {
+   "main": [
+    [
+     {
+      "node": "Write brief (Azure)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write brief (Azure)": {
+   "main": [
+    [
+     {
+      "node": "Build save SQL",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build save SQL": {
+   "main": [
+    [
+     {
+      "node": "Save brief",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Azure OpenAI Chat Model": {
+   "ai_languageModel": [
+    [
+     {
+      "node": "Write brief (Azure)",
+      "type": "ai_languageModel",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "pinData": {}
+}
