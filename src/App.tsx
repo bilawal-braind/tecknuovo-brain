@@ -65,11 +65,11 @@ export default function App() {
   if (!checked) return <Splash text="Signing you in…" />
   if (!me || !getAuthToken()) return <LoginScreen onLogin={login} />
 
-  // Role → what they can open. scope 'all' (or admin) can navigate every dashboard;
-  // everyone else is pinned to their own dashboard.
+  // Role → what they can open. scope 'all' (or admin) can navigate every dashboard,
+  // and at the root route they get the landing page to pick from (the tn logo links
+  // back to it). Everyone else is pinned to their own dashboard.
   const allowAll = me.role === 'admin' || me.scope === 'all'
-  const fallback = me.role === 'admin' ? 'leadership' : me.role
-  return renderDash(allowAll ? (route || fallback) : me.role)
+  return renderDash(allowAll ? route : me.role)
 }
 
 function Splash({ text }: { text: string }) {
