@@ -170,6 +170,23 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
     }
     call.signals.push(liveSignals[i])
   })
+  // Calls that produced no signals (routine standups, internal catch-ups) still
+  // belong in the calls layer - they carry attendance and prove coverage.
+  for (const c of cRows) {
+    if (byCall.has(c.id)) continue
+    byCall.set(c.id, {
+      id: c.id,
+      title: c.title || 'Call',
+      date: (c.call_date || '').slice(0, 10),
+      type: inferCallType(c.title),
+      speaker: '',
+      accountId: c.account_id || '',
+      projectId: c.project_id || undefined,
+      signals: [],
+      transcript: c.transcript || undefined,
+      speakers: c.speaker_stats || undefined,
+    })
+  }
   const liveCalls = [...byCall.values()].sort((a, b) => b.date.localeCompare(a.date))
 
   // Last contact / last activity = the most recent call on the account / project.
