@@ -15,6 +15,10 @@ import { fmt } from '../common/SignalLayer'
 type Days = 7 | 14 | 30
 type Tab = 'overview' | 'people'
 const DAY = 86_400_000
+// Curated demo roster: when non-empty, ONLY these people show anywhere in Ops OS
+// (photos go in public/people/<first-last>.jpg). Empty = show everyone detected.
+const FEATURED: string[] = []
+
 const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A', '#8A6D3B', '#3B8A6D', '#6D3B8A', '#8A3B5C']
 const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 // Teams gives "Goldsbrough, Marcus (DES OD-SalesDisposals-005)" - show "Marcus Goldsbrough".
@@ -76,11 +80,22 @@ export function OpsOS() {
   // so the team page is complete even before someone's first analysed call.
   const roster = useMemo<ApiPersonMetrics[]>(() => {
     const seen = new Set(top.map((r) => normName(r.name)))
-    const extras = people
-      .filter((p) => /^(cp|cd|dl)-/.test(p.id) && p.name && !seen.has(normName(p.name)))
-      .map((p) => ({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 }))
+    const extras: ApiPersonMetrics[] = []
+    for (const p of people) {
+      if (!/^(cp|cd|dl|dm)-/.test(p.id) || !p.name) continue
+      const key = normName(p.name)
+      if (seen.has(key)) continue
+      seen.add(key) // dedupe: the same person can exist as dm- and dl- rows
+      extras.push({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 })
+    }
+    let all = [...top, ...extras]
+    // When the demo roster is curated, FEATURED names (any order/format) win.
+    if (FEATURED.length) {
+      const want = new Set(FEATURED.map((n) => normName(n)))
+      all = all.filter((r) => want.has(normName(r.name)))
+    }
     // The org roster is never sliced away - named CDs/CPs/delivery leads always show.
-    return [...top, ...extras].slice(0, Math.max(20, extras.length + 8))
+    return all.slice(0, Math.max(24, extras.length + 12))
   }, [top])
   const maxCalls = Math.max(1, ...top.map((r) => r.calls))
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
@@ -182,13 +197,13 @@ export function OpsOS() {
             <div className="eyebrow">Calls attended · last {days} days</div>
             <p className="mt-0.5 text-[11px] text-muted-2">Each bar is that person's calls, scaled against the busiest person. Airtime = their share of everything said across the team's analysed calls.</p>
             <div className="mt-3 space-y-2.5">
-              {top.map((r, i) => (
+              {roster.map((r, i) => (
                 <div key={r.name} className="flex items-center gap-3">
                   <PersonPhoto name={r.name} size={32} color={PALETTE[i % PALETTE.length]} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[12.5px] font-semibold">{displayName(r.name)}</span>
-                      <span className="shrink-0 text-[11px] text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} account{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% of airtime</span>
+                      <span className="shrink-0 text-[11px] text-muted">{r.calls === 0 ? 'no analysed calls yet' : `${r.calls} call${r.calls !== 1 ? 's' : ''} · ${r.accounts} account${r.accounts !== 1 ? 's' : ''} · ${r.talk_share}% of airtime`}</span>
                     </div>
                     <div className="mt-1 h-2 overflow-hidden rounded-full bg-bg-2">
                       <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((100 * r.calls) / maxCalls)}%`, background: PALETTE[i % PALETTE.length] }} />
