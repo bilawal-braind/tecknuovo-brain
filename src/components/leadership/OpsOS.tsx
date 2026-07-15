@@ -15,9 +15,18 @@ import { fmt } from '../common/SignalLayer'
 type Days = 7 | 14 | 30
 type Tab = 'overview' | 'people'
 const DAY = 86_400_000
-// Curated demo roster: when non-empty, ONLY these people show anywhere in Ops OS
-// (photos go in public/people/<first-last>.jpg). Empty = show everyone detected.
-const FEATURED: string[] = []
+// Curated demo roster: ONLY these people show in Ops OS, in this order. Metrics
+// attach automatically where they appear in analysed calls; others show honest
+// zero-states. Photos live in public/people/<first-last>.jpg. Empty list = show all.
+const FEATURED: { name: string; role?: string }[] = [
+  { name: 'Kiera Battersby', role: 'Client Delivery Director' },
+  { name: 'Meesha Chotai', role: 'Portfolio Director' },
+  { name: 'Chloe Hollinshead', role: 'Client Partner' },
+  { name: 'Kaitlyn Bryant' },
+  { name: 'Arjun Mammen' },
+  { name: 'Rob Kirkham' },
+]
+const featuredRole = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))?.role
 
 const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A', '#8A6D3B', '#3B8A6D', '#6D3B8A', '#8A3B5C']
 const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -75,6 +84,7 @@ export function OpsOS() {
     return !m || /tecknuovo/i.test(m[1])
   }), [allRows])
   const top = rows.slice(0, 12)
+  // (roster below is the display set; pie/bars scale from it)
   // People tab shows the wider team: everyone seen on calls, then the named org
   // roster from Monday (client directors, partners, delivery leads) at zero calls -
   // so the team page is complete even before someone's first analysed call.
@@ -88,16 +98,18 @@ export function OpsOS() {
       seen.add(key) // dedupe: the same person can exist as dm- and dl- rows
       extras.push({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 })
     }
-    let all = [...top, ...extras]
-    // When the demo roster is curated, FEATURED names (any order/format) win.
+    const all = [...top, ...extras]
+    // Curated roster: exactly the FEATURED people, in FEATURED order - with their
+    // real metrics when they appear in analysed calls, zero-state rows otherwise.
     if (FEATURED.length) {
-      const want = new Set(FEATURED.map((n) => normName(n)))
-      all = all.filter((r) => want.has(normName(r.name)))
+      const byKey = new Map(all.map((r) => [normName(r.name), r]))
+      return FEATURED.map((f) => byKey.get(normName(f.name)) ?? { name: f.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 })
     }
     // The org roster is never sliced away - named CDs/CPs/delivery leads always show.
     return all.slice(0, Math.max(24, extras.length + 12))
   }, [top])
-  const maxCalls = Math.max(1, ...top.map((r) => r.calls))
+  const maxCalls = Math.max(1, ...roster.map((r) => r.calls))
+  const pieRows = roster.filter((r) => r.calls > 0)
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
   const line = useMemo(() => {
@@ -174,15 +186,15 @@ export function OpsOS() {
                 <div className="h-[150px] w-[150px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={top.map((r) => ({ name: r.name, value: r.calls }))} dataKey="value" nameKey="name" innerRadius={40} outerRadius={68} paddingAngle={2} isAnimationActive={false}>
-                        {top.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} stroke="var(--surface)" />)}
+                      <Pie data={pieRows.map((r) => ({ name: displayName(r.name), value: r.calls }))} dataKey="value" nameKey="name" innerRadius={40} outerRadius={68} paddingAngle={2} isAnimationActive={false}>
+                        {pieRows.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} stroke="var(--surface)" />)}
                       </Pie>
                       <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="min-w-0 space-y-1">
-                  {top.slice(0, 6).map((r, i) => (
+                  {pieRows.slice(0, 6).map((r, i) => (
                     <div key={r.name} className="flex items-center gap-1.5 text-[11.5px]">
                       <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
                       <span className="truncate text-muted">{displayName(r.name).split(' ')[0]}</span>
@@ -216,7 +228,7 @@ export function OpsOS() {
         </>
       ) : (
         <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {roster.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={roleOf(r.name)} days={days} />)}
+          {roster.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={featuredRole(r.name) ?? roleOf(r.name)} days={days} />)}
         </div>
       )}
     </div>
