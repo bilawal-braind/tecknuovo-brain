@@ -17,6 +17,12 @@ type Tab = 'overview' | 'people'
 const DAY = 86_400_000
 const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A', '#8A6D3B', '#3B8A6D', '#6D3B8A', '#8A3B5C']
 const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+// Teams gives "Goldsbrough, Marcus (DES OD-SalesDisposals-005)" - show "Marcus Goldsbrough".
+const displayName = (n: string) => {
+  const noParen = n.replace(/\s*\(.*?\)\s*/g, ' ').trim()
+  return noParen.includes(',') ? noParen.split(',').map((x) => x.trim()).reverse().join(' ') : noParen
+}
+const normName = (n: string) => displayName(n).toLowerCase().replace(/[^a-z0-9]+/g, '')
 const initials = (n: string) => n.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
 // Photo from /people/<name-slug>.jpg. Teams often gives "Surname, Firstname" -
@@ -59,6 +65,16 @@ export function OpsOS() {
 
   const rows = apiRows && apiRows.length ? apiRows : derived
   const top = rows.slice(0, 12)
+  // People tab shows the wider team: everyone seen on calls, then the named org
+  // roster from Monday (client directors, partners, delivery leads) at zero calls -
+  // so the team page is complete even before someone's first analysed call.
+  const roster = useMemo<ApiPersonMetrics[]>(() => {
+    const seen = new Set(top.map((r) => normName(r.name)))
+    const extras = people
+      .filter((p) => /^(cp|cd|dl)-/.test(p.id) && p.name && !seen.has(normName(p.name)))
+      .map((p) => ({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 }))
+    return [...top, ...extras].slice(0, 12)
+  }, [top])
   const maxCalls = Math.max(1, ...top.map((r) => r.calls))
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
@@ -147,7 +163,7 @@ export function OpsOS() {
                   {top.slice(0, 6).map((r, i) => (
                     <div key={r.name} className="flex items-center gap-1.5 text-[11.5px]">
                       <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
-                      <span className="truncate text-muted">{r.name.split(',')[0]}</span>
+                      <span className="truncate text-muted">{displayName(r.name).split(' ')[0]}</span>
                     </div>
                   ))}
                 </div>
@@ -164,7 +180,7 @@ export function OpsOS() {
                   <PersonPhoto name={r.name} size={32} color={PALETTE[i % PALETTE.length]} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[12.5px] font-semibold">{r.name}</span>
+                      <span className="truncate text-[12.5px] font-semibold">{displayName(r.name)}</span>
                       <span className="shrink-0 text-[11px] text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} account{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% of airtime</span>
                     </div>
                     <div className="mt-1 h-2 overflow-hidden rounded-full bg-bg-2">
@@ -177,8 +193,8 @@ export function OpsOS() {
           </div>
         </>
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {top.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={roleOf(r.name)} days={days} />)}
+        <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {roster.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={roleOf(r.name)} days={days} />)}
         </div>
       )}
     </div>
@@ -195,11 +211,11 @@ function PersonCard({ r, color, role, days }: { r: ApiPersonMetrics; color: stri
   const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 5), [theirCalls])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]" style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
       <button onClick={() => setOpen((o) => !o)} className="w-full p-4 text-left transition-colors hover:bg-bg-2">
         <div className="flex flex-col items-center text-center">
           <PersonPhoto name={r.name} size={64} color={color} />
-          <div className="mt-2.5 w-full truncate text-[14px] font-bold">{r.name}</div>
+          <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
           <div className="w-full truncate text-[11.5px] text-muted">{role}</div>
           {theirAccounts.length > 0 && (
             <div className="mt-2 flex flex-wrap justify-center gap-1">
@@ -224,7 +240,7 @@ function PersonCard({ r, color, role, days }: { r: ApiPersonMetrics; color: stri
         <div className="border-t border-line bg-surface-2 p-3">
           <div className="eyebrow mb-1.5">Their calls · last {days} days</div>
           {theirCalls.length === 0 ? (
-            <p className="py-2 text-center text-[11.5px] text-muted-2">No call detail in this window.</p>
+            <p className="py-2 text-center text-[11.5px] text-muted-2">No analysed calls in this window yet - metrics start with their first transcribed call.</p>
           ) : (
             <div className="space-y-1.5">
               {theirCalls.map((c) => (

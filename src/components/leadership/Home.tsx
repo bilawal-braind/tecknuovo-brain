@@ -201,7 +201,7 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
             <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing accumulated in this period.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
             {d.cards.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} />)}
           </div>
         )}
@@ -339,7 +339,7 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
     `${accountName(card.accountId)} generated ${card.items.length} signal${card.items.length !== 1 ? 's' : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period.`,
     card.rk.length ? `On the risk side, the conversations kept returning to ${card.cats.length ? card.cats.join(' and ').toLowerCase() : 'delivery concerns'}${card.worstRisk ? ` - most seriously: ${card.worstRisk.summary}` : ''}${card.oldest >= 14 ? ` One item has now sat unresolved for ${card.oldest} days.` : ''}` : '',
     card.op.length ? `Commercially, ${card.op.length} opportunit${card.op.length !== 1 ? 'ies were' : 'y was'} surfaced${card.value ? ` with roughly ${gbp(card.value)} mentioned` : ''}.` : '',
-    'Run workflow 15 for the full tnAI analysis of this account.',
+    'tnAI writes its full analysis for this account with the next weekly brief.',
   ].filter(Boolean).join(' ')
 
   const moments: Moment[] = card.items.map((s) => ({
@@ -504,7 +504,7 @@ function RadarSection({ computed, onOpenAccount }: { computed: { text: string; a
         <h3 className="text-[15px] font-semibold">Potential risks forming</h3>
         <span className="text-[11.5px] text-muted-2">read from the raw conversations, before anything is formally flagged</span>
       </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
         {radar.map((r, i) => {
           const accId = accountIdFor(r.account)
           return (
