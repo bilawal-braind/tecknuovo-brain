@@ -126,6 +126,17 @@ function findQuoteLine(normed: string[], words: Set<string>[], quote: string): n
   return bestScore >= Math.min(2, qw.size) ? best : -1
 }
 
+// A window of conversation around a quote - the "read the context" view used by
+// the Leadership macro cards. Returns the surrounding lines with the hit marked.
+export function snippetAround(lines: TranscriptLine[], quote: string, context = 2): { lines: TranscriptLine[]; hit: number } | null {
+  const normed = lines.map((l) => normText(l.text))
+  const words = lines.map((l) => contentWords(l.text))
+  const idx = findQuoteLine(normed, words, quote)
+  if (idx < 0) return null
+  const start = Math.max(0, idx - context)
+  return { lines: lines.slice(start, Math.min(lines.length, idx + context + 1)), hit: idx - start }
+}
+
 const ACK: Record<SignalType, string> = {
   risk: 'Understood - we will get a plan together on that and come back to you.',
   opportunity: 'Good to hear - we will scope it and bring an outline to the next session.',

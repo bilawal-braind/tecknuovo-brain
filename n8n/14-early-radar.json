@@ -1,0 +1,240 @@
+{
+ "name": "TN Brain \u00b7 14 \u00b7 Early Radar (Mondays 07:55)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "55 7 * * 1"
+      }
+     ]
+    }
+   },
+   "id": "rad_sched",
+   "name": "Mondays 07:55",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    220,
+    260
+   ]
+  },
+  {
+   "parameters": {},
+   "id": "rad_manual",
+   "name": "Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    220,
+    460
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT jsonb_build_object(\n 'accounts', COALESCE((SELECT jsonb_agg(x.acct) FROM (\n    SELECT jsonb_build_object(\n      'account', a.name,\n      'health_context', (SELECT jsonb_agg(jsonb_build_object('project', w.project_title, 'rag', w.rag))\n                         FROM weekly_reports w WHERE w.account_id = a.id AND w.week_ending > now() - interval '10 days'),\n      'already_flagged', (SELECT jsonb_agg(s.summary) FROM signals s\n                          WHERE s.account_id = a.id AND s.type = 'risk' AND s.created_at > now() - interval '14 days'),\n      'calls', (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date, 'transcript', left(c.transcript, 9000)))\n                FROM (SELECT * FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days'\n                      AND c2.transcript IS NOT NULL AND c2.transcript <> '' ORDER BY c2.call_date DESC LIMIT 4) c)\n    ) AS acct\n    FROM accounts a\n    JOIN LATERAL (SELECT max(c3.call_date) AS mx FROM calls c3 WHERE c3.account_id = a.id) m ON true\n    WHERE EXISTS (SELECT 1 FROM calls c4 WHERE c4.account_id = a.id AND c4.call_date > now() - interval '7 days'\n                  AND c4.transcript IS NOT NULL AND c4.transcript <> '')\n    ORDER BY m.mx DESC LIMIT 6\n ) x), '[]'::jsonb)\n) AS ctx;",
+    "options": {}
+   },
+   "id": "rad_gather",
+   "name": "Gather transcripts",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    460,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const ctx=$json.ctx;\nconst rules='You are the early-warning radar for Tecknuovo, a UK digital-delivery consultancy. Below are the RAW TRANSCRIPTS of the past week\\'s client calls, account by account, plus each account\\'s recent weekly-report RAG and the risks ALREADY formally flagged. Your ONLY job: find EMERGING concerns that are NOT in already_flagged - things a sharp managing director would want on her radar BEFORE they become formal risks. Look for: hesitation or friction around budgets, renewals or contracts; client-side reorganisations, departures or new decision-makers; repeated small frustrations that add up (delays mentioned in passing, scope confusion, tooling pain); cooling tone or shrinking engagement from client stakeholders; dependencies on things outside our control; anything a client said that sounds like the start of a bigger conversation. Judge from Tecknuovo\\'s perspective - a client-side issue matters only if it could affect our delivery, relationship or revenue. RULES: maximum 5 items across all accounts, each ONE sentence naming the account and why it deserves watching, each with a SHORT verbatim quote from the transcript as evidence (copy exactly, max 25 words). Do NOT repeat anything in already_flagged. If nothing genuine is emerging, return an empty items array - never invent. Never use em dashes. Return ONLY JSON: {\"items\":[{\"account\":\"...\",\"insight\":\"...\",\"quote\":\"...\"}]}';\nconst prompt=rules+'\\n\\nDATA:\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
+   },
+   "id": "rad_prompt",
+   "name": "Build prompt",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    680,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "promptType": "define",
+    "text": "={{ $json.prompt }}",
+    "messages": {},
+    "batching": {}
+   },
+   "id": "rad_chain",
+   "name": "Read between the lines (Azure)",
+   "type": "@n8n/n8n-nodes-langchain.chainLlm",
+   "typeVersion": 1.5,
+   "position": [
+    900,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "model": "gpt-4o-mini",
+    "options": {
+     "temperature": 0.2
+    }
+   },
+   "id": "rad_model",
+   "name": "Azure OpenAI Chat Model",
+   "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+   "typeVersion": 1,
+   "position": [
+    900,
+    560
+   ],
+   "credentials": {
+    "azureOpenAiApi": {
+     "id": "W7KKkeJLvjngHgZA",
+     "name": "Azure Open AI account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const raw=($json.text||$json.response||$json.output||'').trim();\nconst m=raw.match(/\\{[\\s\\S]*\\}/); if(!m){return [];}\nlet obj; try{obj=JSON.parse(m[0]);}catch(e){return [];}\nconst items=Array.isArray(obj.items)?obj.items.slice(0,5).map(function(x){return {\n account:String((x&&x.account)||'').slice(0,120),\n insight:String((x&&x.insight)||'').slice(0,300),\n quote:String((x&&x.quote)||'').slice(0,220)\n}}).filter(function(x){return x.insight}):[];\nconst e=function(s){return String(s).replace(/'/g,\"''\")};\nconst sql=\"INSERT INTO briefs (audience,period_start,period_end,content) VALUES ('radar', now()::date-7, now()::date, '\"+e(JSON.stringify({items:items}))+\"'::jsonb);\";\nreturn [{json:{sql,found:items.length}}];"
+   },
+   "id": "rad_save_sql",
+   "name": "Build save SQL",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1140,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "={{ $json.sql }}",
+    "options": {}
+   },
+   "id": "rad_save",
+   "name": "Save radar",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    1360,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts per account (up to 6 accounts x 4 calls, 9k chars each), excludes already-flagged risks, and hunts for emerging concerns - budget hesitation, reorgs, cooling tone, repeated small frictions. Max 5 items, each with a verbatim evidence quote; empty when nothing genuine (never invents).\nStored in `briefs` (audience='radar'); the Leadership Overview's 'Potential risks forming' section reads it.",
+    "height": 250,
+    "width": 430
+   },
+   "id": "rad_note",
+   "name": "How it works",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    20
+   ]
+  }
+ ],
+ "connections": {
+  "Mondays 07:55": {
+   "main": [
+    [
+     {
+      "node": "Gather transcripts",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run": {
+   "main": [
+    [
+     {
+      "node": "Gather transcripts",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gather transcripts": {
+   "main": [
+    [
+     {
+      "node": "Build prompt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build prompt": {
+   "main": [
+    [
+     {
+      "node": "Read between the lines (Azure)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read between the lines (Azure)": {
+   "main": [
+    [
+     {
+      "node": "Build save SQL",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build save SQL": {
+   "main": [
+    [
+     {
+      "node": "Save radar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Azure OpenAI Chat Model": {
+   "ai_languageModel": [
+    [
+     {
+      "node": "Read between the lines (Azure)",
+      "type": "ai_languageModel",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "pinData": {}
+}

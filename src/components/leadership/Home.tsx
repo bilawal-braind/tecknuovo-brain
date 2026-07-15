@@ -1,19 +1,23 @@
 // Katie's home: the week zoomed out, for a MANAGING DIRECTOR.
-// Rules of this page: no individual day-to-day signals, ever - only accumulations,
-// patterns and trajectories. Account names are live links (hover -> arrow -> the
-// account). Detail always exists one click away; it is never the default.
+// Order: tnAI brief (parallel columns, account names are live links) -> numbers ->
+// charts -> risks as detailed macro cards per account (expand: the risk, why it was
+// flagged, the step, and transcript snippets from across the week's calls) ->
+// potential risks (computed trajectories + the early-radar automation that reads
+// whole transcripts) -> opportunity heat. No raw signal feed, ever.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, MessageSquareQuote } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals, riskScope } from '../../data/signals'
-import { calls } from '../../data/calls'
+import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
+import type { Call } from '../../data/calls'
 import { accounts, accountName } from '../../data/org'
 import { weeklyTrend } from '../../data/trends'
-import { fetchBrief } from '../../data/api'
+import { fetchBrief, fetchTranscript } from '../../data/api'
 import type { ApiBrief } from '../../data/api'
 import type { Signal, Severity } from '../../data/types'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
+import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
 const DAY = 86_400_000
@@ -27,8 +31,7 @@ function parsePounds(v?: string): number {
 }
 const gbp = (n: number) => (n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : n >= 1000 ? `£${Math.round(n / 1000)}k` : `£${n}`)
 
-// The escalation gate: critical, account/relationship level, or flagged 14+ days
-// ago and still not actioned. Everything else never reaches this page.
+// Escalation gate: critical, account/relationship level, or unresolved 14+ days.
 const needsHer = (s: Signal) =>
   s.type === 'risk' &&
   s.status !== 'actioned' && s.status !== 'dismissed' &&
@@ -52,28 +55,30 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
     const periodCalls = calls.filter((c) => inP(c.date))
     const prevCalls = calls.filter((c) => inPrev(c.date))
 
-    // Escalations, ROLLED UP PER ACCOUNT - never shown as individual signal rows.
-    const attention = allSignals.filter(needsHer)
-    const attnMap = new Map<string, Signal[]>()
-    for (const s of attention) { if (!attnMap.has(s.accountId)) attnMap.set(s.accountId, []); attnMap.get(s.accountId)!.push(s) }
-    const attnRows = [...attnMap.entries()].map(([accountId, items]) => {
-      const worst = [...items].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])[0]
-      const oldest = Math.max(...items.map((s) => ageDays(s.createdAt)))
-      return { accountId, count: items.length, worst, oldest, critical: items.filter((s) => s.severity === 'critical').length }
-    }).sort((a, b) => SEV_W[b.worst.severity] - SEV_W[a.worst.severity] || b.oldest - a.oldest)
-
-    // Risk themes: the period's risks accumulated by framework category.
-    const themeMap = new Map<string, Signal[]>()
-    for (const s of risks) {
-      const key = s.riskCategory || s.subtype || 'Uncategorised'
-      if (!themeMap.has(key)) themeMap.set(key, [])
-      themeMap.get(key)!.push(s)
+    // Risks grouped PER ACCOUNT - one macro card each. Escalated accounts first.
+    const riskMap = new Map<string, Signal[]>()
+    for (const s of risks) { if (!riskMap.has(s.accountId)) riskMap.set(s.accountId, []); riskMap.get(s.accountId)!.push(s) }
+    // Unresolved older risks join their account's card even if outside the window.
+    for (const s of allSignals.filter(needsHer)) {
+      if (!riskMap.has(s.accountId)) riskMap.set(s.accountId, [])
+      if (!riskMap.get(s.accountId)!.some((x) => x.id === s.id)) riskMap.get(s.accountId)!.push(s)
     }
-    const themes = [...themeMap.entries()]
-      .map(([name, items]) => ({ name, items, accounts: [...new Set(items.map((s) => s.accountId))] }))
-      .sort((a, b) => Math.max(...b.items.map((s) => SEV_W[s.severity])) - Math.max(...a.items.map((s) => SEV_W[s.severity])) || b.items.length - a.items.length)
+    const riskCards = [...riskMap.entries()].map(([accountId, items]) => {
+      const sorted = [...items].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity] || b.createdAt.localeCompare(a.createdAt))
+      const cats = [...new Set(items.map((s) => s.riskCategory || s.subtype).filter(Boolean))] as string[]
+      const callIds = new Set(items.map((s) => s.callId ?? s.sourceCall.title))
+      return {
+        accountId,
+        items: sorted,
+        gated: items.some(needsHer),
+        critical: items.filter((s) => s.severity === 'critical').length,
+        oldest: Math.max(...items.map((s) => ageDays(s.createdAt))),
+        cats,
+        callCount: callIds.size,
+      }
+    }).sort((a, b) => Number(b.gated) - Number(a.gated) || SEV_W[b.items[0].severity] - SEV_W[a.items[0].severity])
 
-    // Potential risks: trajectories caught BEFORE they're formally big.
+    // Trajectories computed from the data (the radar automation adds transcript-level ones).
     const warnings: { text: string; accountId?: string }[] = []
     const perAcctTheme = new Map<string, number>()
     for (const s of risks) {
@@ -98,19 +103,20 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       warnings.push({ text: `Opportunity chatter is accelerating (${oppPrev} → ${opps.length} period on period), gathering around ${hot}.` })
     }
 
-    // Opportunities, rolled up per account.
+    // Opportunities per account - same macro card treatment.
     const oppMap = new Map<string, Signal[]>()
     for (const s of opps) { if (!oppMap.has(s.accountId)) oppMap.set(s.accountId, []); oppMap.get(s.accountId)!.push(s) }
-    const oppRows = [...oppMap.entries()].map(([accountId, items]) => ({
+    const oppCards = [...oppMap.entries()].map(([accountId, items]) => ({
       accountId,
-      count: items.length,
+      items: [...items].sort((a, b) => (b.networksTotal ?? 0) - (a.networksTotal ?? 0)),
       value: items.reduce((t, s) => t + parsePounds(s.value), 0),
       topScore: Math.max(0, ...items.map((s) => s.networksTotal ?? 0)),
-    })).sort((a, b) => b.value - a.value || b.count - a.count)
+    })).sort((a, b) => b.value - a.value || b.items.length - a.items.length)
 
     return {
-      period, risks, opps, periodCalls, attnRows, themes, warnings: warnings.slice(0, 4), oppRows,
-      attentionCount: attention.length,
+      period, opps, periodCalls, riskCards, oppCards, warnings: warnings.slice(0, 3),
+      riskCount: risks.length,
+      attentionCount: allSignals.filter(needsHer).length,
       oppValue: opps.reduce((t, s) => t + parsePounds(s.value), 0),
       accountsActive: new Set(periodCalls.map((c) => c.accountId).filter(Boolean)).size,
     }
@@ -134,7 +140,6 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
 
       <TnaiBrief onOpenAccount={onOpenAccount} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
 
-      {/* numbers, then the shape of the period - visuals up top */}
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={Building2} label="Accounts active" value={`${d.accountsActive}`} sub={`of ${accounts.length} in the brain`} />
         <Stat icon={Radio} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.period.length} signals extracted`} color="var(--accent)" />
@@ -160,121 +165,61 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
           </div>
         </div>
         <DonutCard title="Risk mix" sub="by framework category, this period"
-          data={d.themes.map((t) => ({ name: t.name, value: t.items.length }))} palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
+          data={(() => { const m = new Map<string, number>(); for (const s of d.riskCards.flatMap((c) => c.items)) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
+          palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
         <DonutCard title="Portfolio health" sub="current RAG across accounts"
           data={(['red', 'amber', 'green'] as const).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
           palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
       </div>
 
-      {/* needs her - per ACCOUNT, never per signal */}
-      <div className="mt-5">
-        <div className="mb-2 flex items-center gap-2">
+      {/* ── Risks: one detailed macro card per account ── */}
+      <div className="mt-6">
+        <div className="mb-2.5 flex items-center gap-2">
           <AlertTriangle size={15} className="text-[var(--risk)]" />
-          <h3 className="text-[15px] font-semibold">Needs your attention</h3>
-          <span className="text-[11.5px] text-muted-2">critical · account-level · unresolved 14+ days</span>
+          <h3 className="text-[15px] font-semibold">Risks, by account</h3>
+          <span className="text-[11.5px] text-muted-2">{d.riskCount} accumulated this period · accounts needing you come first</span>
         </div>
-        {d.attnRows.length === 0 ? (
+        {d.riskCards.length === 0 ? (
           <div className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-[13px] text-muted">
-            <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing needs your intervention right now. Everything flagged is being handled at delivery or partner level.
+            <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> No risks in this period, and nothing older left unresolved.
           </div>
         ) : (
-          <div className="space-y-2">
-            {d.attnRows.map((r) => (
-              <button key={r.accountId} onClick={() => onOpenAccount(r.accountId)}
-                className="group flex w-full items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
-                style={{ borderLeft: '3px solid var(--risk)' }}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14px] font-bold">{accountName(r.accountId)}</span>
-                    {r.critical > 0 && <Chip color="var(--risk)">{r.critical} critical</Chip>}
-                    <Chip color="var(--muted)">{r.count} open escalation{r.count !== 1 ? 's' : ''}</Chip>
-                    {r.oldest >= 14 && <Chip color="var(--people)">oldest {r.oldest}d unresolved</Chip>}
-                  </div>
-                  <p className="mt-1 truncate text-[12.5px] text-muted">{r.worst.summary}</p>
-                </div>
-                <ArrowRight size={16} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
-            ))}
+          <div className="space-y-3">
+            {d.riskCards.map((c) => <RiskAccountCard key={c.accountId} card={c} onOpenAccount={onOpenAccount} />)}
           </div>
         )}
       </div>
 
-      {/* potential risks - before they're formally risks */}
-      {d.warnings.length > 0 && (
-        <div className="mt-5">
-          <div className="mb-2 flex items-center gap-2">
-            <Eye size={15} style={{ color: 'var(--people)' }} />
-            <h3 className="text-[15px] font-semibold">Potential risks forming</h3>
-            <span className="text-[11.5px] text-muted-2">trajectories the brain is watching - not formally flagged yet</span>
-          </div>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            {d.warnings.map((w, i) => (
-              <button key={i} onClick={() => w.accountId && onOpenAccount(w.accountId)} disabled={!w.accountId}
-                className="group flex items-center gap-2 rounded-xl border border-line bg-surface p-3.5 text-left text-[13px] leading-snug text-text transition-colors enabled:hover:border-[var(--line-2)]"
-                style={{ borderLeft: '3px solid var(--people)' }}>
-                <span className="min-w-0 flex-1">{w.text}</span>
-                {w.accountId && <ArrowRight size={14} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ── Potential risks: before they're formally risks ── */}
+      <RadarSection computed={d.warnings} onOpenAccount={onOpenAccount} />
 
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* risk themes - accumulated; expansion stays macro (one line per moment, links to the account) */}
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold">Risk themes</h3>
-            <span className="text-[11.5px] text-muted-2">{d.risks.length} risk{d.risks.length !== 1 ? 's' : ''} accumulated · grouped by framework category</span>
-          </div>
-          {d.themes.length === 0 ? (
-            <p className="rounded-xl border border-line bg-surface p-5 text-center text-[12.5px] text-muted-2">No risks flagged in this period.</p>
-          ) : (
-            <div className="space-y-2">{d.themes.map((t) => <ThemeCard key={t.name} name={t.name} items={t.items} accountIds={t.accounts} onOpenAccount={onOpenAccount} />)}</div>
-          )}
+      {/* ── Opportunity heat ── */}
+      <div className="mt-6">
+        <div className="mb-2.5 flex items-center gap-2">
+          <TrendingUp size={15} style={{ color: 'var(--opp)' }} />
+          <h3 className="text-[15px] font-semibold">Opportunity heat</h3>
+          <span className="text-[11.5px] text-muted-2">where the commercial energy is gathering</span>
         </div>
-
-        {/* opportunity heat - per account */}
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold">Opportunity heat</h3>
-            <span className="text-[11.5px] text-muted-2">where the commercial energy is gathering</span>
+        {d.oppCards.length === 0 ? (
+          <p className="rounded-2xl border border-line bg-surface p-5 text-center text-[12.5px] text-muted-2">No opportunities surfaced in this period.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {d.oppCards.map((c) => <OppAccountCard key={c.accountId} card={c} onOpenAccount={onOpenAccount} />)}
           </div>
-          {d.oppRows.length === 0 ? (
-            <p className="rounded-xl border border-line bg-surface p-5 text-center text-[12.5px] text-muted-2">No opportunities surfaced in this period.</p>
-          ) : (
-            <div className="space-y-2">
-              {d.oppRows.map((r) => (
-                <button key={r.accountId} onClick={() => onOpenAccount(r.accountId)}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
-                  style={{ borderLeft: '3px solid var(--opp)' }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-bold">{accountName(r.accountId)}</span>
-                      <Chip color="var(--opp)">{r.count} opportunit{r.count !== 1 ? 'ies' : 'y'}</Chip>
-                      {r.value > 0 && <Chip color="var(--accent-d)">~{gbp(r.value)} mentioned</Chip>}
-                      {r.topScore > 0 && <Chip color="var(--muted)">best NETWORKS {r.topScore}/40</Chip>}
-                    </div>
-                  </div>
-                  <ArrowRight size={16} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ── tnAI brief: her analyst. Ivy-style compact bullets; account names inside the
-// text are live - hover shows the arrow, click opens the account. ──
+// ── tnAI brief: parallel columns like the reference; account names live-linked ──
 function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [checked, setChecked] = useState(false)
   useEffect(() => { let on = true; fetchBrief().then((b) => { if (on) { setBrief(b); setChecked(true) } }); return () => { on = false } }, [])
 
   const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
+  const hasWatch = (brief?.content.watch_for?.length ?? 0) > 0
   return (
     <div className="mt-4 overflow-hidden rounded-2xl border border-line" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
       <div className="p-5">
@@ -286,17 +231,15 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
         </div>
 
         {brief ? (
-          <div className="mt-3.5 space-y-3">
-            <BriefBullets title="What's happening" items={splitSentences(brief.content.whats_happening)} dot="var(--accent)" onOpenAccount={onOpenAccount} />
-            <BriefBullets title="Why" items={splitSentences(brief.content.why)} dot="var(--muted-2)" onOpenAccount={onOpenAccount} />
-            {(brief.content.watch_for?.length ?? 0) > 0 && (
-              <BriefBullets title="Watch for" items={brief.content.watch_for!} dot="var(--people)" onOpenAccount={onOpenAccount} />
-            )}
-            <BriefBullets title="What needs you" dot="var(--risk)" onOpenAccount={onOpenAccount}
+          <div className={`mt-4 grid grid-cols-1 gap-5 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <BriefCol title="What's happening" items={splitSentences(brief.content.whats_happening)} dot="var(--accent)" onOpenAccount={onOpenAccount} />
+            <BriefCol title="Why" items={splitSentences(brief.content.why)} dot="var(--muted-2)" onOpenAccount={onOpenAccount} />
+            {hasWatch && <BriefCol title="Watch for" items={brief.content.watch_for!} dot="var(--people)" onOpenAccount={onOpenAccount} />}
+            <BriefCol title="What needs you" dot="var(--risk)" onOpenAccount={onOpenAccount}
               items={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
           </div>
         ) : (
-          <div className="mt-3.5">
+          <div className="mt-4">
             <p className="text-[13.5px] leading-relaxed text-text">
               Over the last {fallback.days} days the Second Brain analysed <b>{fallback.calls} call{fallback.calls !== 1 ? 's' : ''}</b> across <b>{fallback.accounts} account{fallback.accounts !== 1 ? 's' : ''}</b>,
               surfacing <b>{fallback.opps} opportunit{fallback.opps !== 1 ? 'ies' : 'y'}</b>{fallback.attention ? <> and <b style={{ color: 'var(--risk)' }}>{fallback.attention} escalation{fallback.attention !== 1 ? 's' : ''}</b> (below)</> : <> and nothing that needs your intervention</>}.
@@ -311,13 +254,13 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
 
 const splitSentences = (t: string) => t.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x.length > 2)
 
-function BriefBullets({ title, items, dot, onOpenAccount }: { title: string; items: string[]; dot: string; onOpenAccount: (id: string) => void }) {
+function BriefCol({ title, items, dot, onOpenAccount }: { title: string; items: string[]; dot: string; onOpenAccount: (id: string) => void }) {
   return (
-    <div className="grid grid-cols-1 gap-1 lg:grid-cols-[130px_1fr]">
-      <div className="eyebrow pt-1" style={{ color: 'var(--accent-d)' }}>{title}</div>
-      <ul className="space-y-1.5">
+    <div>
+      <div className="eyebrow" style={{ color: 'var(--accent-d)' }}>{title}</div>
+      <ul className="mt-2 space-y-2">
         {items.map((x, i) => (
-          <li key={i} className="flex items-start gap-2 text-[13.5px] leading-relaxed text-text">
+          <li key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
             <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dot }} />
             <span><Linkified text={x} onOpenAccount={onOpenAccount} /></span>
           </li>
@@ -327,7 +270,7 @@ function BriefBullets({ title, items, dot, onOpenAccount }: { title: string; ite
   )
 }
 
-// Turn account names inside brief text into live links (hover -> arrow -> account).
+// Account names inside text become live links (hover -> arrow -> the account).
 function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: string) => void }) {
   const parts = useMemo(() => {
     const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
@@ -361,37 +304,202 @@ function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: 
   )
 }
 
-// Theme card: expansion stays MACRO - one line per accumulated moment, linking to
-// the account. No triage cards, no feedback buttons, no forms on this page.
-function ThemeCard({ name, items, accountIds, onOpenAccount }: { name: string; items: Signal[]; accountIds: string[]; onOpenAccount: (id: string) => void }) {
+// ── The detailed risk macro card ──
+type RiskCard = { accountId: string; items: Signal[]; gated: boolean; critical: number; oldest: number; cats: string[]; callCount: number }
+
+function RiskAccountCard({ card, onOpenAccount }: { card: RiskCard; onOpenAccount: (id: string) => void }) {
   const [open, setOpen] = useState(false)
-  const worst = [...items].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])[0].severity
+  const worst = card.items[0]
+  const acc = accounts.find((a) => a.id === card.accountId)
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface" style={{ borderLeft: `3px solid ${SEV_COLOR[worst]}` }}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2.5 p-3.5 text-left transition-colors hover:bg-bg-2">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderLeft: `3px solid ${card.gated ? 'var(--risk)' : SEV_COLOR[worst.severity]}` }}>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-bg-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13.5px] font-semibold">{name}</span>
-            <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[10.5px] font-bold text-muted">{items.length}</span>
+            {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
+            <span className="text-[14.5px] font-bold">{accountName(card.accountId)}</span>
+            {card.gated && <Chip color="var(--risk)">needs you</Chip>}
+            {card.critical > 0 && <Chip color="var(--risk)">{card.critical} critical</Chip>}
+            {card.oldest >= 14 && <Chip color="var(--people)">oldest {card.oldest}d unresolved</Chip>}
           </div>
-          <div className="mt-0.5 truncate text-[11.5px] text-muted">{accountIds.map((id) => accountName(id)).join(' · ')}</div>
+          <p className="mt-1.5 text-[12.5px] leading-snug text-muted">
+            {card.items.length} risk{card.items.length !== 1 ? 's' : ''} across {card.callCount} call{card.callCount !== 1 ? 's' : ''}
+            {card.cats.length ? <> · themes: <span className="font-medium text-text">{card.cats.join(', ')}</span></> : null}
+            {' · '}headline: <span className="font-medium text-text">{worst.summary}</span>
+          </p>
         </div>
-        <ChevronDown size={15} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={16} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+
       {open && (
-        <div className="space-y-1.5 border-t border-line bg-surface-2 p-3">
-          {items.map((s) => (
-            <button key={s.id} onClick={() => onOpenAccount(s.accountId)}
-              className="group flex w-full items-start gap-2 rounded-lg bg-surface px-3 py-2 text-left transition-colors hover:bg-bg-2">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: SEV_COLOR[s.severity] }} />
-              <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-text">
-                {s.summary} <span className="text-muted-2">· {accountName(s.accountId)}</span>
-              </span>
-              <ArrowRight size={13} className="mt-0.5 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
-          ))}
+        <div className="border-t border-line bg-surface-2 p-4">
+          <div className="space-y-3">
+            {card.items.map((s) => <RiskDetail key={s.id} s={s} />)}
+          </div>
+          <button onClick={() => onOpenAccount(card.accountId)} className="group mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--accent-d)] hover:underline">
+            Open {accountName(card.accountId)} <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+          </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// One risk inside the card: what it was, why it was flagged, the step - and the
+// transcript snippets toggle that pulls the conversation around the moment.
+function RiskDetail({ s }: { s: Signal }) {
+  const [showSnips, setShowSnips] = useState(false)
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip color={SEV_COLOR[s.severity]}>{s.severity}</Chip>
+        {s.riskCategory && <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[10.5px] font-semibold text-muted">{s.riskCategory}</span>}
+        <span className="ml-auto text-[11px] text-muted-2">{s.sourceCall.title} · {fmt(s.createdAt)}</span>
+      </div>
+      <p className="mt-2 text-[13.5px] font-semibold leading-snug text-text">{s.summary}</p>
+      <p className="mt-1.5 border-l-2 pl-2.5 text-[12.5px] italic leading-relaxed text-muted" style={{ borderColor: SEV_COLOR[s.severity] }}>“{s.quote}”</p>
+      {s.suggestedAction && (
+        <p className="mt-2 text-[12.5px] leading-snug text-text"><span className="font-bold uppercase tracking-wide text-[10px] text-muted-2">The step · </span>{s.suggestedAction}</p>
+      )}
+      <button onClick={() => setShowSnips((v) => !v)} className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-2 px-2.5 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+        <MessageSquareQuote size={13} /> {showSnips ? 'Hide the conversation' : 'View transcript snippets'}
+      </button>
+      {showSnips && <Snippet signal={s} />}
+    </div>
+  )
+}
+
+// The conversation around the captured moment, fetched lazily from the call.
+function Snippet({ signal }: { signal: Signal }) {
+  const [state, setState] = useState<'loading' | 'ready' | 'none'>('loading')
+  const [snip, setSnip] = useState<{ lines: { speaker: string; text: string }[]; hit: number } | null>(null)
+
+  useEffect(() => {
+    let on = true
+    const call: Call | undefined = calls.find((c) => c.id === signal.callId) ?? calls.find((c) => c.signals.some((x) => x.id === signal.id))
+    const build = (c: Call) => {
+      const { lines } = transcriptWithMoments(c)
+      const s = snippetAround(lines, signal.quote, 2)
+      if (!on) return
+      if (s) { setSnip(s); setState('ready') } else setState('none')
+    }
+    if (!call) { setState('none'); return }
+    if (call.transcript || !/^[0-9a-f]{8}-/i.test(call.id)) { build(call); return }
+    fetchTranscript(call.id)
+      .then((r) => { if (r.transcript) call.transcript = r.transcript; build(call) })
+      .catch(() => { if (on) setState('none') })
+    return () => { on = false }
+  }, [signal])
+
+  if (state === 'loading') return <p className="mt-2 text-[11.5px] text-muted-2">Loading the conversation…</p>
+  if (state === 'none' || !snip) return <p className="mt-2 text-[11.5px] text-muted-2">The exact moment couldn't be located in the stored transcript.</p>
+  return (
+    <div className="mt-2.5 space-y-1.5 rounded-lg bg-bg-2 p-3">
+      {snip.lines.map((l, i) => (
+        <div key={i} className={`rounded-md px-2.5 py-1.5 text-[12px] leading-relaxed ${i === snip.hit ? 'bg-surface font-medium text-text' : 'text-muted'}`}
+          style={i === snip.hit ? { boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--risk) 30%, transparent)' } : undefined}>
+          {l.speaker && <span className="font-semibold">{l.speaker}: </span>}{l.text}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Opportunity macro card ──
+type OppCard = { accountId: string; items: Signal[]; value: number; topScore: number }
+
+function OppAccountCard({ card, onOpenAccount }: { card: OppCard; onOpenAccount: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderLeft: '3px solid var(--opp)' }}>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-bg-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[14.5px] font-bold">{accountName(card.accountId)}</span>
+            <Chip color="var(--opp)">{card.items.length} opportunit{card.items.length !== 1 ? 'ies' : 'y'}</Chip>
+            {card.value > 0 && <Chip color="var(--accent-d)">~{gbp(card.value)} mentioned</Chip>}
+            {card.topScore > 0 && <Chip color="var(--muted)">best NETWORKS {card.topScore}/40</Chip>}
+          </div>
+          <p className="mt-1.5 truncate text-[12.5px] text-muted">{card.items[0].summary}</p>
+        </div>
+        <ChevronDown size={16} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-line bg-surface-2 p-4">
+          <div className="space-y-3">
+            {card.items.map((s) => (
+              <div key={s.id} className="rounded-xl border border-line bg-surface p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {s.networksTotal != null && <Chip color="var(--opp)">NETWORKS {s.networksTotal}/40</Chip>}
+                  {s.value && <Chip color="var(--accent-d)">{s.value}</Chip>}
+                  <span className="ml-auto text-[11px] text-muted-2">{s.sourceCall.title} · {fmt(s.createdAt)}</span>
+                </div>
+                <p className="mt-2 text-[13.5px] font-semibold leading-snug text-text">{s.summary}</p>
+                <p className="mt-1.5 border-l-2 pl-2.5 text-[12.5px] italic leading-relaxed text-muted" style={{ borderColor: 'var(--opp)' }}>“{s.quote}”</p>
+                {s.suggestedAction && <p className="mt-2 text-[12.5px] leading-snug text-text"><span className="font-bold uppercase tracking-wide text-[10px] text-muted-2">The step · </span>{s.suggestedAction}</p>}
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onOpenAccount(card.accountId)} className="group mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--accent-d)] hover:underline">
+            Open {accountName(card.accountId)} <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Potential risks: computed trajectories + the transcript-reading radar ──
+type RadarItem = { account?: string; insight: string; quote?: string }
+
+function RadarSection({ computed, onOpenAccount }: { computed: { text: string; accountId?: string }[]; onOpenAccount: (id: string) => void }) {
+  const [radar, setRadar] = useState<RadarItem[]>([])
+  useEffect(() => {
+    let on = true
+    fetchBrief('radar').then((b) => {
+      if (!on || !b) return
+      const items = (b.content as unknown as { items?: RadarItem[] }).items
+      if (Array.isArray(items)) setRadar(items.slice(0, 5))
+    })
+    return () => { on = false }
+  }, [])
+
+  const accountIdFor = (name?: string) => (name ? accounts.find((a) => a.name.toLowerCase() === name.toLowerCase())?.id : undefined)
+  if (radar.length === 0 && computed.length === 0) return null
+
+  return (
+    <div className="mt-6">
+      <div className="mb-2.5 flex items-center gap-2">
+        <Eye size={15} style={{ color: 'var(--people)' }} />
+        <h3 className="text-[15px] font-semibold">Potential risks forming</h3>
+        <span className="text-[11.5px] text-muted-2">read from the raw conversations, before anything is formally flagged</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        {radar.map((r, i) => {
+          const accId = accountIdFor(r.account)
+          return (
+            <button key={`r${i}`} onClick={() => accId && onOpenAccount(accId)} disabled={!accId}
+              className="group rounded-xl border border-line bg-surface p-3.5 text-left transition-colors enabled:hover:border-[var(--line-2)]"
+              style={{ borderLeft: '3px solid var(--people)' }}>
+              <div className="flex items-start gap-2">
+                <span className="min-w-0 flex-1 text-[13px] leading-snug text-text">
+                  {r.account && <span className="font-semibold">{r.account}: </span>}{r.insight}
+                </span>
+                {accId && <ArrowRight size={14} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />}
+              </div>
+              {r.quote && <p className="mt-1.5 truncate text-[11.5px] italic text-muted-2">“{r.quote}”</p>}
+            </button>
+          )
+        })}
+        {computed.map((w, i) => (
+          <button key={`c${i}`} onClick={() => w.accountId && onOpenAccount(w.accountId)} disabled={!w.accountId}
+            className="group flex items-center gap-2 rounded-xl border border-line bg-surface p-3.5 text-left text-[13px] leading-snug text-text transition-colors enabled:hover:border-[var(--line-2)]"
+            style={{ borderLeft: '3px solid var(--people)' }}>
+            <span className="min-w-0 flex-1">{w.text}</span>
+            {w.accountId && <ArrowRight size={14} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
