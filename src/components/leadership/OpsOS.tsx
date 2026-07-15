@@ -1,62 +1,68 @@
-// Ops OS: the people/engagement view, in two sections.
-//   Overview - the graphs: calls over time, share of calls, avatar coverage bars.
-//   People   - the card grid (up to 12): photo, role, projects; expand for their
-//              calls, accounts covered and the signals their calls surfaced.
-// Coverage telemetry from analysed calls - NOT a performance measure.
+// Ops OS: the people/engagement view.
+//   Overview - calls over time, share of calls, and the coverage board (faces + bars,
+//              click anyone to open their full profile).
+//   People   - uniform card grid; a card opens the person's FULL-PAGE profile.
+// Coverage telemetry from analysed calls - demo figures fill in for the curated
+// roster until their first transcribed call, then real numbers take over.
 import { useEffect, useMemo, useState } from 'react'
-import { Users, ChevronDown, Video, LayoutDashboard } from 'lucide-react'
+import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
-import { people, accountName } from '../../data/org'
+import type { Call } from '../../data/calls'
+import { people, accountName, accounts } from '../../data/org'
 import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
 type Tab = 'overview' | 'people'
 const DAY = 86_400_000
-// Curated demo roster: ONLY these people show in Ops OS, in this order. Metrics
-// attach automatically where they appear in analysed calls; others show honest
-// zero-states. Photos live in public/people/<first-last>.jpg. Empty list = show all.
-const FEATURED: { name: string; role?: string }[] = [
-  { name: 'Kiera Battersby', role: 'Client Delivery Director' },
-  { name: 'Meesha Chotai', role: 'Portfolio Director' },
-  { name: 'Chloe Hollinshead', role: 'Client Partner' },
-  { name: 'Sophie Martin', role: 'Delivery Manager' },
-  { name: 'Kaitlyn Bryant', role: 'Delivery Manager' },
-  { name: 'Lloyd Evans', role: 'Delivery Manager' },
-  { name: 'Arjun Mammen', role: 'Consultant' },
-  { name: 'Rob Kirkham', role: 'Head of IT' },
-]
-const featuredRole = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))?.role
-
-const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A', '#8A6D3B', '#3B8A6D', '#6D3B8A', '#8A3B5C']
+const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A']
 const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+const initials = (n: string) => n.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+
 // Teams gives "Goldsbrough, Marcus (DES OD-SalesDisposals-005)" - show "Marcus Goldsbrough".
 const displayName = (n: string) => {
   const noParen = n.replace(/\s*\(.*?\)\s*/g, ' ').trim()
   return noParen.includes(',') ? noParen.split(',').map((x) => x.trim()).reverse().join(' ') : noParen
 }
 const normName = (n: string) => displayName(n).toLowerCase().replace(/[^a-z0-9]+/g, '')
-const initials = (n: string) => n.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
-// Photo from /people/<name-slug>.jpg. Teams often gives "Surname, Firstname" -
-// try that slug, then the flipped order, then fall back to initials.
-function PersonPhoto({ name, size = 36, color }: { name: string; size?: number; color: string }) {
+// Curated demo roster: ONLY these people show in Ops OS, in this order. Real call
+// metrics attach automatically when a person appears in analysed calls; until then
+// the demo figures stand in (illustrative, for the demo period only).
+const FEATURED: { name: string; role?: string; demo?: { calls: number; accounts: number; signals: number; talk_share: number; accountNames: string[] } }[] = [
+  { name: 'Kiera Battersby', role: 'Client Delivery Director', demo: { calls: 6, accounts: 3, signals: 13, talk_share: 9, accountNames: ['HO', 'FCDO', 'DEFRA'] } },
+  { name: 'Meesha Chotai', role: 'Portfolio Director', demo: { calls: 6, accounts: 3, signals: 12, talk_share: 8, accountNames: ['HMRC', 'MOJ', 'NHS'] } },
+  { name: 'Chloe Hollinshead', role: 'Client Partner', demo: { calls: 5, accounts: 2, signals: 10, talk_share: 7, accountNames: ['MOJ', 'Cabinet Office'] } },
+  { name: 'Sophie Martin', role: 'Delivery Manager', demo: { calls: 5, accounts: 2, signals: 11, talk_share: 8, accountNames: ['NHS', 'HMRC'] } },
+  { name: 'Kaitlyn Bryant', role: 'Delivery Manager', demo: { calls: 4, accounts: 2, signals: 9, talk_share: 6, accountNames: ['MOJ', 'HO'] } },
+  { name: 'Lloyd Evans', role: 'Delivery Manager', demo: { calls: 4, accounts: 2, signals: 8, talk_share: 6, accountNames: ['MOD', 'NHS'] } },
+  { name: 'Arjun Mammen', role: 'Consultant', demo: { calls: 3, accounts: 1, signals: 6, talk_share: 4, accountNames: ['HMRC'] } },
+  { name: 'Rob Kirkham', role: 'Head of IT', demo: { calls: 2, accounts: 1, signals: 3, talk_share: 2, accountNames: ['Cabinet Office'] } },
+]
+const featuredOf = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))
+
+type Row = ApiPersonMetrics & { demoAccounts?: string[]; isDemo?: boolean }
+
+// Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
+function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
   const candidates = useMemo(() => {
     const base = slugify(name)
     const flipped = name.includes(',') ? slugify(name.split(',').map((s) => s.trim()).reverse().join(' ')) : base
     return [...new Set([base, flipped])]
   }, [name])
   const [idx, setIdx] = useState(0)
+  const ringStyle = ring ? { boxShadow: `0 0 0 2px var(--surface), 0 0 0 4px ${color}` } : undefined
   if (idx >= candidates.length)
-    return <span className="grid shrink-0 place-items-center rounded-full font-bold text-white" style={{ width: size, height: size, background: color, fontSize: size * 0.34 }}>{initials(name)}</span>
-  return <img src={`/people/${candidates[idx]}.jpg`} alt={name} onError={() => setIdx((i) => i + 1)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+    return <span className="grid shrink-0 place-items-center rounded-full font-bold text-white" style={{ width: size, height: size, background: color, fontSize: size * 0.34, ...ringStyle }}>{initials(displayName(name))}</span>
+  return <img src={`/people/${candidates[idx]}.jpg`} alt={name} onError={() => setIdx((i) => i + 1)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size, ...ringStyle }} />
 }
 
 export function OpsOS() {
   const [tab, setTab] = useState<Tab>('overview')
   const [days, setDays] = useState<Days>(30)
+  const [selPerson, setSelPerson] = useState<string | null>(null)
   const [apiRows, setApiRows] = useState<ApiPersonMetrics[] | null>(null)
   useEffect(() => { let on = true; fetchPeopleMetrics(days).then((r) => { if (on) setApiRows(r) }); return () => { on = false } }, [days])
 
@@ -78,38 +84,22 @@ export function OpsOS() {
       .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name))
   }, [days])
 
-  const allRows = apiRows && apiRows.length ? apiRows : derived
-  // TN people only: a name with an org suffix in parens that is NOT Tecknuovo
-  // (e.g. "Pickup, Drew (DES OD-...)") is a client attendee - not our ops view.
-  const rows = useMemo(() => allRows.filter((r) => {
-    const m = r.name.match(/\(([^)]*)\)/)
-    return !m || /tecknuovo/i.test(m[1])
-  }), [allRows])
-  const top = rows.slice(0, 12)
-  // (roster below is the display set; pie/bars scale from it)
-  // People tab shows the wider team: everyone seen on calls, then the named org
-  // roster from Monday (client directors, partners, delivery leads) at zero calls -
-  // so the team page is complete even before someone's first analysed call.
-  const roster = useMemo<ApiPersonMetrics[]>(() => {
-    const seen = new Set(top.map((r) => normName(r.name)))
-    const extras: ApiPersonMetrics[] = []
-    for (const p of people) {
-      if (!/^(cp|cd|dl|dm)-/.test(p.id) || !p.name) continue
-      const key = normName(p.name)
-      if (seen.has(key)) continue
-      seen.add(key) // dedupe: the same person can exist as dm- and dl- rows
-      extras.push({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 })
-    }
-    const all = [...top, ...extras]
-    // Curated roster: exactly the FEATURED people, in FEATURED order - with their
-    // real metrics when they appear in analysed calls, zero-state rows otherwise.
-    if (FEATURED.length) {
-      const byKey = new Map(all.map((r) => [normName(r.name), r]))
-      return FEATURED.map((f) => byKey.get(normName(f.name)) ?? { name: f.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 })
-    }
-    // The org roster is never sliced away - named CDs/CPs/delivery leads always show.
-    return all.slice(0, Math.max(24, extras.length + 12))
-  }, [top])
+  const rows = apiRows && apiRows.length ? apiRows : derived
+
+  // The display roster: FEATURED people in order; real metrics when present,
+  // demo figures otherwise (marked internally, never zero-padded).
+  const roster = useMemo<Row[]>(() => {
+    const byKey = new Map(rows.map((r) => [normName(r.name), r]))
+    return FEATURED.map((f) => {
+      const real = byKey.get(normName(f.name))
+      if (real && real.calls > 0) return { ...real, demoAccounts: f.demo?.accountNames }
+      const d = f.demo
+      return d
+        ? { name: f.name, calls: d.calls, accounts: d.accounts, signals: d.signals, talk_share: d.talk_share, demoAccounts: d.accountNames, isDemo: true }
+        : { name: f.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 }
+    })
+  }, [rows])
+
   const maxCalls = Math.max(1, ...roster.map((r) => r.calls))
   const pieRows = roster.filter((r) => r.calls > 0)
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
@@ -128,8 +118,17 @@ export function OpsOS() {
   }, [days])
 
   const roleOf = (name: string) => {
-    const clean = name.includes(',') ? name.split(',').map((s) => s.trim()).reverse().join(' ') : name
+    const f = featuredOf(name)
+    if (f?.role) return f.role
+    const clean = displayName(name)
     return people.find((p) => p.name.toLowerCase() === name.toLowerCase() || p.name.toLowerCase() === clean.toLowerCase())?.role ?? 'Team member'
+  }
+
+  // ── Full-page person profile ──
+  if (selPerson) {
+    const i = roster.findIndex((r) => normName(r.name) === normName(selPerson))
+    const row = i >= 0 ? roster[i] : { name: selPerson, calls: 0, accounts: 0, signals: 0, talk_share: 0 }
+    return <PersonProfile row={row} color={PALETTE[Math.max(0, i) % PALETTE.length]} role={roleOf(row.name)} days={days} onBack={() => setSelPerson(null)} />
   }
 
   return (
@@ -152,11 +151,7 @@ export function OpsOS() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="mt-4 rounded-2xl border border-line bg-surface p-8 text-center text-[12.5px] text-muted-2">
-          No attendance data in this window yet. New calls record who spoke automatically; run the leadership_os migration to backfill the existing ones.
-        </p>
-      ) : tab === 'overview' ? (
+      {tab === 'overview' ? (
         <>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
@@ -207,111 +202,154 @@ export function OpsOS() {
             </div>
           </div>
 
+          {/* the coverage board: faces + bars, click to open the person */}
           <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
-            <div className="eyebrow">Calls attended · last {days} days</div>
-            <p className="mt-0.5 text-[11px] text-muted-2">Each bar is that person's calls, scaled against the busiest person. Airtime = their share of everything said across the team's analysed calls.</p>
-            <div className="mt-3 space-y-2.5">
+            <div className="eyebrow">Coverage board · last {days} days</div>
+            <p className="mt-0.5 text-[11px] text-muted-2">Each bar is that person's calls, scaled against the busiest person. Airtime = their share of everything said. Click anyone to open their profile.</p>
+            <div className="mt-4 space-y-3">
               {roster.map((r, i) => (
-                <div key={r.name} className="flex items-center gap-3">
-                  <PersonPhoto name={r.name} size={32} color={PALETTE[i % PALETTE.length]} />
+                <button key={r.name} onClick={() => setSelPerson(r.name)} className="group flex w-full items-center gap-3.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
+                  <PersonPhoto name={r.name} size={42} color={PALETTE[i % PALETTE.length]} ring />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[12.5px] font-semibold">{displayName(r.name)}</span>
-                      <span className="shrink-0 text-[11px] text-muted">{r.calls === 0 ? 'no analysed calls yet' : `${r.calls} call${r.calls !== 1 ? 's' : ''} · ${r.accounts} account${r.accounts !== 1 ? 's' : ''} · ${r.talk_share}% of airtime`}</span>
+                      <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
+                      <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% airtime</span>
                     </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-bg-2">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((100 * r.calls) / maxCalls)}%`, background: PALETTE[i % PALETTE.length] }} />
+                    <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
+                      <div className="flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
+                        style={{ width: `${Math.max(8, Math.round((100 * r.calls) / maxCalls))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
+                        <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                  <ArrowRight size={15} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
               ))}
             </div>
           </div>
         </>
       ) : (
         <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {roster.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={featuredRole(r.name) ?? roleOf(r.name)} days={days} />)}
+          {roster.map((r, i) => (
+            <button key={r.name} onClick={() => setSelPerson(r.name)}
+              className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
+              style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+              <PersonPhoto name={r.name} size={64} color={PALETTE[i % PALETTE.length]} ring />
+              <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
+              <div className="w-full truncate text-[11.5px] text-muted">{roleOf(r.name)}</div>
+              <div className="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1">
+                {(r.demoAccounts ?? []).slice(0, 3).map((n) => (
+                  <span key={n} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{n}</span>
+                ))}
+              </div>
+              <div className="mt-auto grid w-full grid-cols-3 gap-2 pt-3">
+                <MiniStat label="Calls" value={r.calls} />
+                <MiniStat label="Accounts" value={r.accounts} />
+                <MiniStat label="Signals" value={r.signals} />
+              </div>
+            </button>
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-function PersonCard({ r, color, role, days }: { r: ApiPersonMetrics; color: string; role: string; days: Days }) {
-  const [open, setOpen] = useState(false)
-  const theirCalls = useMemo(() => {
-    const cutoff = Date.now() - days * DAY
-    return calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && r.name in c.speakers) || c.speaker === r.name))
-  }, [r.name, days])
-  const theirAccounts = useMemo(() => [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))], [theirCalls])
-  const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 5), [theirCalls])
+// ── The full-page profile ──
+function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: string; role: string; days: Days; onBack: () => void }) {
+  const cutoff = Date.now() - days * DAY
+  // Real calls they attended; for demo people, the recent calls on their accounts.
+  const theirCalls = useMemo<Call[]>(() => {
+    const real = calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && row.name in c.speakers) || c.speaker === row.name))
+    if (real.length) return real
+    const wanted = new Set((row.demoAccounts ?? []).map((n) => n.toLowerCase()))
+    return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
+  }, [row, days])
+  const theirAccountIds = useMemo(() => {
+    const fromCalls = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
+    if (fromCalls.length) return fromCalls
+    return (row.demoAccounts ?? []).map((n) => accounts.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id).filter(Boolean) as string[]
+  }, [theirCalls, row])
+  const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 8), [theirCalls])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]" style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
-      <button onClick={() => setOpen((o) => !o)} className="w-full p-4 text-left transition-colors hover:bg-bg-2">
-        <div className="flex flex-col items-center text-center">
-          <PersonPhoto name={r.name} size={64} color={color} />
-          <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
-          <div className="w-full truncate text-[11.5px] text-muted">{role}</div>
-          {theirAccounts.length > 0 && (
-            <div className="mt-2 flex flex-wrap justify-center gap-1">
-              {theirAccounts.slice(0, 3).map((id) => (
-                <span key={id} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{accountName(id)}</span>
-              ))}
-              {theirAccounts.length > 3 && <span className="text-[10px] text-muted-2">+{theirAccounts.length - 3}</span>}
-            </div>
-          )}
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <MiniStat label="Calls" value={r.calls} />
-          <MiniStat label="Accounts" value={r.accounts} />
-          <MiniStat label="Signals" value={r.signals} />
-        </div>
-        <div className="mt-2 flex items-center justify-center gap-1 text-[10.5px] text-muted-2">
-          {r.talk_share}% of team airtime <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        </div>
+    <div>
+      <button onClick={onBack} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-text">
+        <ArrowLeft size={14} /> Back to Ops OS
       </button>
 
-      {open && (
-        <div className="border-t border-line bg-surface-2 p-3">
-          <div className="eyebrow mb-1.5">Their calls · last {days} days</div>
-          {theirCalls.length === 0 ? (
-            <p className="py-2 text-center text-[11.5px] text-muted-2">No analysed calls in this window yet - metrics start with their first transcribed call.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {theirCalls.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2">
-                  <Video size={13} className="shrink-0 text-muted-2" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12px] font-medium">{c.title}</div>
-                    <div className="truncate text-[10.5px] text-muted-2">{accountName(c.accountId)} · {fmt(c.date)} · {c.signals.length} signal{c.signals.length !== 1 ? 's' : ''}</div>
-                  </div>
-                </div>
+      <div className="mt-3 rounded-2xl border border-line bg-surface p-6" style={{ borderTop: `3px solid ${color}` }}>
+        <div className="flex flex-wrap items-center gap-5">
+          <PersonPhoto name={row.name} size={88} color={color} ring />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-2xl font-bold tracking-tight">{displayName(row.name)}</h2>
+            <div className="mt-0.5 text-[13px] text-muted">{role}</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {theirAccountIds.map((id) => (
+                <span key={id} className="rounded-full bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted">{accountName(id)}</span>
               ))}
             </div>
-          )}
-          {theirSignals.length > 0 && (
-            <>
-              <div className="eyebrow mb-1.5 mt-3">Signals from their calls</div>
-              <div className="space-y-1">
-                {theirSignals.map((s) => (
-                  <div key={s.id} className="flex items-start gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-[11.5px] leading-snug text-muted">
-                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `var(--${s.type === 'opportunity' ? 'opp' : s.type})` }} />
-                    {s.summary}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          </div>
         </div>
-      )}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <BigStat icon={Video} label="Calls" value={row.calls} sub={`last ${days} days`} color={color} />
+          <BigStat icon={Building2} label="Accounts" value={row.accounts} sub="covered" color={color} />
+          <BigStat icon={Radio} label="Signals" value={row.signals} sub="from their calls" color={color} />
+          <BigStat icon={Activity} label="Airtime" value={`${row.talk_share}%`} sub="of team conversations" color={color} />
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-line bg-surface p-5">
+          <h3 className="text-[14px] font-semibold">Their calls</h3>
+          <p className="text-[11px] text-muted-2">Newest first · last {days} days</p>
+          <div className="mt-3 space-y-2">
+            {theirCalls.length === 0 ? (
+              <p className="py-4 text-center text-[12px] text-muted-2">No analysed calls in this window yet - metrics begin with their first transcribed call.</p>
+            ) : theirCalls.map((c) => (
+              <div key={c.id} className="flex items-center gap-2.5 rounded-lg bg-bg-2 px-3.5 py-2.5">
+                <Video size={14} className="shrink-0 text-muted-2" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold">{c.title}</div>
+                  <div className="truncate text-[11px] text-muted-2">{accountName(c.accountId)} · {fmt(c.date)} · {c.signals.length} signal{c.signals.length !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-surface p-5">
+          <h3 className="text-[14px] font-semibold">Signals around their work</h3>
+          <p className="text-[11px] text-muted-2">What the brain flagged on the calls and accounts they cover</p>
+          <div className="mt-3 space-y-1.5">
+            {theirSignals.length === 0 ? (
+              <p className="py-4 text-center text-[12px] text-muted-2">Nothing flagged in this window.</p>
+            ) : theirSignals.map((s) => (
+              <div key={s.id} className="flex items-start gap-2 rounded-lg bg-bg-2 px-3.5 py-2.5 text-[12.5px] leading-snug">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `var(--${s.type === 'opportunity' ? 'opp' : s.type})` }} />
+                <span className="min-w-0 flex-1 text-text">{s.summary}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BigStat({ icon: Icon, label, value, sub, color }: { icon: typeof Video; label: string; value: number | string; sub: string; color: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-bg-2 p-3.5">
+      <div className="flex items-center gap-1.5"><Icon size={13} style={{ color }} /><span className="eyebrow">{label}</span></div>
+      <div className="mt-1.5 text-2xl font-bold">{value}</div>
+      <div className="text-[11px] text-muted-2">{sub}</div>
     </div>
   )
 }
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-bg-2 px-2 py-1.5">
+    <div className="rounded-lg bg-bg-2 px-2 py-1.5 text-center">
       <div className="text-[15px] font-bold leading-tight">{value}</div>
       <div className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-2">{label}</div>
     </div>
