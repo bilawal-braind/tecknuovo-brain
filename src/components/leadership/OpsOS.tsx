@@ -109,6 +109,7 @@ export function OpsOS() {
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
               <div className="eyebrow">Calls analysed over time</div>
+              <p className="mt-0.5 text-[11px] text-muted-2">How many team calls the brain processed each week. A dip means a quiet week - or meetings running without transcription.</p>
               <div className="mt-3 h-[170px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={line} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
@@ -130,6 +131,7 @@ export function OpsOS() {
 
             <div className="rounded-2xl border border-line bg-surface p-5">
               <div className="eyebrow">Share of calls</div>
+              <p className="mt-0.5 text-[11px] text-muted-2">Who was in the room, across every analysed call this period.</p>
               <div className="mt-1 flex items-center gap-3">
                 <div className="h-[150px] w-[150px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
@@ -155,6 +157,7 @@ export function OpsOS() {
 
           <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
             <div className="eyebrow">Calls attended · last {days} days</div>
+            <p className="mt-0.5 text-[11px] text-muted-2">Each bar is that person's calls, scaled against the busiest person. Airtime = their share of everything said across the team's analysed calls.</p>
             <div className="mt-3 space-y-2.5">
               {top.map((r, i) => (
                 <div key={r.name} className="flex items-center gap-3">

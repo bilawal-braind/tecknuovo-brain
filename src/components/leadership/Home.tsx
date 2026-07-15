@@ -216,10 +216,12 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
 function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [checked, setChecked] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   useEffect(() => { let on = true; fetchBrief().then((b) => { if (on) { setBrief(b); setChecked(true) } }); return () => { on = false } }, [])
 
   const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
   const hasWatch = (brief?.content.watch_for?.length ?? 0) > 0
+  const teaser = brief ? brief.content.whats_happening.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ') : ''
   return (
     <div className="mt-4 overflow-hidden rounded-2xl border border-line" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
       <div className="p-5">
@@ -230,14 +232,32 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
           <span className="ml-auto rounded-full border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-muted-2">reads every call, weekly report + HubSpot</span>
         </div>
 
-        {brief ? (
-          <div className={`mt-4 grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-            <BriefCol title="What's happening" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-            <BriefCol title="Why" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-            {hasWatch && <BriefCol title="Watch for" paragraphs={brief.content.watch_for!} accent="var(--people)" onOpenAccount={onOpenAccount} />}
-            <BriefCol title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
-              paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
+        {brief && !expanded ? (
+          <div className="mt-3.5">
+            <p className="text-[13.5px] leading-relaxed text-text"><Linkified text={teaser} onOpenAccount={onOpenAccount} /></p>
+            <div className="mt-3 flex justify-center">
+              <button onClick={() => setExpanded(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-5 py-2 text-[12px] font-semibold text-[var(--accent-d)] transition-all hover:scale-[1.03]"
+                style={{ boxShadow: '0 4px 16px color-mix(in srgb, var(--accent) 20%, transparent)' }}>
+                <Sparkles size={13} /> Read this week's full brief <ChevronDown size={13} />
+              </button>
+            </div>
           </div>
+        ) : brief ? (
+          <>
+            <div className={`mt-4 grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+              <BriefCol title="What's happening" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
+              <BriefCol title="Why" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
+              {hasWatch && <BriefCol title="Watch for" paragraphs={brief.content.watch_for!} accent="var(--people)" onOpenAccount={onOpenAccount} />}
+              <BriefCol title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
+                paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
+            </div>
+            <div className="mt-4 flex justify-center">
+              <button onClick={() => setExpanded(false)} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+                Collapse <ChevronDown size={12} className="rotate-180" />
+              </button>
+            </div>
+          </>
         ) : (
           <div className="mt-4">
             <p className="text-[13.5px] leading-relaxed text-text">
@@ -362,20 +382,20 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
         </div>
       )}
 
-      {convo && <ConversationsModal accountId={card.accountId} moments={moments} onClose={() => setConvo(false)} />}
+      {convo && <ConversationsModal title={`The conversations · ${accountName(card.accountId)}`} moments={moments} onClose={() => setConvo(false)} />}
     </div>
   )
 }
 
 // The popup: the week's moments flowing in as an animated chain.
-function ConversationsModal({ accountId, moments, onClose }: { accountId: string; moments: Moment[]; onClose: () => void }) {
+function ConversationsModal({ title, moments, onClose }: { title: string; moments: Moment[]; onClose: () => void }) {
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div className="flex max-h-[85vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h3 className="text-[15px] font-bold tracking-tight">The conversations · {accountName(accountId)}</h3>
-            <p className="mt-0.5 text-[11.5px] text-muted">Every captured moment this period, in the flow of the actual calls - oldest first.</p>
+            <h3 className="text-[15px] font-bold tracking-tight">{title}</h3>
+            <p className="mt-0.5 text-[11.5px] text-muted">The captured moments, in the flow of the actual calls - oldest first.</p>
           </div>
           <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
         </div>
@@ -484,7 +504,7 @@ function RadarSection({ computed, onOpenAccount }: { computed: { text: string; a
         <h3 className="text-[15px] font-semibold">Potential risks forming</h3>
         <span className="text-[11.5px] text-muted-2">read from the raw conversations, before anything is formally flagged</span>
       </div>
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {radar.map((r, i) => {
           const accId = accountIdFor(r.account)
           return (
@@ -509,30 +529,25 @@ function RadarSection({ computed, onOpenAccount }: { computed: { text: string; a
 }
 
 function WatchCard({ text, moments, accountId, onOpenAccount }: { text: ReactNode; moments: Moment[]; accountId?: string; onOpenAccount: (id: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const expandable = moments.length > 0
+  const [convo, setConvo] = useState(false)
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-surface" style={{ borderLeft: '3px solid var(--people)' }}>
-      <div className="flex items-center gap-2 p-3.5">
-        <button onClick={() => expandable && setOpen((o) => !o)} className={`min-w-0 flex-1 text-left text-[13px] leading-snug text-text ${expandable ? '' : 'cursor-default'}`}>
-          {text}
-        </button>
-        {accountId && (
-          <button onClick={() => onOpenAccount(accountId)} title="Open the account" className="shrink-0 rounded-md p-1 text-muted-2 transition-colors hover:text-text">
-            <ArrowRight size={14} />
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: '3px solid var(--people)' }}>
+      <div className="flex-1 p-4">
+        <p className="text-[13px] leading-relaxed text-text">{text}</p>
+      </div>
+      <div className="flex items-center gap-3 border-t border-line bg-surface-2 px-4 py-2.5">
+        {moments.length > 0 && (
+          <button onClick={() => setConvo(true)} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--accent-d)] hover:underline">
+            <MessagesSquare size={12} /> View the conversation
           </button>
         )}
-        {expandable && (
-          <button onClick={() => setOpen((o) => !o)} aria-label="Show the conversation" className="shrink-0 rounded-md p-1 text-muted-2 transition-colors hover:text-text">
-            <ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        {accountId && (
+          <button onClick={() => onOpenAccount(accountId)} className="group ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+            Open account <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
           </button>
         )}
       </div>
-      {open && expandable && (
-        <div className="border-t border-line bg-surface-2 p-4">
-          <SnippetChain moments={moments} animated />
-        </div>
-      )}
+      {convo && <ConversationsModal title="Potential risk · the conversation" moments={moments} onClose={() => setConvo(false)} />}
     </div>
   )
 }
