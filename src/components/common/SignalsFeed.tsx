@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Search } from 'lucide-react'
 import type { Signal, SignalType } from '../../data/types'
 import { rankByImpact, riskScope } from '../../data/signals'
-import { accountById, podName } from '../../data/org'
+import { accountById, accountName, podName, projectById } from '../../data/org'
 import { SignalBadge, RagDot, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
@@ -22,6 +22,7 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
   const [sort, setSort] = useState<Sort>('urgent')
   const [groupBy, setGroupBy] = useState<GroupBy>('account')
   const [range, setRange] = useState<'all' | '30' | '7'>('all')
+  const [q, setQ] = useState('')
   const [shownAll, setShownAll] = useState<Record<string, boolean>>({})
   const [flatCount, setFlatCount] = useState(20)
   const GROUP_CAP = 5
@@ -35,8 +36,22 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
       const cutoff = Date.now() - Number(range) * 86400000
       list = list.filter((s) => new Date(s.createdAt).getTime() >= cutoff)
     }
+    const ql = q.trim().toLowerCase()
+    if (ql) {
+      list = list.filter((s) => {
+        const hay = [
+          accountName(s.accountId),
+          s.projectId ? projectById(s.projectId)?.name : '',
+          s.sourceCall.title,
+          s.summary,
+          s.quote,
+          s.suggestedAction,
+        ].join(' ').toLowerCase()
+        return hay.includes(ql)
+      })
+    }
     return sort === 'newest' ? [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : rankByImpact(list)
-  }, [filter, riskLevel, callType, sort, range, signals])
+  }, [filter, riskLevel, callType, sort, range, q, signals])
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
@@ -53,7 +68,16 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
 
   return (
     <>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="relative mt-3">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-2" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search signals by account, call, quote, project…"
+          className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-[13px] text-text outline-none placeholder:text-muted-2 focus:border-[var(--accent)]"
+        />
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${signals.length})`} />
         <FilterChip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} color={SIGNAL_META.opportunity.color} label={`Opportunities (${count('opportunity')})`} />
         <FilterChip active={filter === 'risk'} onClick={() => setFilter('risk')} color={SIGNAL_META.risk.color} label={`Risks (${count('risk')})`} />
