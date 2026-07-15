@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Search, Video, ChevronDown, FileText, X } from 'lucide-react'
 import { fetchTranscript } from '../../data/api'
 import type { Call } from '../../data/calls'
-import { transcriptLinesFor } from '../../data/calls'
+import { transcriptWithMoments } from '../../data/calls'
 import type { SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
 import { SignalBadge, FilterChip } from './primitives'
@@ -182,8 +182,7 @@ const initials = (name: string) =>
   name.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
 export function CallTranscript({ call }: { call: Call }) {
-  const lines = transcriptLinesFor(call)
-  const moments = lines.map((l, i) => ({ type: l.signalType, i })).filter((m): m is { type: NonNullable<typeof m.type>; i: number } => !!m.type)
+  const { lines, moments } = transcriptWithMoments(call)
   const blockRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [flash, setFlash] = useState<number | null>(null)
   const jump = (i: number) => {
@@ -198,18 +197,30 @@ export function CallTranscript({ call }: { call: Call }) {
       {moments.length > 0 ? (
         <div className="sticky top-0 z-10 -mx-1 mb-2 flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-1 pb-2.5 pt-1">
           <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted-2">{moments.length} captured moment{moments.length > 1 ? 's' : ''}</span>
-          {moments.map((m, n) => (
-            <button
-              key={m.i}
-              onClick={() => jump(m.i)}
-              title={`Jump to this ${SIGNAL_META[m.type].label.toLowerCase()} in the conversation`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-text"
-              style={{ borderColor: `color-mix(in srgb, ${SIGNAL_META[m.type].color} 45%, transparent)` }}
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: SIGNAL_META[m.type].color }} />
-              {SIGNAL_META[m.type].label}{moments.filter((x) => x.type === m.type).length > 1 ? ` ${moments.filter((x, j) => x.type === m.type && j <= n).length}` : ''}
-            </button>
-          ))}
+          {moments.map((m, n) => {
+            const label = `${SIGNAL_META[m.type].label}${moments.filter((x) => x.type === m.type).length > 1 ? ` ${moments.filter((x, j) => x.type === m.type && j <= n).length}` : ''}`
+            // A signal whose quote couldn't be located still gets a chip - honest,
+            // muted, with the why on hover. The signal itself is on the cards below.
+            if (m.line == null)
+              return (
+                <span key={n} title="The exact wording wasn't found in this transcript - open the signal card for the captured quote" className="inline-flex cursor-default items-center gap-1.5 rounded-full border border-dashed border-line bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted-2">
+                  <span className="h-1.5 w-1.5 rounded-full opacity-50" style={{ background: SIGNAL_META[m.type].color }} />
+                  {label} · not located
+                </span>
+              )
+            return (
+              <button
+                key={n}
+                onClick={() => jump(m.line as number)}
+                title={`Jump to this ${SIGNAL_META[m.type].label.toLowerCase()} in the conversation`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-text"
+                style={{ borderColor: `color-mix(in srgb, ${SIGNAL_META[m.type].color} 45%, transparent)` }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: SIGNAL_META[m.type].color }} />
+                {label}
+              </button>
+            )
+          })}
         </div>
       ) : (
         <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-2">Transcript</div>
@@ -217,9 +228,9 @@ export function CallTranscript({ call }: { call: Call }) {
       <div>
         {lines.map((l, i) => {
           const color = l.speaker ? speakerColor(l.speaker) : 'var(--muted-2)'
-          const sameSpeaker = i > 0 && lines[i - 1].speaker === l.speaker && !l.signalType && !lines[i - 1].signalType
-          if (l.signalType) {
-            const sc = SIGNAL_META[l.signalType].color
+          const sameSpeaker = i > 0 && lines[i - 1].speaker === l.speaker && !l.signalTypes && !lines[i - 1].signalTypes
+          if (l.signalTypes?.length) {
+            const sc = SIGNAL_META[l.signalTypes[0]].color
             return (
               <div
                 key={i}
@@ -238,7 +249,7 @@ export function CallTranscript({ call }: { call: Call }) {
                     <span className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold text-white" style={{ background: color }}>{initials(l.speaker)}</span>
                   )}
                   {l.speaker && <span className="text-[12px] font-semibold" style={{ color }}>{l.speaker}</span>}
-                  <SignalBadge type={l.signalType} size="sm" />
+                  {l.signalTypes.map((t, k) => <SignalBadge key={k} type={t} size="sm" />)}
                   <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide" style={{ color: sc }}>Captured</span>
                 </div>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-text">“{l.text}”</p>
