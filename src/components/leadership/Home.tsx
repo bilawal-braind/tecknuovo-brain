@@ -86,7 +86,9 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       if (!perAccount.has(s.accountId)) perAccount.set(s.accountId, [])
       if (!perAccount.get(s.accountId)!.some((x) => x.id === s.id)) perAccount.get(s.accountId)!.push(s)
     }
-    const cards = [...perAccount.entries()].map(([accountId, items]) => {
+    const cards = [...perAccount.entries()]
+      .filter(([accountId]) => accountId && accounts.some((a) => a.id === accountId))
+      .map(([accountId, items]) => {
       const sorted = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       const rk = items.filter((s) => s.type === 'risk')
       const op = items.filter((s) => s.type === 'opportunity')
@@ -351,7 +353,7 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
 
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: `3px solid ${accent}` }}>
-      <button onClick={() => setOpen((o) => !o)} className="flex-1 p-4 text-left transition-colors hover:bg-bg-2">
+      <button onClick={() => setOpen((o) => !o)} className="min-h-[124px] flex-1 p-4 text-left transition-colors hover:bg-bg-2">
         <div className="flex flex-wrap items-center gap-2">
           {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
           <span className="text-[15px] font-bold">{accountName(card.accountId)}</span>
@@ -361,7 +363,7 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
           {card.op.length > 0 && <Chip color="var(--opp)">{card.op.length} opp{card.op.length !== 1 ? 's' : ''}{card.value ? ` · ~${gbp(card.value)}` : ''}</Chip>}
           <ChevronDown size={15} className={`ml-auto shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-        <p className="mt-2 text-[13px] leading-relaxed text-text">{headline}</p>
+        <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-text">{headline}</p>
       </button>
 
       {open && (

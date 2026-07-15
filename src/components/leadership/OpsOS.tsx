@@ -63,7 +63,13 @@ export function OpsOS() {
       .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name))
   }, [days])
 
-  const rows = apiRows && apiRows.length ? apiRows : derived
+  const allRows = apiRows && apiRows.length ? apiRows : derived
+  // TN people only: a name with an org suffix in parens that is NOT Tecknuovo
+  // (e.g. "Pickup, Drew (DES OD-...)") is a client attendee - not our ops view.
+  const rows = useMemo(() => allRows.filter((r) => {
+    const m = r.name.match(/\(([^)]*)\)/)
+    return !m || /tecknuovo/i.test(m[1])
+  }), [allRows])
   const top = rows.slice(0, 12)
   // People tab shows the wider team: everyone seen on calls, then the named org
   // roster from Monday (client directors, partners, delivery leads) at zero calls -
@@ -73,7 +79,8 @@ export function OpsOS() {
     const extras = people
       .filter((p) => /^(cp|cd|dl)-/.test(p.id) && p.name && !seen.has(normName(p.name)))
       .map((p) => ({ name: p.name, calls: 0, accounts: 0, signals: 0, talk_share: 0 }))
-    return [...top, ...extras].slice(0, 12)
+    // The org roster is never sliced away - named CDs/CPs/delivery leads always show.
+    return [...top, ...extras].slice(0, Math.max(20, extras.length + 8))
   }, [top])
   const maxCalls = Math.max(1, ...top.map((r) => r.calls))
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
