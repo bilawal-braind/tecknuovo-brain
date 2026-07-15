@@ -22,9 +22,11 @@ const FEATURED: { name: string; role?: string }[] = [
   { name: 'Kiera Battersby', role: 'Client Delivery Director' },
   { name: 'Meesha Chotai', role: 'Portfolio Director' },
   { name: 'Chloe Hollinshead', role: 'Client Partner' },
-  { name: 'Kaitlyn Bryant' },
-  { name: 'Arjun Mammen' },
-  { name: 'Rob Kirkham' },
+  { name: 'Sophie Martin', role: 'Delivery Manager' },
+  { name: 'Kaitlyn Bryant', role: 'Delivery Manager' },
+  { name: 'Lloyd Evans', role: 'Delivery Manager' },
+  { name: 'Arjun Mammen', role: 'Consultant' },
+  { name: 'Rob Kirkham', role: 'Head of IT' },
 ]
 const featuredRole = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))?.role
 
