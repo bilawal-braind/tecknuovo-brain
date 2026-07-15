@@ -150,3 +150,12 @@ header[class*='bg-surface'] {
   to { opacity: 1; transform: none; }
 }
 .chain-node { animation: chainIn 0.45s ease both; }
+
+/* Glassmorphism card - frosted surface over the app's gradient background */
+.glass {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, #ffffff 60%, var(--line));
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.08);
+}

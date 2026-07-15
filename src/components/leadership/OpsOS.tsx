@@ -101,6 +101,10 @@ export function OpsOS() {
   }, [rows])
 
   const maxCalls = Math.max(1, ...roster.map((r) => r.calls))
+  // A readable axis: 4 even steps up to a rounded ceiling (e.g. max 6 -> 0,2,4,6,8).
+  const step = Math.max(1, Math.ceil(maxCalls / 4))
+  const scaleMax = step * 4
+  const ticks = [0, 1, 2, 3, 4].map((i) => i * step)
   const pieRows = roster.filter((r) => r.calls > 0)
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
@@ -154,7 +158,7 @@ export function OpsOS() {
       {tab === 'overview' ? (
         <>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
+            <div className="glass rounded-2xl p-5 lg:col-span-2">
               <div className="eyebrow">Calls analysed over time</div>
               <p className="mt-0.5 text-[11px] text-muted-2">How many team calls the brain processed each week. A dip means a quiet week - or meetings running without transcription.</p>
               <div className="mt-3 h-[170px]">
@@ -176,7 +180,7 @@ export function OpsOS() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-line bg-surface p-5">
+            <div className="glass rounded-2xl p-5">
               <div className="eyebrow">Share of calls</div>
               <p className="mt-0.5 text-[11px] text-muted-2">Who was in the room, across every analysed call this period.</p>
               <div className="mt-1 flex items-center gap-3">
@@ -203,9 +207,14 @@ export function OpsOS() {
           </div>
 
           {/* the coverage board: faces + bars, click to open the person */}
-          <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
-            <div className="eyebrow">Coverage board · last {days} days</div>
-            <p className="mt-0.5 text-[11px] text-muted-2">Each bar is that person's calls, scaled against the busiest person. Airtime = their share of everything said. Click anyone to open their profile.</p>
+          <div className="glass mt-4 rounded-2xl p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <div className="eyebrow">Coverage board</div>
+                <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days. Airtime = their share of everything said. Click anyone to open their profile.</p>
+              </div>
+              <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
+            </div>
             <div className="mt-4 space-y-3">
               {roster.map((r, i) => (
                 <button key={r.name} onClick={() => setSelPerson(r.name)} className="group flex w-full items-center gap-3.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
@@ -215,9 +224,12 @@ export function OpsOS() {
                       <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
                       <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% airtime</span>
                     </div>
-                    <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
-                      <div className="flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
-                        style={{ width: `${Math.max(8, Math.round((100 * r.calls) / maxCalls))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
+                    <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
+                      {ticks.slice(1, 4).map((t) => (
+                        <span key={t} className="absolute bottom-0 top-0 w-px bg-[var(--line-2)] opacity-60" style={{ left: `${(100 * t) / scaleMax}%` }} aria-hidden />
+                      ))}
+                      <div className="relative flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
+                        style={{ width: `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
                         <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
                       </div>
                     </div>
@@ -225,6 +237,17 @@ export function OpsOS() {
                   <ArrowRight size={15} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
                 </button>
               ))}
+              {/* the shared axis, aligned under the bar tracks */}
+              <div className="flex items-center gap-3.5 px-2">
+                <span className="w-[42px] shrink-0" aria-hidden />
+                <div className="relative h-5 min-w-0 flex-1">
+                  {ticks.map((t) => (
+                    <span key={t} className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold text-muted-2" style={{ left: `${(100 * t) / scaleMax}%` }}>{t}</span>
+                  ))}
+                </div>
+                <span className="w-[15px] shrink-0" aria-hidden />
+              </div>
+              <p className="pl-[60px] text-[10px] font-semibold uppercase tracking-wide text-muted-2">Calls attended · last {days} days</p>
             </div>
           </div>
         </>
