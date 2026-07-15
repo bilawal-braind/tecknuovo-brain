@@ -76,10 +76,6 @@ export function Leadership() {
         sections={[
           { id: 'home', label: 'Overview', icon: Sparkles },
           { id: 'opsos', label: 'Ops OS', icon: Users },
-          { id: 'overview', label: 'Portfolio health', icon: LayoutDashboard },
-          { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
-          { id: 'sales', label: 'Sales', icon: PoundSterling },
-          { id: 'pods', label: 'Pods', icon: Layers, count: livePods().length },
         ]}
       >
         <div className="px-7 py-6">

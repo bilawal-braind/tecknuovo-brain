@@ -202,7 +202,7 @@ export type ApiBrief = {
   audience: string
   period_start: string
   period_end: string
-  content: { whats_happening: string; why: string; needs_you: string[] }
+  content: { whats_happening: string; why: string; needs_you: string[]; watch_for?: string[] }
   created_at: string
 }
 export type ApiPersonMetrics = {
