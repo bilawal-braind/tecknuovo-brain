@@ -1,17 +1,18 @@
-// Ops OS: the people/engagement view.
-//   Overview - calls over time, share of calls, and the coverage board (faces + bars,
-//              click anyone to open their full profile).
+// Ops OS: the people/engagement view, navigated by a collapsible left rail.
+//   Overview - the MD read: team rhythm (calls over time), where the attention
+//              went (calls per account vs account health), and the coverage board.
 //   People   - uniform card grid; a card opens the person's FULL-PAGE profile.
 // Coverage telemetry from analysed calls - demo figures fill in for the curated
 // roster until their first transcribed call, then real numbers take over.
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
+import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity, ChevronLeft } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts } from '../../data/org'
+import { HEALTH_COLOR } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
@@ -61,6 +62,7 @@ function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; s
 
 export function OpsOS() {
   const [tab, setTab] = useState<Tab>('overview')
+  const [rail, setRail] = useState(true)
   const [days, setDays] = useState<Days>(30)
   const [selPerson, setSelPerson] = useState<string | null>(null)
   const [apiRows, setApiRows] = useState<ApiPersonMetrics[] | null>(null)
@@ -101,11 +103,9 @@ export function OpsOS() {
   }, [rows])
 
   const maxCalls = Math.max(1, ...roster.map((r) => r.calls))
-  // A readable axis: 4 even steps up to a rounded ceiling (e.g. max 6 -> 0,2,4,6,8).
   const step = Math.max(1, Math.ceil(maxCalls / 4))
   const scaleMax = step * 4
   const ticks = [0, 1, 2, 3, 4].map((i) => i * step)
-  const pieRows = roster.filter((r) => r.calls > 0)
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
   const line = useMemo(() => {
@@ -119,6 +119,21 @@ export function OpsOS() {
         calls: calls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end }).length,
       }
     })
+  }, [days])
+
+  // Where the team's attention went: calls per account, against account health.
+  // The MD question this answers: is our effort where the value and risk are?
+  const attention = useMemo(() => {
+    const cutoff = Date.now() - days * DAY
+    const m = new Map<string, number>()
+    let total = 0
+    for (const c of calls) {
+      if (Date.parse(c.date) < cutoff || !c.accountId) continue
+      m.set(c.accountId, (m.get(c.accountId) || 0) + 1)
+      total++
+    }
+    const rows = [...m.entries()].map(([id, n]) => ({ id, n })).sort((a, b) => b.n - a.n).slice(0, 8)
+    return { total, rows, max: Math.max(1, ...rows.map((r) => r.n)) }
   }, [days])
 
   const roleOf = (name: string) => {
@@ -142,138 +157,150 @@ export function OpsOS() {
           <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Ops OS</h3></div>
           <p className="mt-0.5 text-[13px] text-muted">Who's in the conversations, how much, and where{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}. Engagement coverage, not a performance measure.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
-            <button onClick={() => setTab('overview')} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${tab === 'overview' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}><LayoutDashboard size={13} /> Overview</button>
-            <button onClick={() => setTab('people')} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${tab === 'people' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}><Users size={13} /> People</button>
-          </div>
-          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
-            {([7, 14, 30] as Days[]).map((v) => (
-              <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>{v}d</button>
-            ))}
-          </div>
+        <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
+          {([7, 14, 30] as Days[]).map((v) => (
+            <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>{v}d</button>
+          ))}
         </div>
       </div>
 
-      {tab === 'overview' ? (
-        <>
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="glass rounded-2xl p-5 lg:col-span-2">
-              <div className="eyebrow">Calls analysed over time</div>
-              <p className="mt-0.5 text-[11px] text-muted-2">How many team calls the brain processed each week. A dip means a quiet week - or meetings running without transcription.</p>
-              <div className="mt-3 h-[170px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={line} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="opsFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="var(--line)" vertical={false} />
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
-                    <Area type="monotone" dataKey="calls" stroke="var(--accent)" strokeWidth={2} fill="url(#opsFill)" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="glass rounded-2xl p-5">
-              <div className="eyebrow">Share of calls</div>
-              <p className="mt-0.5 text-[11px] text-muted-2">Who was in the room, across every analysed call this period.</p>
-              <div className="mt-1 flex items-center gap-3">
-                <div className="h-[150px] w-[150px] shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieRows.map((r) => ({ name: displayName(r.name), value: r.calls }))} dataKey="value" nameKey="name" innerRadius={40} outerRadius={68} paddingAngle={2} isAnimationActive={false}>
-                        {pieRows.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} stroke="var(--surface)" />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="min-w-0 space-y-1">
-                  {pieRows.slice(0, 6).map((r, i) => (
-                    <div key={r.name} className="flex items-center gap-1.5 text-[11.5px]">
-                      <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
-                      <span className="truncate text-muted">{displayName(r.name).split(' ')[0]}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* the coverage board: faces + bars, click to open the person */}
-          <div className="glass mt-4 rounded-2xl p-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <div className="eyebrow">Coverage board</div>
-                <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days. Airtime = their share of everything said. Click anyone to open their profile.</p>
-              </div>
-              <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {roster.map((r, i) => (
-                <button key={r.name} onClick={() => setSelPerson(r.name)} className="group flex w-full items-center gap-3.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
-                  <PersonPhoto name={r.name} size={42} color={PALETTE[i % PALETTE.length]} ring />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
-                      <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% airtime</span>
-                    </div>
-                    <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
-                      {ticks.slice(1, 4).map((t) => (
-                        <span key={t} className="absolute bottom-0 top-0 w-px bg-[var(--line-2)] opacity-60" style={{ left: `${(100 * t) / scaleMax}%` }} aria-hidden />
-                      ))}
-                      <div className="relative flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
-                        style={{ width: `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
-                        <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <ArrowRight size={15} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-              ))}
-              {/* the shared axis, aligned under the bar tracks */}
-              <div className="flex items-center gap-3.5 px-2">
-                <span className="w-[42px] shrink-0" aria-hidden />
-                <div className="relative h-5 min-w-0 flex-1">
-                  {ticks.map((t) => (
-                    <span key={t} className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold text-muted-2" style={{ left: `${(100 * t) / scaleMax}%` }}>{t}</span>
-                  ))}
-                </div>
-                <span className="w-[15px] shrink-0" aria-hidden />
-              </div>
-              <p className="pl-[60px] text-[10px] font-semibold uppercase tracking-wide text-muted-2">Calls attended · last {days} days</p>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {roster.map((r, i) => (
-            <button key={r.name} onClick={() => setSelPerson(r.name)}
-              className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
-              style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
-              <PersonPhoto name={r.name} size={64} color={PALETTE[i % PALETTE.length]} ring />
-              <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
-              <div className="w-full truncate text-[11.5px] text-muted">{roleOf(r.name)}</div>
-              <div className="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1">
-                {(r.demoAccounts ?? []).slice(0, 3).map((n) => (
-                  <span key={n} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{n}</span>
-                ))}
-              </div>
-              <div className="mt-auto grid w-full grid-cols-3 gap-2 pt-3">
-                <MiniStat label="Calls" value={r.calls} />
-                <MiniStat label="Accounts" value={r.accounts} />
-                <MiniStat label="Signals" value={r.signals} />
-              </div>
+      <div className="mt-4 flex items-start gap-4">
+        {/* the collapsible rail - the arrow toggle switches it between labels and icons */}
+        <div className={`glass sticky top-4 flex shrink-0 flex-col gap-1 rounded-2xl p-2 transition-all duration-300 ${rail ? 'w-44' : 'w-[52px]'}`}>
+          {([['overview', 'Overview', LayoutDashboard], ['people', 'People', Users]] as const).map(([id, label, Icon]) => (
+            <button key={id} onClick={() => setTab(id as Tab)} title={label}
+              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-[13px] font-semibold transition-colors ${tab === id ? 'text-white' : 'text-muted hover:text-text'}`}
+              style={tab === id ? { background: 'var(--accent)' } : undefined}>
+              <Icon size={16} className="shrink-0" />
+              {rail && <span className="truncate">{label}</span>}
             </button>
           ))}
+          <button onClick={() => setRail((v) => !v)} aria-label={rail ? 'Collapse' : 'Expand'}
+            className="mt-1 flex items-center justify-center rounded-xl border border-line bg-surface py-1.5 text-muted-2 transition-colors hover:text-text">
+            <ChevronLeft size={15} className={`transition-transform duration-300 ${rail ? '' : 'rotate-180'}`} />
+          </button>
         </div>
-      )}
+
+        <div className="min-w-0 flex-1">
+          {tab === 'overview' ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="glass rounded-2xl p-5">
+                  <div className="eyebrow">Team rhythm</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">Calls the brain analysed each week. A dip means a quiet week - or meetings running without transcription.</p>
+                  <div className="mt-3 h-[170px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={line} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="opsFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="var(--line)" vertical={false} />
+                        <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
+                        <Area type="monotone" dataKey="calls" stroke="var(--accent)" strokeWidth={2} fill="url(#opsFill)" isAnimationActive={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="glass rounded-2xl p-5">
+                  <div className="eyebrow">Where the attention went</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">Team calls per account, coloured by account health - is the effort where the value and the risk are?</p>
+                  <div className="mt-3.5 space-y-2.5">
+                    {attention.rows.length === 0 ? (
+                      <p className="py-8 text-center text-[12px] text-muted-2">No calls in this window.</p>
+                    ) : attention.rows.map((r) => {
+                      const acc = accounts.find((a) => a.id === r.id)
+                      const color = acc ? HEALTH_COLOR[acc.health] : 'var(--muted-2)'
+                      return (
+                        <div key={r.id} className="flex items-center gap-2.5">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+                          <span className="w-[110px] shrink-0 truncate text-[12px] font-semibold">{accountName(r.id)}</span>
+                          <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-2">
+                            <div className="h-full rounded-full" style={{ width: `${Math.round((100 * r.n) / attention.max)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})` }} />
+                          </div>
+                          <span className="w-[72px] shrink-0 text-right text-[11px] font-medium text-muted">{r.n} · {attention.total ? Math.round((100 * r.n) / attention.total) : 0}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* the coverage board: faces + bars on a real scale, click through to people */}
+              <div className="glass mt-4 rounded-2xl p-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <div className="eyebrow">Coverage board</div>
+                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days. Airtime = their share of everything said. Click anyone to open their profile.</p>
+                  </div>
+                  <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {roster.map((r, i) => (
+                    <button key={r.name} onClick={() => setSelPerson(r.name)} className="group flex w-full items-center gap-3.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
+                      <PersonPhoto name={r.name} size={42} color={PALETTE[i % PALETTE.length]} ring />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
+                          <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% airtime</span>
+                        </div>
+                        <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
+                          {ticks.slice(1, 4).map((t) => (
+                            <span key={t} className="absolute bottom-0 top-0 w-px bg-[var(--line-2)] opacity-60" style={{ left: `${(100 * t) / scaleMax}%` }} aria-hidden />
+                          ))}
+                          <div className="relative flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
+                            style={{ width: `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
+                            <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <ArrowRight size={15} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                  ))}
+                  {/* the shared axis, aligned under the bar tracks */}
+                  <div className="flex items-center gap-3.5 px-2">
+                    <span className="w-[42px] shrink-0" aria-hidden />
+                    <div className="relative h-5 min-w-0 flex-1">
+                      {ticks.map((t) => (
+                        <span key={t} className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold text-muted-2" style={{ left: `${(100 * t) / scaleMax}%` }}>{t}</span>
+                      ))}
+                    </div>
+                    <span className="w-[15px] shrink-0" aria-hidden />
+                  </div>
+                  <p className="pl-[60px] text-[10px] font-semibold uppercase tracking-wide text-muted-2">Calls attended · last {days} days</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {roster.map((r, i) => (
+                <button key={r.name} onClick={() => setSelPerson(r.name)}
+                  className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
+                  style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+                  <PersonPhoto name={r.name} size={64} color={PALETTE[i % PALETTE.length]} ring />
+                  <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
+                  <div className="w-full truncate text-[11.5px] text-muted">{roleOf(r.name)}</div>
+                  <div className="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1">
+                    {(r.demoAccounts ?? []).slice(0, 3).map((n) => (
+                      <span key={n} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{n}</span>
+                    ))}
+                  </div>
+                  <div className="mt-auto grid w-full grid-cols-3 gap-2 pt-3">
+                    <MiniStat label="Calls" value={r.calls} />
+                    <MiniStat label="Accounts" value={r.accounts} />
+                    <MiniStat label="Signals" value={r.signals} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -294,6 +321,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
     return (row.demoAccounts ?? []).map((n) => accounts.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id).filter(Boolean) as string[]
   }, [theirCalls, row])
   const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 8), [theirCalls])
+  const yieldPerCall = row.calls ? (row.signals / row.calls).toFixed(1) : '0'
 
   return (
     <div>
@@ -301,7 +329,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
         <ArrowLeft size={14} /> Back to Ops OS
       </button>
 
-      <div className="mt-3 rounded-2xl border border-line bg-surface p-6" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="glass mt-3 rounded-2xl p-6" style={{ borderTop: `3px solid ${color}` }}>
         <div className="flex flex-wrap items-center gap-5">
           <PersonPhoto name={row.name} size={88} color={color} ring />
           <div className="min-w-0 flex-1">
@@ -317,7 +345,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <BigStat icon={Video} label="Calls" value={row.calls} sub={`last ${days} days`} color={color} />
           <BigStat icon={Building2} label="Accounts" value={row.accounts} sub="covered" color={color} />
-          <BigStat icon={Radio} label="Signals" value={row.signals} sub="from their calls" color={color} />
+          <BigStat icon={Radio} label="Signals" value={row.signals} sub={`${yieldPerCall} per call`} color={color} />
           <BigStat icon={Activity} label="Airtime" value={`${row.talk_share}%`} sub="of team conversations" color={color} />
         </div>
       </div>
