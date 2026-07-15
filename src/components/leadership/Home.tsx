@@ -308,9 +308,9 @@ function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: 
       {parts.map((p, i) =>
         p.accountId ? (
           <button key={i} onClick={() => onOpenAccount(p.accountId!)}
-            className="group inline-flex items-baseline gap-0.5 font-semibold text-[var(--accent-d)] hover:underline">
+            className="group inline-flex items-baseline font-semibold text-[var(--accent-d)] hover:underline">
             {p.text}
-            <ArrowRight size={11} className="translate-y-[1px] opacity-0 transition-opacity group-hover:opacity-100" />
+            <ArrowRight size={11} className="w-0 translate-y-[1px] opacity-0 transition-all group-hover:ml-0.5 group-hover:w-[11px] group-hover:opacity-100" />
           </button>
         ) : (
           <span key={i}>{p.text}</span>
