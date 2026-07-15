@@ -143,3 +143,10 @@ header[class*='bg-surface'] {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Leadership OS: evidence-chain nodes flow in one after another */
+@keyframes chainIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.chain-node { animation: chainIn 0.45s ease both; }

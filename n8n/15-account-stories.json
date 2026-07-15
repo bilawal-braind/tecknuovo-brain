@@ -1,0 +1,240 @@
+{
+ "name": "TN Brain \u00b7 15 \u00b7 Account Stories (Mondays 07:52)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "52 7 * * 1"
+      }
+     ]
+    }
+   },
+   "id": "st_sched",
+   "name": "Mondays 07:52",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    220,
+    260
+   ]
+  },
+  {
+   "parameters": {},
+   "id": "st_manual",
+   "name": "Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    220,
+    460
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT jsonb_build_object('accounts', COALESCE((SELECT jsonb_agg(x.acct) FROM (\n  SELECT jsonb_build_object(\n    'account', a.name,\n    'signals', (SELECT jsonb_agg(jsonb_build_object('type', s.type, 'summary', s.summary, 'quote', left(s.quote, 180),\n                  'band', s.details->>'band', 'category', s.details->>'risk_category',\n                  'networks', s.details->>'networks_total', 'value_mentioned', s.details->>'value',\n                  'status', s.status, 'age_days', (now()::date - s.created_at::date)))\n                FROM signals s WHERE s.account_id = a.id\n                AND (s.created_at > now() - interval '7 days'\n                     OR (s.type = 'risk' AND s.status IN ('new','routed') AND s.created_at > now() - interval '30 days'))),\n    'calls', (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date))\n              FROM calls c WHERE c.account_id = a.id AND c.call_date > now() - interval '7 days'),\n    'latest_weekly_report', (SELECT jsonb_build_object('rag', w.rag, 'summary', left(w.summary, 600), 'lowlights', left(w.lowlights, 400))\n                             FROM weekly_reports w WHERE w.account_id = a.id ORDER BY w.week_ending DESC LIMIT 1),\n    'open_pipeline', (SELECT jsonb_build_object('deals', count(*), 'value', COALESCE(sum(d.amount), 0))\n                      FROM deals d WHERE d.account_id = a.id AND d.is_open)\n  ) AS acct\n  FROM accounts a\n  WHERE EXISTS (SELECT 1 FROM signals s2 WHERE s2.account_id = a.id AND s2.created_at > now() - interval '7 days')\n     OR EXISTS (SELECT 1 FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days')\n  LIMIT 8\n) x), '[]'::jsonb)) AS ctx;",
+    "options": {}
+   },
+   "id": "st_gather",
+   "name": "Gather per account",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    460,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const ctx=$json.ctx;\nconst rules='You are tnAI, writing the Managing Director of Tecknuovo one MACRO STORY per account, from the past week\\'s data below (signals with quotes, the calls they came from, the latest weekly delivery report, open pipeline). For EACH account in the data produce: headline = 1-2 sentences, the so-what an MD absorbs in five seconds (name the biggest thing, with numbers where the data has them). story = an IN-DEPTH analysis of 2-3 full paragraphs: what actually happened across this account\\'s calls this week and the thread connecting them; the risks in context - what is driving them, whether they are one-offs or a pattern, how severe, and call out anything sitting unresolved with its age in days; the commercial side - opportunities, their NETWORKS strength, any value mentioned, how the pipeline looks; and close with where this account is heading and what should happen next, naming who should act where the data suggests it. Be precise and analytical, never generic - every claim anchored in the data, quote fragments woven in where they carry weight. Judge everything from Tecknuovo\\'s perspective. Plain UK business English. Never use em dashes; use commas or hyphens. Return ONLY JSON: {\"items\":[{\"account\":\"exact account name\",\"headline\":\"...\",\"story\":\"paragraphs separated by \\\\n\\\\n\"}]}';\nconst prompt=rules+'\\n\\nTHE WEEK\\'S DATA:\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
+   },
+   "id": "st_prompt",
+   "name": "Build prompt",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    680,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "promptType": "define",
+    "text": "={{ $json.prompt }}",
+    "messages": {},
+    "batching": {}
+   },
+   "id": "st_chain",
+   "name": "Write stories (Azure)",
+   "type": "@n8n/n8n-nodes-langchain.chainLlm",
+   "typeVersion": 1.5,
+   "position": [
+    900,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "model": "gpt-4o-mini",
+    "options": {
+     "temperature": 0.3
+    }
+   },
+   "id": "st_model",
+   "name": "Azure OpenAI Chat Model",
+   "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+   "typeVersion": 1,
+   "position": [
+    900,
+    560
+   ],
+   "credentials": {
+    "azureOpenAiApi": {
+     "id": "W7KKkeJLvjngHgZA",
+     "name": "Azure Open AI account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "const raw=($json.text||$json.response||$json.output||'').trim();\nconst m=raw.match(/\\{[\\s\\S]*\\}/); if(!m){return [];}\nlet obj; try{obj=JSON.parse(m[0]);}catch(e){return [];}\nconst items=Array.isArray(obj.items)?obj.items.slice(0,10).map(function(x){return {\n account:String((x&&x.account)||'').slice(0,120),\n headline:String((x&&x.headline)||'').slice(0,400),\n story:String((x&&x.story)||'').slice(0,4000)\n}}).filter(function(x){return x.account&&x.story}):[];\nif(!items.length){return [];}\nconst e=function(s){return String(s).replace(/'/g,\"''\")};\nconst sql=\"INSERT INTO briefs (audience,period_start,period_end,content) VALUES ('stories', now()::date-7, now()::date, '\"+e(JSON.stringify({items:items}))+\"'::jsonb);\";\nreturn [{json:{sql,accounts:items.length}}];"
+   },
+   "id": "st_save_sql",
+   "name": "Build save SQL",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1140,
+    360
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "={{ $json.sql }}",
+    "options": {}
+   },
+   "id": "st_save",
+   "name": "Save stories",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    1360,
+    360
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "content": "## Account stories - the macro brief per account\nMondays 07:52 (+ manual): for every account active this week, writes an MD-grade headline (1-2 sentences) + an in-depth 2-3 paragraph analysis: the week's thread, risks in context with unresolved ages, the commercial side, and where the account is heading. Stored in `briefs` (audience='stories'); the Leadership account cards read it - card face shows the headline, expansion shows the full story.",
+    "height": 230,
+    "width": 430
+   },
+   "id": "st_note",
+   "name": "How it works",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    180,
+    20
+   ]
+  }
+ ],
+ "connections": {
+  "Mondays 07:52": {
+   "main": [
+    [
+     {
+      "node": "Gather per account",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run": {
+   "main": [
+    [
+     {
+      "node": "Gather per account",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gather per account": {
+   "main": [
+    [
+     {
+      "node": "Build prompt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build prompt": {
+   "main": [
+    [
+     {
+      "node": "Write stories (Azure)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write stories (Azure)": {
+   "main": [
+    [
+     {
+      "node": "Build save SQL",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build save SQL": {
+   "main": [
+    [
+     {
+      "node": "Save stories",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Azure OpenAI Chat Model": {
+   "ai_languageModel": [
+    [
+     {
+      "node": "Write stories (Azure)",
+      "type": "ai_languageModel",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "pinData": {}
+}

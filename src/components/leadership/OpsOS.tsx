@@ -1,9 +1,10 @@
-// Ops OS: the people/engagement view. Who is on calls, how much, across which
-// accounts - coverage telemetry from analysed calls, NOT a performance measure.
-// Metrics come from /api/people-metrics (calls.speaker_stats); when that's empty
-// (mock mode, or before the migration backfill) it derives from in-memory calls.
+// Ops OS: the people/engagement view, in two sections.
+//   Overview - the graphs: calls over time, share of calls, avatar coverage bars.
+//   People   - the card grid (up to 12): photo, role, projects; expand for their
+//              calls, accounts covered and the signals their calls surfaced.
+// Coverage telemetry from analysed calls - NOT a performance measure.
 import { useEffect, useMemo, useState } from 'react'
-import { Users, ChevronDown, Video } from 'lucide-react'
+import { Users, ChevronDown, Video, LayoutDashboard } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
@@ -12,25 +13,32 @@ import { people, accountName } from '../../data/org'
 import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
+type Tab = 'overview' | 'people'
 const DAY = 86_400_000
-const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A']
-const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#1F7A3A', '#B4468E', '#D64545', '#5C7C8A', '#8A6D3B', '#3B8A6D', '#6D3B8A', '#8A3B5C']
+const slugify = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 const initials = (n: string) => n.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 
-// Photo from /people/<name-slug>.jpg (curated demo assets); initials circle otherwise.
+// Photo from /people/<name-slug>.jpg. Teams often gives "Surname, Firstname" -
+// try that slug, then the flipped order, then fall back to initials.
 function PersonPhoto({ name, size = 36, color }: { name: string; size?: number; color: string }) {
-  const [failed, setFailed] = useState(false)
-  if (failed)
+  const candidates = useMemo(() => {
+    const base = slugify(name)
+    const flipped = name.includes(',') ? slugify(name.split(',').map((s) => s.trim()).reverse().join(' ')) : base
+    return [...new Set([base, flipped])]
+  }, [name])
+  const [idx, setIdx] = useState(0)
+  if (idx >= candidates.length)
     return <span className="grid shrink-0 place-items-center rounded-full font-bold text-white" style={{ width: size, height: size, background: color, fontSize: size * 0.34 }}>{initials(name)}</span>
-  return <img src={`/people/${slugify(name)}.jpg`} alt={name} onError={() => setFailed(true)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+  return <img src={`/people/${candidates[idx]}.jpg`} alt={name} onError={() => setIdx((i) => i + 1)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
 }
 
 export function OpsOS() {
+  const [tab, setTab] = useState<Tab>('overview')
   const [days, setDays] = useState<Days>(30)
   const [apiRows, setApiRows] = useState<ApiPersonMetrics[] | null>(null)
   useEffect(() => { let on = true; fetchPeopleMetrics(days).then((r) => { if (on) setApiRows(r) }); return () => { on = false } }, [days])
 
-  // Fallback derivation from in-memory calls (speakers map, or the single named speaker in mock data).
   const derived = useMemo<ApiPersonMetrics[]>(() => {
     const cutoff = Date.now() - days * DAY
     const acc = new Map<string, { calls: number; accounts: Set<string>; signals: number; lines: number }>()
@@ -50,11 +58,10 @@ export function OpsOS() {
   }, [days])
 
   const rows = apiRows && apiRows.length ? apiRows : derived
-  const top = rows.slice(0, 8)
+  const top = rows.slice(0, 12)
   const maxCalls = Math.max(1, ...top.map((r) => r.calls))
-  const earliest = useMemo(() => calls.length ? calls[calls.length - 1].date : null, [])
+  const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
-  // Calls over time, weekly buckets covering the window.
   const line = useMemo(() => {
     const weeks = Math.max(2, Math.ceil(days / 7))
     const now = Date.now()
@@ -68,19 +75,28 @@ export function OpsOS() {
     })
   }, [days])
 
-  const roleOf = (name: string) => people.find((p) => p.name.toLowerCase() === name.toLowerCase())?.role ?? 'Team member'
+  const roleOf = (name: string) => {
+    const clean = name.includes(',') ? name.split(',').map((s) => s.trim()).reverse().join(' ') : name
+    return people.find((p) => p.name.toLowerCase() === name.toLowerCase() || p.name.toLowerCase() === clean.toLowerCase())?.role ?? 'Team member'
+  }
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Ops OS</h3></div>
-          <p className="mt-0.5 text-[13px] text-muted">Who's in the conversations, how much, and where - engagement coverage from analysed calls{earliest ? ` since ${fmt(earliest)}` : ''}. Not a performance measure.</p>
+          <p className="mt-0.5 text-[13px] text-muted">Who's in the conversations, how much, and where{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}. Engagement coverage, not a performance measure.</p>
         </div>
-        <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
-          {([7, 14, 30] as Days[]).map((v) => (
-            <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>{v} days</button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
+            <button onClick={() => setTab('overview')} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${tab === 'overview' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}><LayoutDashboard size={13} /> Overview</button>
+            <button onClick={() => setTab('people')} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${tab === 'people' ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}><Users size={13} /> People</button>
+          </div>
+          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
+            {([7, 14, 30] as Days[]).map((v) => (
+              <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>{v}d</button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -88,10 +104,9 @@ export function OpsOS() {
         <p className="mt-4 rounded-2xl border border-line bg-surface p-8 text-center text-[12.5px] text-muted-2">
           No attendance data in this window yet. New calls record who spoke automatically; run the leadership_os migration to backfill the existing ones.
         </p>
-      ) : (
+      ) : tab === 'overview' ? (
         <>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {/* calls over time */}
             <div className="rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
               <div className="eyebrow">Calls analysed over time</div>
               <div className="mt-3 h-[170px]">
@@ -113,7 +128,6 @@ export function OpsOS() {
               </div>
             </div>
 
-            {/* share of calls */}
             <div className="rounded-2xl border border-line bg-surface p-5">
               <div className="eyebrow">Share of calls</div>
               <div className="mt-1 flex items-center gap-3">
@@ -139,7 +153,6 @@ export function OpsOS() {
             </div>
           </div>
 
-          {/* avatar coverage bars */}
           <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
             <div className="eyebrow">Calls attended · last {days} days</div>
             <div className="mt-3 space-y-2.5">
@@ -159,16 +172,11 @@ export function OpsOS() {
               ))}
             </div>
           </div>
-
-          {/* people cards */}
-          <div className="mt-5 mb-2 flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold">People</h3>
-            <span className="text-[11.5px] text-muted-2">click a card for their calls</span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {top.slice(0, 6).map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={roleOf(r.name)} days={days} />)}
-          </div>
         </>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {top.map((r, i) => <PersonCard key={r.name} r={r} color={PALETTE[i % PALETTE.length]} role={roleOf(r.name)} days={days} />)}
+        </div>
       )}
     </div>
   )
@@ -180,27 +188,40 @@ function PersonCard({ r, color, role, days }: { r: ApiPersonMetrics; color: stri
     const cutoff = Date.now() - days * DAY
     return calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && r.name in c.speakers) || c.speaker === r.name))
   }, [r.name, days])
+  const theirAccounts = useMemo(() => [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))], [theirCalls])
+  const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 5), [theirCalls])
+
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface">
       <button onClick={() => setOpen((o) => !o)} className="w-full p-4 text-left transition-colors hover:bg-bg-2">
-        <div className="flex items-center gap-3">
-          <PersonPhoto name={r.name} size={44} color={color} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold">{r.name}</div>
-            <div className="truncate text-[11.5px] text-muted">{role}</div>
-          </div>
-          <ChevronDown size={15} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <div className="flex flex-col items-center text-center">
+          <PersonPhoto name={r.name} size={64} color={color} />
+          <div className="mt-2.5 w-full truncate text-[14px] font-bold">{r.name}</div>
+          <div className="w-full truncate text-[11.5px] text-muted">{role}</div>
+          {theirAccounts.length > 0 && (
+            <div className="mt-2 flex flex-wrap justify-center gap-1">
+              {theirAccounts.slice(0, 3).map((id) => (
+                <span key={id} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{accountName(id)}</span>
+              ))}
+              {theirAccounts.length > 3 && <span className="text-[10px] text-muted-2">+{theirAccounts.length - 3}</span>}
+            </div>
+          )}
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           <MiniStat label="Calls" value={r.calls} />
           <MiniStat label="Accounts" value={r.accounts} />
           <MiniStat label="Signals" value={r.signals} />
         </div>
+        <div className="mt-2 flex items-center justify-center gap-1 text-[10.5px] text-muted-2">
+          {r.talk_share}% of team airtime <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
       </button>
+
       {open && (
         <div className="border-t border-line bg-surface-2 p-3">
+          <div className="eyebrow mb-1.5">Their calls · last {days} days</div>
           {theirCalls.length === 0 ? (
-            <p className="py-2 text-center text-[11.5px] text-muted-2">Call detail not loaded for this person in this window.</p>
+            <p className="py-2 text-center text-[11.5px] text-muted-2">No call detail in this window.</p>
           ) : (
             <div className="space-y-1.5">
               {theirCalls.map((c) => (
@@ -213,6 +234,19 @@ function PersonCard({ r, color, role, days }: { r: ApiPersonMetrics; color: stri
                 </div>
               ))}
             </div>
+          )}
+          {theirSignals.length > 0 && (
+            <>
+              <div className="eyebrow mb-1.5 mt-3">Signals from their calls</div>
+              <div className="space-y-1">
+                {theirSignals.map((s) => (
+                  <div key={s.id} className="flex items-start gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-[11.5px] leading-snug text-muted">
+                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `var(--${s.type === 'opportunity' ? 'opp' : s.type})` }} />
+                    {s.summary}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}

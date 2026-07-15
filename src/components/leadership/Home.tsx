@@ -1,11 +1,13 @@
 // Katie's home: the week zoomed out, for a MANAGING DIRECTOR.
-// tnAI brief: detailed prose in parallel columns, account names live-linked.
-// Macro cards: expanding one tells the ACCOUNT'S WEEK as a story - the calls it
-// came from, the thread connecting them, and a visual chain of transcript snippets
-// (the actual conversation moments). Individual signal rows never appear here.
+// tnAI brief (detailed prose, parallel columns, live account links) -> numbers ->
+// charts -> "The week, account by account": one macro card per active account.
+// Card face = generated headline. Expand = the in-depth tnAI story (wf15).
+// "View the conversations" = a popup where the week's moments flow in as an
+// animated chain of transcript snippets. No individual signal rows, ever.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals, riskScope } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
@@ -38,7 +40,6 @@ const needsHer = (s: Signal) =>
 const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
 const SEV_COLOR: Record<Severity, string> = { critical: 'var(--risk)', high: 'var(--people)', medium: 'var(--muted)', low: 'var(--muted-2)' }
 
-// ── A conversation moment that the evidence chain can render ──
 type Moment = {
   key: string
   quote: string
@@ -51,8 +52,20 @@ type Moment = {
   accountId?: string
 }
 
+type Story = { account: string; headline: string; story: string }
+
 export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) => void }) {
   const [days, setDays] = useState<Days>(7)
+  const [stories, setStories] = useState<Story[]>([])
+  useEffect(() => {
+    let on = true
+    fetchBrief('stories').then((b) => {
+      if (!on || !b) return
+      const items = (b.content as unknown as { items?: Story[] }).items
+      if (Array.isArray(items)) setStories(items)
+    })
+    return () => { on = false }
+  }, [])
 
   const d = useMemo(() => {
     const cutoff = Date.now() - days * DAY
@@ -66,27 +79,31 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
     const periodCalls = calls.filter((c) => inP(c.date))
     const prevCalls = calls.filter((c) => inPrev(c.date))
 
-    const riskMap = new Map<string, Signal[]>()
-    for (const s of risks) { if (!riskMap.has(s.accountId)) riskMap.set(s.accountId, []); riskMap.get(s.accountId)!.push(s) }
+    // One card per account active this period (signals or gated older risks).
+    const perAccount = new Map<string, Signal[]>()
+    for (const s of [...risks, ...opps]) { if (!perAccount.has(s.accountId)) perAccount.set(s.accountId, []); perAccount.get(s.accountId)!.push(s) }
     for (const s of allSignals.filter(needsHer)) {
-      if (!riskMap.has(s.accountId)) riskMap.set(s.accountId, [])
-      if (!riskMap.get(s.accountId)!.some((x) => x.id === s.id)) riskMap.get(s.accountId)!.push(s)
+      if (!perAccount.has(s.accountId)) perAccount.set(s.accountId, [])
+      if (!perAccount.get(s.accountId)!.some((x) => x.id === s.id)) perAccount.get(s.accountId)!.push(s)
     }
-    const riskCards = [...riskMap.entries()].map(([accountId, items]) => {
-      const sorted = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) // story order
-      const cats = [...new Set(items.map((s) => s.riskCategory || s.subtype).filter(Boolean))] as string[]
-      const callIds = new Set(items.map((s) => s.callId ?? s.sourceCall.title))
-      const worst = [...items].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])[0]
+    const cards = [...perAccount.entries()].map(([accountId, items]) => {
+      const sorted = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      const rk = items.filter((s) => s.type === 'risk')
+      const op = items.filter((s) => s.type === 'opportunity')
+      const cats = [...new Set(rk.map((s) => s.riskCategory || s.subtype).filter(Boolean))] as string[]
+      const worstRisk = rk.length ? [...rk].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])[0] : null
       return {
-        accountId, items: sorted, worst,
+        accountId, items: sorted, rk, op, cats,
         gated: items.some(needsHer),
-        critical: items.filter((s) => s.severity === 'critical').length,
-        oldest: Math.max(...items.map((s) => ageDays(s.createdAt))),
-        cats, callCount: callIds.size,
+        critical: rk.filter((s) => s.severity === 'critical').length,
+        oldest: rk.length ? Math.max(...rk.map((s) => ageDays(s.createdAt))) : 0,
+        value: op.reduce((t, s) => t + parsePounds(s.value), 0),
+        callCount: new Set(items.map((s) => s.callId ?? s.sourceCall.title)).size,
+        worstRisk,
       }
-    }).sort((a, b) => Number(b.gated) - Number(a.gated) || SEV_W[b.worst.severity] - SEV_W[a.worst.severity])
+    }).sort((a, b) => Number(b.gated) - Number(a.gated) || (SEV_W[b.worstRisk?.severity ?? 'low'] - SEV_W[a.worstRisk?.severity ?? 'low']) || b.items.length - a.items.length)
 
-    // Trajectories (computed). Recurring themes carry their signals so the chain can show evidence.
+    // Trajectories (computed); recurring themes carry evidence for the chains.
     const warnings: { text: string; accountId?: string; evidence?: Signal[] }[] = []
     const perAcctTheme = new Map<string, Signal[]>()
     for (const s of risks) {
@@ -112,24 +129,16 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       warnings.push({ text: `Opportunity chatter is accelerating (${oppPrev} → ${opps.length} period on period), gathering around ${hot}.`, evidence: opps })
     }
 
-    const oppMap = new Map<string, Signal[]>()
-    for (const s of opps) { if (!oppMap.has(s.accountId)) oppMap.set(s.accountId, []); oppMap.get(s.accountId)!.push(s) }
-    const oppCards = [...oppMap.entries()].map(([accountId, items]) => ({
-      accountId,
-      items: [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-      value: items.reduce((t, s) => t + parsePounds(s.value), 0),
-      topScore: Math.max(0, ...items.map((s) => s.networksTotal ?? 0)),
-      callCount: new Set(items.map((s) => s.callId ?? s.sourceCall.title)).size,
-    })).sort((a, b) => b.value - a.value || b.items.length - a.items.length)
-
     return {
-      period, opps, periodCalls, riskCards, oppCards, warnings: warnings.slice(0, 4),
+      period, opps, periodCalls, cards, warnings: warnings.slice(0, 4),
       riskCount: risks.length,
       attentionCount: allSignals.filter(needsHer).length,
       oppValue: opps.reduce((t, s) => t + parsePounds(s.value), 0),
       accountsActive: new Set(periodCalls.map((c) => c.accountId).filter(Boolean)).size,
     }
   }, [days])
+
+  const storyFor = (accountId: string) => stories.find((s) => s.account.toLowerCase() === accountName(accountId).toLowerCase())
 
   return (
     <div>
@@ -174,85 +183,36 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
           </div>
         </div>
         <DonutCard title="Risk mix" sub="by framework category, this period"
-          data={(() => { const m = new Map<string, number>(); for (const s of d.riskCards.flatMap((c) => c.items)) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
+          data={(() => { const m = new Map<string, number>(); for (const s of d.cards.flatMap((c) => c.rk)) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
           palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
         <DonutCard title="Portfolio health" sub="current RAG across accounts"
           data={(['red', 'amber', 'green'] as const).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
           palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
       </div>
 
-      {/* ── Risks: the account's week as a story ── */}
+      {/* ── The week, account by account ── */}
       <div className="mt-6">
         <div className="mb-2.5 flex items-center gap-2">
-          <AlertTriangle size={15} className="text-[var(--risk)]" />
-          <h3 className="text-[15px] font-semibold">Risks, by account</h3>
-          <span className="text-[11.5px] text-muted-2">{d.riskCount} accumulated this period · accounts needing you come first</span>
+          <h3 className="text-[15px] font-semibold">The week, account by account</h3>
+          <span className="text-[11.5px] text-muted-2">tnAI's macro read per account · accounts needing you come first</span>
         </div>
-        {d.riskCards.length === 0 ? (
+        {d.cards.length === 0 ? (
           <div className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-[13px] text-muted">
-            <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> No risks in this period, and nothing older left unresolved.
+            <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing accumulated in this period.
           </div>
         ) : (
-          <div className="space-y-3">
-            {d.riskCards.map((c) => (
-              <StoryCard key={c.accountId} accountId={c.accountId} accent={c.gated ? 'var(--risk)' : SEV_COLOR[c.worst.severity]} onOpenAccount={onOpenAccount}
-                chips={<>
-                  {c.gated && <Chip color="var(--risk)">needs you</Chip>}
-                  {c.critical > 0 && <Chip color="var(--risk)">{c.critical} critical</Chip>}
-                  {c.oldest >= 14 && <Chip color="var(--people)">oldest {c.oldest}d unresolved</Chip>}
-                </>}
-                summary={<>{c.items.length} risk{c.items.length !== 1 ? 's' : ''} across {c.callCount} call{c.callCount !== 1 ? 's' : ''}{c.cats.length ? <> · themes: <span className="font-medium text-text">{c.cats.join(', ')}</span></> : null} · headline: <span className="font-medium text-text">{c.worst.summary}</span></>}
-                thread={`Across ${c.callCount} call${c.callCount !== 1 ? 's' : ''} this period the conversation kept returning to ${c.cats.length ? c.cats.join(' and ').toLowerCase() : 'the same concerns'}. Follow the thread - each snippet below is the actual moment in the conversation, oldest first.`}
-                moments={c.items.map((s) => ({
-                  key: s.id, quote: s.quote, color: SEV_COLOR[s.severity],
-                  caption: s.summary, step: s.suggestedAction,
-                  callId: s.callId, callTitle: s.sourceCall.title, date: s.createdAt, accountId: s.accountId,
-                }))}
-              />
-            ))}
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {d.cards.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} />)}
           </div>
         )}
       </div>
 
-      {/* ── Potential risks: radar + trajectories, each with its evidence chain ── */}
       <RadarSection computed={d.warnings} onOpenAccount={onOpenAccount} />
-
-      {/* ── Opportunity heat ── */}
-      <div className="mt-6">
-        <div className="mb-2.5 flex items-center gap-2">
-          <TrendingUp size={15} style={{ color: 'var(--opp)' }} />
-          <h3 className="text-[15px] font-semibold">Opportunity heat</h3>
-          <span className="text-[11.5px] text-muted-2">where the commercial energy is gathering</span>
-        </div>
-        {d.oppCards.length === 0 ? (
-          <p className="rounded-2xl border border-line bg-surface p-5 text-center text-[12.5px] text-muted-2">No opportunities surfaced in this period.</p>
-        ) : (
-          <div className="space-y-3">
-            {d.oppCards.map((c) => (
-              <StoryCard key={c.accountId} accountId={c.accountId} accent="var(--opp)" onOpenAccount={onOpenAccount}
-                chips={<>
-                  <Chip color="var(--opp)">{c.items.length} opportunit{c.items.length !== 1 ? 'ies' : 'y'}</Chip>
-                  {c.value > 0 && <Chip color="var(--accent-d)">~{gbp(c.value)} mentioned</Chip>}
-                  {c.topScore > 0 && <Chip color="var(--muted)">best NETWORKS {c.topScore}/40</Chip>}
-                </>}
-                summary={<>{c.items.length} opportunit{c.items.length !== 1 ? 'ies' : 'y'} across {c.callCount} call{c.callCount !== 1 ? 's' : ''} · headline: <span className="font-medium text-text">{c.items[0].summary}</span></>}
-                thread={`The commercial thread on this account, oldest first - each snippet is the moment it surfaced in conversation.`}
-                moments={c.items.map((s) => ({
-                  key: s.id, quote: s.quote, color: 'var(--opp)',
-                  caption: `${s.summary}${s.networksTotal != null ? ` · NETWORKS ${s.networksTotal}/40` : ''}`,
-                  step: s.suggestedAction,
-                  callId: s.callId, callTitle: s.sourceCall.title, date: s.createdAt, accountId: s.accountId,
-                }))}
-              />
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
 
-// ── tnAI brief: detailed prose, parallel columns, account names live-linked ──
+// ── tnAI brief ──
 function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [checked, setChecked] = useState(false)
@@ -272,8 +232,8 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
 
         {brief ? (
           <div className={`mt-4 grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-            <BriefCol title="What's happening" paragraphs={[brief.content.whats_happening]} onOpenAccount={onOpenAccount} />
-            <BriefCol title="Why" paragraphs={[brief.content.why]} onOpenAccount={onOpenAccount} />
+            <BriefCol title="What's happening" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
+            <BriefCol title="Why" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
             {hasWatch && <BriefCol title="Watch for" paragraphs={brief.content.watch_for!} accent="var(--people)" onOpenAccount={onOpenAccount} />}
             <BriefCol title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
               paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
@@ -284,7 +244,7 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
               Over the last {fallback.days} days the Second Brain analysed <b>{fallback.calls} call{fallback.calls !== 1 ? 's' : ''}</b> across <b>{fallback.accounts} account{fallback.accounts !== 1 ? 's' : ''}</b>,
               surfacing <b>{fallback.opps} opportunit{fallback.opps !== 1 ? 'ies' : 'y'}</b>{fallback.attention ? <> and <b style={{ color: 'var(--risk)' }}>{fallback.attention} escalation{fallback.attention !== 1 ? 's' : ''}</b> (below)</> : <> and nothing that needs your intervention</>}.
             </p>
-            {checked && <p className="mt-2 text-[11.5px] text-muted-2">The full written brief generates every Monday at 07:50 - this is the live summary meanwhile.</p>}
+            {checked && <p className="mt-2 text-[11.5px] text-muted-2">The full written brief generates every Monday at 07:50 - run workflow 13 to generate one now.</p>}
           </div>
         )}
       </div>
@@ -338,56 +298,106 @@ function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: 
   )
 }
 
-// ── The macro card: face = the account's rollup; expand = the week as a story ──
-function StoryCard({ accountId, accent, chips, summary, thread, moments, onOpenAccount }: {
-  accountId: string; accent: string; chips: ReactNode; summary: ReactNode; thread: string; moments: Moment[]; onOpenAccount: (id: string) => void
-}) {
+// ── One account's macro card: headline on the face, tnAI story on expand,
+//    "View the conversations" opens the animated snippet-chain popup. ──
+type CardData = {
+  accountId: string; items: Signal[]; rk: Signal[]; op: Signal[]; cats: string[]
+  gated: boolean; critical: number; oldest: number; value: number; callCount: number
+  worstRisk: Signal | null
+}
+
+function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: Story; onOpenAccount: (id: string) => void }) {
   const [open, setOpen] = useState(false)
-  const acc = accounts.find((a) => a.id === accountId)
-  const callChips = [...new Map(moments.map((m) => [m.callTitle ?? '', m])).values()].filter((m) => m.callTitle)
+  const [convo, setConvo] = useState(false)
+  const acc = accounts.find((a) => a.id === card.accountId)
+  const accent = card.gated ? 'var(--risk)' : card.rk.length ? SEV_COLOR[card.worstRisk!.severity] : 'var(--opp)'
+
+  const headline = story?.headline
+    || `${card.rk.length ? `${card.rk.length} risk${card.rk.length !== 1 ? 's' : ''}` : ''}${card.rk.length && card.op.length ? ' and ' : ''}${card.op.length ? `${card.op.length} opportunit${card.op.length !== 1 ? 'ies' : 'y'}` : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period${card.cats.length ? `, centred on ${card.cats.join(' and ').toLowerCase()}` : ''}.`
+
+  const fallbackStory = [
+    `${accountName(card.accountId)} generated ${card.items.length} signal${card.items.length !== 1 ? 's' : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period.`,
+    card.rk.length ? `On the risk side, the conversations kept returning to ${card.cats.length ? card.cats.join(' and ').toLowerCase() : 'delivery concerns'}${card.worstRisk ? ` - most seriously: ${card.worstRisk.summary}` : ''}${card.oldest >= 14 ? ` One item has now sat unresolved for ${card.oldest} days.` : ''}` : '',
+    card.op.length ? `Commercially, ${card.op.length} opportunit${card.op.length !== 1 ? 'ies were' : 'y was'} surfaced${card.value ? ` with roughly ${gbp(card.value)} mentioned` : ''}.` : '',
+    'Run workflow 15 for the full tnAI analysis of this account.',
+  ].filter(Boolean).join(' ')
+
+  const moments: Moment[] = card.items.map((s) => ({
+    key: s.id, quote: s.quote,
+    color: s.type === 'opportunity' ? 'var(--opp)' : SEV_COLOR[s.severity],
+    caption: s.summary, step: s.suggestedAction,
+    callId: s.callId, callTitle: s.sourceCall.title, date: s.createdAt, accountId: s.accountId,
+  }))
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderLeft: `3px solid ${accent}` }}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-bg-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
-            <span className="text-[14.5px] font-bold">{accountName(accountId)}</span>
-            {chips}
-          </div>
-          <p className="mt-1.5 text-[12.5px] leading-snug text-muted">{summary}</p>
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: `3px solid ${accent}` }}>
+      <button onClick={() => setOpen((o) => !o)} className="flex-1 p-4 text-left transition-colors hover:bg-bg-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
+          <span className="text-[15px] font-bold">{accountName(card.accountId)}</span>
+          {card.gated && <Chip color="var(--risk)">needs you</Chip>}
+          {card.critical > 0 && <Chip color="var(--risk)">{card.critical} critical</Chip>}
+          {card.oldest >= 14 && <Chip color="var(--people)">{card.oldest}d unresolved</Chip>}
+          {card.op.length > 0 && <Chip color="var(--opp)">{card.op.length} opp{card.op.length !== 1 ? 's' : ''}{card.value ? ` · ~${gbp(card.value)}` : ''}</Chip>}
+          <ChevronDown size={15} className={`ml-auto shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-        <ChevronDown size={16} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <p className="mt-2 text-[13px] leading-relaxed text-text">{headline}</p>
       </button>
 
       {open && (
         <div className="border-t border-line bg-surface-2 p-4">
-          {callChips.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-muted-2">From:</span>
-              {callChips.map((m, i) => (
-                <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-muted">
-                  <Video size={11} className="text-muted-2" /> {m.callTitle}{m.date ? ` · ${fmt(m.date)}` : ''}
-                </span>
-              ))}
-            </div>
-          )}
-          <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{thread}</p>
-          <SnippetChain moments={moments} />
-          <button onClick={() => onOpenAccount(accountId)} className="group mt-4 inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--accent-d)] hover:underline">
-            Open {accountName(accountId)} <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-          </button>
+          <div className="space-y-2.5">
+            {(story?.story ?? fallbackStory).split(/\n\n+/).map((p, i) => (
+              <p key={i} className="text-[13px] leading-relaxed text-text">{p}</p>
+            ))}
+          </div>
+          <div className="mt-3.5 flex flex-wrap items-center gap-2">
+            <button onClick={() => setConvo(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white transition-transform hover:scale-[1.02]" style={{ background: 'var(--accent)' }}>
+              <MessagesSquare size={13} /> View the conversations
+            </button>
+            <button onClick={() => onOpenAccount(card.accountId)} className="group inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3.5 py-2 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+              Open {accountName(card.accountId)} <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
         </div>
       )}
+
+      {convo && <ConversationsModal accountId={card.accountId} moments={moments} onClose={() => setConvo(false)} />}
     </div>
   )
 }
 
-// ── The evidence chain: connected conversation moments, oldest first ──
-function SnippetChain({ moments }: { moments: Moment[] }) {
+// The popup: the week's moments flowing in as an animated chain.
+function ConversationsModal({ accountId, moments, onClose }: { accountId: string; moments: Moment[]; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+          <div>
+            <h3 className="text-[15px] font-bold tracking-tight">The conversations · {accountName(accountId)}</h3>
+            <p className="mt-0.5 text-[11.5px] text-muted">Every captured moment this period, in the flow of the actual calls - oldest first.</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">
+          <SnippetChain moments={moments} animated />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// ── Evidence chain ──
+function SnippetChain({ moments, animated = false }: { moments: Moment[]; animated?: boolean }) {
   return (
-    <div className="relative mt-3 space-y-4 pl-5">
+    <div className="relative mt-1 space-y-4 pl-5">
       <span className="absolute bottom-2 left-[7px] top-2 w-[2px] rounded-full bg-[var(--line-2)]" aria-hidden />
-      {moments.map((m) => <ChainNode key={m.key} m={m} />)}
+      {moments.map((m, i) => (
+        <div key={m.key} className={animated ? 'chain-node' : undefined} style={animated ? { animationDelay: `${i * 140}ms` } : undefined}>
+          <ChainNode m={m} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -398,7 +408,6 @@ function ChainNode({ m }: { m: Moment }) {
   useEffect(() => {
     let on = true
     const done = (v: { lines: TranscriptLine[]; hit: number } | null) => { if (on) setSnip(v) }
-    // Candidate calls: the moment's own call, else the account's recent calls.
     const cands: Call[] = m.callId
       ? calls.filter((c) => c.id === m.callId)
       : calls.filter((c) => c.accountId === m.accountId).slice(0, 4)
@@ -406,7 +415,7 @@ function ChainNode({ m }: { m: Moment }) {
     ;(async () => {
       for (const c of cands) {
         if (!c.transcript && /^[0-9a-f]{8}-/i.test(c.id)) {
-          try { const r = await fetchTranscript(c.id); if (r.transcript) c.transcript = r.transcript } catch { /* keep trying others */ }
+          try { const r = await fetchTranscript(c.id); if (r.transcript) c.transcript = r.transcript } catch { /* try the next call */ }
         }
         if (!on) return
         const { lines } = transcriptWithMoments(c)
@@ -450,8 +459,7 @@ function ChainNode({ m }: { m: Moment }) {
   )
 }
 
-// ── Potential risks: radar (reads raw transcripts) + computed trajectories,
-//    each expandable into its own evidence chain ──
+// ── Potential risks ──
 type RadarItem = { account?: string; insight: string; quote?: string }
 
 function RadarSection({ computed, onOpenAccount }: { computed: { text: string; accountId?: string; evidence?: Signal[] }[]; onOpenAccount: (id: string) => void }) {
@@ -510,7 +518,7 @@ function WatchCard({ text, moments, accountId, onOpenAccount }: { text: ReactNod
           {text}
         </button>
         {accountId && (
-          <button onClick={() => onOpenAccount(accountId)} title="Open the account" className="group shrink-0 rounded-md p-1 text-muted-2 transition-colors hover:text-text">
+          <button onClick={() => onOpenAccount(accountId)} title="Open the account" className="shrink-0 rounded-md p-1 text-muted-2 transition-colors hover:text-text">
             <ArrowRight size={14} />
           </button>
         )}
@@ -522,7 +530,7 @@ function WatchCard({ text, moments, accountId, onOpenAccount }: { text: ReactNod
       </div>
       {open && expandable && (
         <div className="border-t border-line bg-surface-2 p-4">
-          <SnippetChain moments={moments} />
+          <SnippetChain moments={moments} animated />
         </div>
       )}
     </div>
