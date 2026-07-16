@@ -35,7 +35,7 @@
   {
    "parameters": {
     "operation": "executeQuery",
-    "query": "SELECT a.name AS account,\n (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date, 'transcript', left(c.transcript, 7000)))\n  FROM (SELECT * FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days'\n        AND c2.transcript IS NOT NULL AND c2.transcript <> '' ORDER BY c2.call_date DESC LIMIT 3) c) AS calls,\n (SELECT jsonb_agg(s.summary) FROM signals s WHERE s.account_id = a.id AND s.type = 'risk'\n  AND s.created_at > now() - interval '14 days') AS already_flagged,\n (SELECT jsonb_agg(jsonb_build_object('project', w.project_title, 'rag', w.rag))\n  FROM weekly_reports w WHERE w.account_id = a.id AND w.week_ending > now() - interval '10 days') AS health_context\nFROM accounts a\nJOIN LATERAL (SELECT max(c3.call_date) AS mx FROM calls c3 WHERE c3.account_id = a.id) m ON true\nWHERE EXISTS (SELECT 1 FROM calls c4 WHERE c4.account_id = a.id AND c4.call_date > now() - interval '7 days'\n              AND c4.transcript IS NOT NULL AND c4.transcript <> '')\nORDER BY m.mx DESC LIMIT 6;",
+    "query": "SELECT a.name AS account,\n (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date, 'transcript', left(c.transcript, 4500)))\n  FROM (SELECT * FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days'\n        AND c2.transcript IS NOT NULL AND c2.transcript <> '' ORDER BY c2.call_date DESC LIMIT 2) c) AS calls,\n (SELECT jsonb_agg(s.summary) FROM signals s WHERE s.account_id = a.id AND s.type = 'risk'\n  AND s.created_at > now() - interval '14 days') AS already_flagged,\n (SELECT jsonb_agg(jsonb_build_object('project', w.project_title, 'rag', w.rag))\n  FROM weekly_reports w WHERE w.account_id = a.id AND w.week_ending > now() - interval '10 days') AS health_context\nFROM accounts a\nJOIN LATERAL (SELECT max(c3.call_date) AS mx FROM calls c3 WHERE c3.account_id = a.id) m ON true\nWHERE EXISTS (SELECT 1 FROM calls c4 WHERE c4.account_id = a.id AND c4.call_date > now() - interval '7 days'\n              AND c4.transcript IS NOT NULL AND c4.transcript <> '')\nORDER BY m.mx DESC LIMIT 6;",
     "options": {}
    },
    "id": "rad_gather",
@@ -75,7 +75,7 @@
     "batching": {
      "batch": {
       "batchSize": 1,
-      "delayBetweenBatches": 10000
+      "delayBetweenBatches": 45000
      }
     }
    },
@@ -149,7 +149,7 @@
   },
   {
    "parameters": {
-    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts ONE ACCOUNT AT A TIME (up to 6 accounts x 3 calls x 7k chars), 10s pause between model calls, retry on rate limits - sized for a modest gpt-4o-mini TPM quota. Excludes already-flagged risks; hunts emerging concerns with verbatim evidence quotes; max 2 per account, 8 total; empty when nothing genuine.\nStored in `briefs` (audience='radar'); the Leadership 'Potential risks forming' section reads it.\n\nIf 429s persist, ask DevOps to raise the gpt-4o-mini deployment's TPM in Azure OpenAI.",
+    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts ONE ACCOUNT AT A TIME (up to 6 accounts x 2 calls x 4.5k chars), with a 45-SECOND pause between model calls and retry on rate limits - sized for a minimal gpt-4o-mini TPM quota. A full run takes ~4-5 minutes; slow is correct. Excludes already-flagged risks; max 2 items per account, 8 total, each with a verbatim evidence quote; empty when nothing genuine.\nStored in `briefs` (audience='radar'); the Leadership 'Potential risks forming' section reads it.\n\nTHE REAL FIX: raise the gpt-4o-mini deployment's tokens-per-minute in Azure OpenAI Studio (Deployments -> edit -> capacity). The current quota is too small for the Monday 07:50/07:52/07:55 generator stack long-term.",
     "height": 250,
     "width": 430
    },
