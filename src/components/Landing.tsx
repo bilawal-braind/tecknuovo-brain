@@ -6,7 +6,7 @@ type Card = { hash: string; role: string; persona: string; blurb: string; icon: 
 
 const DASHBOARDS: Card[] = [
   { hash: '#/delivery', role: 'Delivery', persona: 'Kiera Battersby · Client Delivery Director', blurb: 'Every delivery, the signals on it, and the calls behind them.', icon: ClipboardList },
-  { hash: '#/partner', role: 'Client Partner', persona: 'Alice Wells · Client Partner', blurb: 'Opportunities and risks across the portfolio, ranked by value.', icon: Briefcase },
+  { hash: '#/partner', role: 'Client Partner', persona: 'Commercial view · own accounts', blurb: 'Opportunities and risks across the portfolio, ranked by value.', icon: Briefcase },
   { hash: '#/leadership', role: 'Leadership', persona: 'Katie Carruthers · Managing Director', blurb: 'The whole business in a glance - pods, pipeline, what needs a decision.', icon: BarChart3 },
   { hash: '#/observability', role: 'Observability', persona: 'Meesha Chotai · Portfolio Director', blurb: 'How accurate the AI is, and the human-in-the-loop feedback.', icon: ShieldCheck },
 ]

@@ -30,7 +30,7 @@ export function ClientPartner() {
 
   return (
     <DashboardShell
-      role="Client Partner" persona="Alice Wells · Client Partner" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      role="Client Partner" persona="Commercial view · your accounts" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },

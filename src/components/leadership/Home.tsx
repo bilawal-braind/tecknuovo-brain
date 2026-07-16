@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X } from 'lucide-react'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, HelpCircle } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals, riskScope } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
@@ -247,11 +247,11 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
           </div>
         ) : brief ? (
           <>
-            <div className={`mt-4 grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-              <BriefCol title="What's happening" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-              <BriefCol title="Why" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-              {hasWatch && <BriefCol title="Watch for" paragraphs={brief.content.watch_for!} accent="var(--people)" onOpenAccount={onOpenAccount} />}
-              <BriefCol title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
+            <div className={`mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+              <BriefCol icon={Activity} title="What's happening" accent="var(--accent)" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
+              <BriefCol icon={HelpCircle} title="Why" accent="var(--update)" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
+              {hasWatch && <BriefCol icon={Eye} title="Watch for" accent="var(--people)" paragraphs={brief.content.watch_for!} onOpenAccount={onOpenAccount} />}
+              <BriefCol icon={AlertTriangle} title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
                 paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
             </div>
             <div className="mt-4 flex justify-center">
@@ -274,11 +274,17 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
   )
 }
 
-function BriefCol({ title, paragraphs, accent, onOpenAccount }: { title: string; paragraphs: string[]; accent?: string; onOpenAccount: (id: string) => void }) {
+function BriefCol({ icon: Icon, title, paragraphs, accent, onOpenAccount }: { icon: typeof Activity; title: string; paragraphs: string[]; accent: string; onOpenAccount: (id: string) => void }) {
   return (
-    <div className="border-l-2 pl-3.5" style={{ borderColor: accent ?? 'color-mix(in srgb, var(--accent) 35%, transparent)' }}>
-      <div className="eyebrow" style={{ color: accent ?? 'var(--accent-d)' }}>{title}</div>
-      <div className="mt-1.5 space-y-2">
+    <div className="flex flex-col rounded-xl border p-4"
+      style={{ borderColor: `color-mix(in srgb, ${accent} 28%, var(--line))`, background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 7%, var(--surface)), var(--surface) 70%)` }}>
+      <div className="flex items-center gap-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${accent} 15%, transparent)` }}>
+          <Icon size={13} style={{ color: accent }} />
+        </span>
+        <span className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: accent }}>{title}</span>
+      </div>
+      <div className="mt-2.5 space-y-2">
         {paragraphs.map((p, i) => (
           <p key={i} className="text-[13px] leading-relaxed text-text"><Linkified text={p} onOpenAccount={onOpenAccount} /></p>
         ))}

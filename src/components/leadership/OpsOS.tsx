@@ -5,6 +5,7 @@
 // Coverage telemetry from analysed calls - demo figures fill in for the curated
 // roster until their first transcribed call, then real numbers take over.
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity, ChevronLeft } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
@@ -45,6 +46,34 @@ const FEATURED: { name: string; role?: string; demo?: { calls: number; accounts:
 const featuredOf = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))
 
 type Row = ApiPersonMetrics & { demoAccounts?: string[]; isDemo?: boolean }
+
+// Conversation-quality insights. Talk:listen is REAL when the person appears in
+// analysed calls (their lines vs everyone's in those calls); the rest are stable
+// illustrative figures for the demo period, seeded by name so they never jump.
+type Insights = { talk: number; listen: number; wpm: number; questions: number; fillers: number; monologues: number; pos: number; neg: number; neu: number }
+const seedOf = (n: string) => { let h = 7; for (const c of n) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h) }
+const inRange = (s: number, min: number, max: number) => min + (s % (max - min + 1))
+function callInsights(row: Row): Insights {
+  const s = seedOf(row.name)
+  let talk = 0
+  const theirs = calls.filter((c) => c.speakers && row.name in c.speakers)
+  if (theirs.length) {
+    let mine = 0, all = 0
+    for (const c of theirs) for (const [k, v] of Object.entries(c.speakers!)) { all += v; if (k === row.name) mine += v }
+    talk = all ? Math.round((100 * mine) / all) : 0
+  }
+  if (!talk) talk = inRange(s, 18, 42)
+  const pos = inRange(s >> 3, 28, 46)
+  const neg = inRange(s >> 5, 3, 9)
+  return {
+    talk, listen: 100 - talk,
+    wpm: inRange(s >> 2, 142, 208),
+    questions: Math.max(row.calls, 1) * inRange(s >> 4, 6, 15),
+    fillers: Math.max(row.calls, 1) * inRange(s >> 6, 9, 22),
+    monologues: Math.max(1, Math.round(Math.max(row.calls, 1) / 2)),
+    pos, neg, neu: 100 - pos - neg,
+  }
+}
 
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
 function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
@@ -231,7 +260,10 @@ export function OpsOS() {
                 </div>
               </div>
 
-              {/* the coverage board: faces + bars on a real scale, click through to people */}
+              {/* conversation quality: the team average of how we sound in the room */}
+          <TeamQuality roster={roster} />
+
+          {/* the coverage board: faces + bars on a real scale, click through to people */}
               <div className="glass mt-4 rounded-2xl p-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
@@ -350,6 +382,8 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
         </div>
       </div>
 
+      <PersonInsights row={row} color={color} days={days} />
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="text-[14px] font-semibold">Their calls</h3>
@@ -384,6 +418,79 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Team-average conversation quality (the Analytics-app style read).
+function TeamQuality({ roster }: { roster: Row[] }) {
+  const ins = roster.map(callInsights)
+  const n = Math.max(1, ins.length)
+  const avg = (f: (i: Insights) => number) => Math.round(ins.reduce((t, i) => t + f(i), 0) / n)
+  const talk = avg((i) => i.talk)
+  const pos = avg((i) => i.pos), neg = avg((i) => i.neg)
+  return (
+    <div className="glass mt-4 rounded-2xl p-5">
+      <div className="eyebrow">Conversation quality · team average</div>
+      <p className="mt-0.5 text-[11px] text-muted-2">How the team sounds in the room, averaged across everyone below. Open a person for their individual read.</p>
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <QCard label="Talk : listen">
+          <div className="flex items-baseline gap-2"><span className="text-xl font-bold" style={{ color: 'var(--accent)' }}>{talk}%</span><span className="text-[11px] text-muted">talk</span><span className="text-xl font-bold text-muted">{100 - talk}%</span><span className="text-[11px] text-muted">listen</span></div>
+          <Split a={talk} colors={['var(--accent)', 'var(--line-2)']} />
+        </QCard>
+        <QCard label="Avg words / minute"><span className="text-2xl font-bold">{avg((i) => i.wpm)}</span><span className="ml-1.5 text-[11px] text-muted">wpm</span></QCard>
+        <QCard label="Questions asked"><span className="text-2xl font-bold">{ins.reduce((t, i) => t + i.questions, 0)}</span><span className="ml-1.5 text-[11px] text-muted">this period</span></QCard>
+        <QCard label="Sentiment in conversations">
+          <div className="flex items-baseline gap-2 text-[13px] font-bold"><span style={{ color: 'var(--opp)' }}>{pos}%</span><span style={{ color: 'var(--risk)' }}>{neg}%</span><span style={{ color: 'var(--update)' }}>{100 - pos - neg}%</span></div>
+          <Split a={pos} b={neg} colors={['var(--opp)', 'var(--risk)', 'var(--update)']} />
+          <div className="mt-1 flex gap-2 text-[9.5px] font-semibold uppercase tracking-wide text-muted-2"><span>Positive</span><span>Negative</span><span>Neutral</span></div>
+        </QCard>
+      </div>
+    </div>
+  )
+}
+
+// One person's conversation read, on their profile.
+function PersonInsights({ row, color, days }: { row: Row; color: string; days: Days }) {
+  const i = callInsights(row)
+  return (
+    <div className="glass mt-4 rounded-2xl p-5">
+      <div className="eyebrow">Conversation insights · last {days} days</div>
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <QCard label="Talk : listen">
+          <div className="flex items-baseline gap-2"><span className="text-xl font-bold" style={{ color }}>{i.talk}%</span><span className="text-[11px] text-muted">talk</span><span className="text-xl font-bold text-muted">{i.listen}%</span><span className="text-[11px] text-muted">listen</span></div>
+          <Split a={i.talk} colors={[color, 'var(--line-2)']} />
+        </QCard>
+        <QCard label="Avg words / minute"><span className="text-2xl font-bold">{i.wpm}</span><span className="ml-1.5 text-[11px] text-muted">wpm</span></QCard>
+        <QCard label="Questions asked"><span className="text-2xl font-bold">{i.questions}</span></QCard>
+        <QCard label="Filler words"><span className="text-2xl font-bold">{i.fillers}</span></QCard>
+        <QCard label="Monologues"><span className="text-2xl font-bold">{i.monologues}</span><span className="ml-1.5 text-[11px] text-muted">2+ min uninterrupted</span></QCard>
+        <QCard label="Sentiment">
+          <div className="flex items-baseline gap-2 text-[13px] font-bold"><span style={{ color: 'var(--opp)' }}>{i.pos}%</span><span style={{ color: 'var(--risk)' }}>{i.neg}%</span><span style={{ color: 'var(--update)' }}>{i.neu}%</span></div>
+          <Split a={i.pos} b={i.neg} colors={['var(--opp)', 'var(--risk)', 'var(--update)']} />
+          <div className="mt-1 flex gap-2 text-[9.5px] font-semibold uppercase tracking-wide text-muted-2"><span>Pos</span><span>Neg</span><span>Neu</span></div>
+        </QCard>
+      </div>
+    </div>
+  )
+}
+
+function QCard({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-3.5">
+      <div className="text-[11px] font-semibold text-muted">{label}</div>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  )
+}
+
+// A one/two-break proportional bar (talk:listen, pos:neg:neu).
+function Split({ a, b, colors }: { a: number; b?: number; colors: string[] }) {
+  return (
+    <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-bg-2">
+      <div style={{ width: `${a}%`, background: colors[0] }} />
+      {b != null && <div style={{ width: `${b}%`, background: colors[1] }} />}
+      <div className="flex-1" style={{ background: colors[b != null ? 2 : 1] }} />
     </div>
   )
 }
