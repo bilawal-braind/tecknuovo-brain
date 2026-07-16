@@ -35,7 +35,7 @@
   {
    "parameters": {
     "operation": "executeQuery",
-    "query": "SELECT a.name AS account,\n (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date, 'transcript', left(c.transcript, 4500)))\n  FROM (SELECT * FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days'\n        AND c2.transcript IS NOT NULL AND c2.transcript <> '' ORDER BY c2.call_date DESC LIMIT 2) c) AS calls,\n (SELECT jsonb_agg(s.summary) FROM signals s WHERE s.account_id = a.id AND s.type = 'risk'\n  AND s.created_at > now() - interval '14 days') AS already_flagged,\n (SELECT jsonb_agg(jsonb_build_object('project', w.project_title, 'rag', w.rag))\n  FROM weekly_reports w WHERE w.account_id = a.id AND w.week_ending > now() - interval '10 days') AS health_context\nFROM accounts a\nJOIN LATERAL (SELECT max(c3.call_date) AS mx FROM calls c3 WHERE c3.account_id = a.id) m ON true\nWHERE EXISTS (SELECT 1 FROM calls c4 WHERE c4.account_id = a.id AND c4.call_date > now() - interval '7 days'\n              AND c4.transcript IS NOT NULL AND c4.transcript <> '')\nORDER BY m.mx DESC LIMIT 6;",
+    "query": "SELECT jsonb_build_object('accounts', COALESCE((SELECT jsonb_agg(x.acct) FROM (\n  SELECT jsonb_build_object(\n    'account', a.name,\n    'already_flagged', (SELECT jsonb_agg(s.summary) FROM signals s\n                        WHERE s.account_id = a.id AND s.type = 'risk' AND s.created_at > now() - interval '14 days'),\n    'calls', (SELECT jsonb_agg(jsonb_build_object('title', c.title, 'date', c.call_date::date, 'transcript', left(c.transcript, 2500)))\n              FROM (SELECT * FROM calls c2 WHERE c2.account_id = a.id AND c2.call_date > now() - interval '7 days'\n                    AND c2.transcript IS NOT NULL AND c2.transcript <> '' ORDER BY c2.call_date DESC LIMIT 2) c)\n  ) AS acct\n  FROM accounts a\n  JOIN LATERAL (SELECT max(c3.call_date) AS mx FROM calls c3 WHERE c3.account_id = a.id) m ON true\n  WHERE EXISTS (SELECT 1 FROM calls c4 WHERE c4.account_id = a.id AND c4.call_date > now() - interval '7 days'\n                AND c4.transcript IS NOT NULL AND c4.transcript <> '')\n  ORDER BY m.mx DESC LIMIT 5\n) x), '[]'::jsonb)) AS ctx;",
     "options": {}
    },
    "id": "rad_gather",
@@ -55,8 +55,7 @@
   },
   {
    "parameters": {
-    "jsCode": "const rules='You are the early-warning radar for Tecknuovo, a UK digital-delivery consultancy. Below are this week\\'s RAW TRANSCRIPTS for ONE account, plus its weekly-report RAG and the risks ALREADY formally flagged. Your ONLY job: find EMERGING concerns NOT in already_flagged - things a sharp managing director would want on her radar BEFORE they become formal risks. Look for: hesitation or friction around budgets, renewals or contracts; client-side reorganisations, departures or new decision-makers; repeated small frustrations that add up; cooling tone or shrinking engagement from client stakeholders; dependencies on things outside our control. Judge from Tecknuovo\\'s perspective - a client-side issue matters only if it could affect our delivery, relationship or revenue. RULES: maximum 2 items for this account, each ONE sentence naming the account and why it deserves watching, each with a SHORT verbatim quote from the transcript as evidence (copy exactly, max 25 words). Do NOT repeat anything in already_flagged. If nothing genuine is emerging return {\"items\":[]} - never invent. Never use em dashes. Return ONLY JSON: {\"items\":[{\"account\":\"...\",\"insight\":\"...\",\"quote\":\"...\"}]}';\nconst data={account:$json.account,calls:$json.calls,already_flagged:$json.already_flagged,health_context:$json.health_context};\nconst prompt=rules+'\\n\\nACCOUNT DATA:\\n'+JSON.stringify(data);\nreturn {json:{prompt,account:$json.account}};",
-    "mode": "runOnceForEachItem"
+    "jsCode": "const ctx=$json.ctx;\nconst rules='You are the early-warning radar for Tecknuovo, a UK digital-delivery consultancy. Below are EXCERPTS of this week\\'s client-call transcripts, account by account, plus the risks ALREADY formally flagged per account. Your ONLY job: find EMERGING concerns NOT in already_flagged - things a sharp managing director would want on her radar BEFORE they become formal risks. Look for: hesitation or friction around budgets, renewals or contracts; client-side reorganisations, departures or new decision-makers; repeated small frustrations; cooling tone or shrinking engagement; dependencies outside our control. Judge from Tecknuovo\\'s perspective. RULES: maximum 5 items ACROSS ALL accounts (up to 2 per account), each ONE sentence naming the account and why it deserves watching, each with a SHORT verbatim quote from the transcript as evidence (copy exactly, max 25 words). Do NOT repeat anything in already_flagged. If nothing genuine is emerging return {\"items\":[]} - never invent. Never use em dashes. Return ONLY JSON: {\"items\":[{\"account\":\"...\",\"insight\":\"...\",\"quote\":\"...\"}]}';\nconst prompt=rules+'\\n\\nTHE WEEK\\'S DATA:\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
    },
    "id": "rad_prompt",
    "name": "Build prompt",
@@ -72,12 +71,7 @@
     "promptType": "define",
     "text": "={{ $json.prompt }}",
     "messages": {},
-    "batching": {
-     "batch": {
-      "batchSize": 1,
-      "delayBetweenBatches": 75000
-     }
-    }
+    "batching": {}
    },
    "id": "rad_chain",
    "name": "Read between the lines (Azure)",
@@ -88,7 +82,7 @@
     360
    ],
    "retryOnFail": true,
-   "maxTries": 2,
+   "maxTries": 3,
    "waitBetweenTries": 5000,
    "onError": "continueRegularOutput"
   },
@@ -150,7 +144,7 @@
   },
   {
    "parameters": {
-    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts ONE ACCOUNT AT A TIME (up to 6 accounts x 2 calls x 4.5k chars), 75-SECOND pauses between model calls, and rate-limited accounts are SKIPPED rather than failing the whole run - whatever succeeded is saved. A full run takes ~7-8 minutes; slow is correct.\nStored in `briefs` (audience='radar').\n\nTHE REAL FIX: raise the gpt-4o-mini deployment's tokens-per-minute in Azure OpenAI Studio (Deployments -> edit -> capacity). The current quota is too small for the Monday generator stack.",
+    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): ONE model call over tight transcript excerpts (up to 5 accounts x 2 calls x 2.5k chars - the same request size as the brief and stories, which the current Azure quota handles). Excludes already-flagged risks; max 5 items with verbatim evidence quotes; empty when nothing genuine.\nStored in `briefs` (audience='radar').\n\nIf even this 429s, wait 2 minutes after running workflows 13/15 (they share the quota) - and ask DevOps to raise the gpt-4o-mini deployment's TPM, which removes the constraint entirely.",
     "height": 250,
     "width": 430
    },

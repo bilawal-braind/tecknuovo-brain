@@ -11,6 +11,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
+import { signals } from '../../data/signals'
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts } from '../../data/org'
 import { HEALTH_COLOR } from '../../data/types'
@@ -46,34 +47,6 @@ const FEATURED: { name: string; role?: string; demo?: { calls: number; accounts:
 const featuredOf = (name: string) => FEATURED.find((f) => normName(f.name) === normName(name))
 
 type Row = ApiPersonMetrics & { demoAccounts?: string[]; isDemo?: boolean }
-
-// Conversation-quality insights. Talk:listen is REAL when the person appears in
-// analysed calls (their lines vs everyone's in those calls); the rest are stable
-// illustrative figures for the demo period, seeded by name so they never jump.
-type Insights = { talk: number; listen: number; wpm: number; questions: number; fillers: number; monologues: number; pos: number; neg: number; neu: number }
-const seedOf = (n: string) => { let h = 7; for (const c of n) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h) }
-const inRange = (s: number, min: number, max: number) => min + (s % (max - min + 1))
-function callInsights(row: Row): Insights {
-  const s = seedOf(row.name)
-  let talk = 0
-  const theirs = calls.filter((c) => c.speakers && row.name in c.speakers)
-  if (theirs.length) {
-    let mine = 0, all = 0
-    for (const c of theirs) for (const [k, v] of Object.entries(c.speakers!)) { all += v; if (k === row.name) mine += v }
-    talk = all ? Math.round((100 * mine) / all) : 0
-  }
-  if (!talk) talk = inRange(s, 18, 42)
-  const pos = inRange(s >> 3, 28, 46)
-  const neg = inRange(s >> 5, 3, 9)
-  return {
-    talk, listen: 100 - talk,
-    wpm: inRange(s >> 2, 142, 208),
-    questions: Math.max(row.calls, 1) * inRange(s >> 4, 6, 15),
-    fillers: Math.max(row.calls, 1) * inRange(s >> 6, 9, 22),
-    monologues: Math.max(1, Math.round(Math.max(row.calls, 1) / 2)),
-    pos, neg, neu: 100 - pos - neg,
-  }
-}
 
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
 function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
@@ -260,8 +233,8 @@ export function OpsOS() {
                 </div>
               </div>
 
-              {/* conversation quality: the team average of how we sound in the room */}
-          <TeamQuality roster={roster} />
+              {/* the delivery pulse: real numbers from the period's calls and signals */}
+          <DeliveryPulse days={days} />
 
           {/* the coverage board: faces + bars on a real scale, click through to people */}
               <div className="glass mt-4 rounded-2xl p-5">
@@ -382,7 +355,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
         </div>
       </div>
 
-      <PersonInsights row={row} color={color} days={days} />
+      <PersonFootprint days={days} theirCalls={theirCalls} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-line bg-surface p-5">
@@ -422,53 +395,73 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
   )
 }
 
-// Team-average conversation quality (the Analytics-app style read).
-function TeamQuality({ roster }: { roster: Row[] }) {
-  const ins = roster.map(callInsights)
-  const n = Math.max(1, ins.length)
-  const avg = (f: (i: Insights) => number) => Math.round(ins.reduce((t, i) => t + f(i), 0) / n)
-  const talk = avg((i) => i.talk)
-  const pos = avg((i) => i.pos), neg = avg((i) => i.neg)
+// The delivery pulse: entirely real numbers from the period's calls and the
+// signals they produced - the MD read of how delivery intelligence is flowing.
+function DeliveryPulse({ days }: { days: Days }) {
+  const cutoff = Date.now() - days * DAY
+  const pCalls = calls.filter((c) => Date.parse(c.date) >= cutoff)
+  const pSignals = signals.filter((sg) => Date.parse(sg.createdAt) >= cutoff)
+  const risks = pSignals.filter((sg) => sg.type === 'risk').length
+  const opps = pSignals.filter((sg) => sg.type === 'opportunity').length
+  const yieldPc = pCalls.length ? (pSignals.length / pCalls.length).toFixed(1) : '0'
+  const unresolved = signals.filter((sg) => sg.type === 'risk' && (sg.status === 'new' || sg.status === 'routed') && Date.now() - Date.parse(sg.createdAt) >= 14 * DAY).length
+  const covered = new Set(pCalls.map((c) => c.accountId).filter(Boolean)).size
+  const quiet = Math.max(0, accounts.length - covered)
+  const rk = risks + opps ? Math.round((100 * risks) / (risks + opps)) : 50
   return (
     <div className="glass mt-4 rounded-2xl p-5">
-      <div className="eyebrow">Conversation quality · team average</div>
-      <p className="mt-0.5 text-[11px] text-muted-2">How the team sounds in the room, averaged across everyone below. Open a person for their individual read.</p>
+      <div className="eyebrow">Delivery pulse · last {days} days</div>
+      <p className="mt-0.5 text-[11px] text-muted-2">Straight from the analysed calls and the signals they produced.</p>
       <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QCard label="Talk : listen">
-          <div className="flex items-baseline gap-2"><span className="text-xl font-bold" style={{ color: 'var(--accent)' }}>{talk}%</span><span className="text-[11px] text-muted">talk</span><span className="text-xl font-bold text-muted">{100 - talk}%</span><span className="text-[11px] text-muted">listen</span></div>
-          <Split a={talk} colors={['var(--accent)', 'var(--line-2)']} />
+        <QCard label="Signal yield">
+          <span className="text-2xl font-bold">{yieldPc}</span>
+          <span className="ml-1.5 text-[11px] text-muted">per call · {pSignals.length} signals from {pCalls.length} calls</span>
         </QCard>
-        <QCard label="Avg words / minute"><span className="text-2xl font-bold">{avg((i) => i.wpm)}</span><span className="ml-1.5 text-[11px] text-muted">wpm</span></QCard>
-        <QCard label="Questions asked"><span className="text-2xl font-bold">{ins.reduce((t, i) => t + i.questions, 0)}</span><span className="ml-1.5 text-[11px] text-muted">this period</span></QCard>
-        <QCard label="Sentiment in conversations">
-          <div className="flex items-baseline gap-2 text-[13px] font-bold"><span style={{ color: 'var(--opp)' }}>{pos}%</span><span style={{ color: 'var(--risk)' }}>{neg}%</span><span style={{ color: 'var(--update)' }}>{100 - pos - neg}%</span></div>
-          <Split a={pos} b={neg} colors={['var(--opp)', 'var(--risk)', 'var(--update)']} />
-          <div className="mt-1 flex gap-2 text-[9.5px] font-semibold uppercase tracking-wide text-muted-2"><span>Positive</span><span>Negative</span><span>Neutral</span></div>
+        <QCard label="Risk : opportunity mix">
+          <div className="flex items-baseline gap-3 text-[15px] font-bold">
+            <span style={{ color: 'var(--risk)' }}>{risks} risk{risks !== 1 ? 's' : ''}</span>
+            <span style={{ color: 'var(--opp)' }}>{opps} opp{opps !== 1 ? 's' : ''}</span>
+          </div>
+          <Split a={rk} colors={['var(--risk)', 'var(--opp)']} />
+        </QCard>
+        <QCard label="Unresolved risks · 14d+">
+          <span className="text-2xl font-bold" style={unresolved ? { color: 'var(--risk)' } : undefined}>{unresolved}</span>
+          <span className="ml-1.5 text-[11px] text-muted">still open across the portfolio</span>
+        </QCard>
+        <QCard label="Account coverage">
+          <span className="text-2xl font-bold">{covered}</span>
+          <span className="ml-1.5 text-[11px] text-muted">of {accounts.length} heard from{quiet ? ` · ${quiet} quiet` : ''}</span>
+          <Split a={accounts.length ? Math.round((100 * covered) / accounts.length) : 0} colors={['var(--accent)', 'var(--line-2)']} />
         </QCard>
       </div>
     </div>
   )
 }
 
-// One person's conversation read, on their profile.
-function PersonInsights({ row, color, days }: { row: Row; color: string; days: Days }) {
-  const i = callInsights(row)
+// One person's real footprint: what their conversations put into the brain.
+function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] }) {
+  const theirSignals = theirCalls.flatMap((c) => c.signals)
+  const risks = theirSignals.filter((sg) => sg.type === 'risk').length
+  const opps = theirSignals.filter((sg) => sg.type === 'opportunity').length
+  const accIds = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
+  const openOnAccounts = signals.filter((sg) => accIds.includes(sg.accountId) && (sg.status === 'new' || sg.status === 'routed')).length
+  const health = accIds.map((id) => accounts.find((a) => a.id === id)).filter(Boolean)
   return (
     <div className="glass mt-4 rounded-2xl p-5">
-      <div className="eyebrow">Conversation insights · last {days} days</div>
-      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <QCard label="Talk : listen">
-          <div className="flex items-baseline gap-2"><span className="text-xl font-bold" style={{ color }}>{i.talk}%</span><span className="text-[11px] text-muted">talk</span><span className="text-xl font-bold text-muted">{i.listen}%</span><span className="text-[11px] text-muted">listen</span></div>
-          <Split a={i.talk} colors={[color, 'var(--line-2)']} />
-        </QCard>
-        <QCard label="Avg words / minute"><span className="text-2xl font-bold">{i.wpm}</span><span className="ml-1.5 text-[11px] text-muted">wpm</span></QCard>
-        <QCard label="Questions asked"><span className="text-2xl font-bold">{i.questions}</span></QCard>
-        <QCard label="Filler words"><span className="text-2xl font-bold">{i.fillers}</span></QCard>
-        <QCard label="Monologues"><span className="text-2xl font-bold">{i.monologues}</span><span className="ml-1.5 text-[11px] text-muted">2+ min uninterrupted</span></QCard>
-        <QCard label="Sentiment">
-          <div className="flex items-baseline gap-2 text-[13px] font-bold"><span style={{ color: 'var(--opp)' }}>{i.pos}%</span><span style={{ color: 'var(--risk)' }}>{i.neg}%</span><span style={{ color: 'var(--update)' }}>{i.neu}%</span></div>
-          <Split a={i.pos} b={i.neg} colors={['var(--opp)', 'var(--risk)', 'var(--update)']} />
-          <div className="mt-1 flex gap-2 text-[9.5px] font-semibold uppercase tracking-wide text-muted-2"><span>Pos</span><span>Neg</span><span>Neu</span></div>
+      <div className="eyebrow">Their footprint · last {days} days</div>
+      <p className="mt-0.5 text-[11px] text-muted-2">What their conversations put into the brain, and the state of the accounts they cover.</p>
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <QCard label="Risks surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--risk)' }}>{risks}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
+        <QCard label="Opportunities surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--opp)' }}>{opps}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
+        <QCard label="Open items on their accounts"><span className="text-2xl font-bold">{openOnAccounts}</span><span className="ml-1.5 text-[11px] text-muted">awaiting action</span></QCard>
+        <QCard label="Their accounts' health">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {health.length ? health.map((a) => (
+              <span key={a!.id} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-muted">
+                <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[a!.health] }} />{a!.name}
+              </span>
+            )) : <span className="text-[11.5px] text-muted-2">no analysed accounts in this window</span>}
+          </div>
         </QCard>
       </div>
     </div>
