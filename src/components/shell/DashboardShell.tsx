@@ -9,6 +9,10 @@ import { fetchMe } from '../../data/api'
 import type { Me } from '../../data/api'
 import { authEnabled, logout } from '../../data/auth'
 
+// One /api/me per page load, shared by the greeting and the sidebar footer.
+let mePromise: Promise<Me> | null = null
+const whoAmI = () => (mePromise ??= fetchMe())
+
 export type Section = { id: string; label: string; icon: LucideIcon; count?: number }
 
 export function DashboardShell({
@@ -75,6 +79,7 @@ export function DashboardShell({
           <span className="text-muted-2">/</span>
           <span className="font-semibold text-text">{activeLabel}</span>
         </div>
+        <Greeting />
         <FreshDataPill />
       </header>
 
@@ -85,6 +90,24 @@ export function DashboardShell({
       </main>
       <CoPilot onOpenAccount={onOpenAccount} />
     </div>
+  )
+}
+
+// A quiet hello to whoever is actually signed in - it replaces the static persona
+// names that used to sit in the sidebar. First name only, time-of-day aware.
+function Greeting() {
+  const [me, setMe] = useState<Me | null>(null)
+  useEffect(() => { whoAmI().then(setMe).catch(() => {}) }, [])
+  if (!me) return null
+  const raw = (me.name || me.email || '').split(/[\s.@_-]+/).filter(Boolean)[0] ?? ''
+  if (!raw) return null
+  const first = raw[0].toUpperCase() + raw.slice(1)
+  const h = new Date().getHours()
+  const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  return (
+    <span className="hidden whitespace-nowrap text-[12px] text-muted-2 sm:inline">
+      {hello}, <span className="font-semibold text-muted">{first}</span>
+    </span>
   )
 }
 
@@ -123,7 +146,7 @@ const ROLE_LABEL: Record<string, string> = {
 function UserFooter() {
   const [me, setMe] = useState<Me | null>(null)
   useEffect(() => {
-    fetchMe().then(setMe).catch(() => {})
+    whoAmI().then(setMe).catch(() => {})
   }, [])
   if (!me) return null
 

@@ -36,7 +36,7 @@ export function Delivery() {
 
   return (
     <DashboardShell
-      role="Delivery" persona="Kiera Battersby · Client Delivery Director" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      role="Delivery" persona="Every delivery and its signals" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
