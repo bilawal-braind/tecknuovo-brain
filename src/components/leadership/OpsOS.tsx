@@ -48,6 +48,16 @@ const featuredOf = (name: string) => FEATURED.find((f) => normName(f.name) === n
 
 type Row = ApiPersonMetrics & { demoAccounts?: string[]; isDemo?: boolean }
 
+// A person's calls in the window: real attendance where speaker data exists,
+// else the recent calls on their (demo) accounts - same rule everywhere.
+function personCalls(name: string, demoAccounts: string[] | undefined, days: number): Call[] {
+  const cutoff = Date.now() - days * DAY
+  const real = calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && name in c.speakers) || c.speaker === name))
+  if (real.length) return real
+  const wanted = new Set((demoAccounts ?? []).map((n) => n.toLowerCase()))
+  return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
+}
+
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
 function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
   const candidates = useMemo(() => {
@@ -300,6 +310,7 @@ export function OpsOS() {
                     <MiniStat label="Accounts" value={r.accounts} />
                     <MiniStat label="Signals" value={r.signals} />
                   </div>
+                  <CardPulse row={r} days={days} />
                 </button>
               ))}
             </div>
@@ -312,14 +323,7 @@ export function OpsOS() {
 
 // ── The full-page profile ──
 function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: string; role: string; days: Days; onBack: () => void }) {
-  const cutoff = Date.now() - days * DAY
-  // Real calls they attended; for demo people, the recent calls on their accounts.
-  const theirCalls = useMemo<Call[]>(() => {
-    const real = calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && row.name in c.speakers) || c.speaker === row.name))
-    if (real.length) return real
-    const wanted = new Set((row.demoAccounts ?? []).map((n) => n.toLowerCase()))
-    return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
-  }, [row, days])
+  const theirCalls = useMemo<Call[]>(() => personCalls(row.name, row.demoAccounts, days), [row, days])
   const theirAccountIds = useMemo(() => {
     const fromCalls = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
     if (fromCalls.length) return fromCalls
@@ -450,7 +454,10 @@ function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] 
     <div className="glass mt-4 rounded-2xl p-5">
       <div className="eyebrow">Their footprint · last {days} days</div>
       <p className="mt-0.5 text-[11px] text-muted-2">What their conversations put into the brain, and the state of the accounts they cover.</p>
-      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <QCard label="Their activity">
+          <WeeklyBars theirCalls={theirCalls} days={days} />
+        </QCard>
         <QCard label="Risks surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--risk)' }}>{risks}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
         <QCard label="Opportunities surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--opp)' }}>{opps}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
         <QCard label="Open items on their accounts"><span className="text-2xl font-bold">{openOnAccounts}</span><span className="ml-1.5 text-[11px] text-muted">awaiting action</span></QCard>
@@ -464,6 +471,47 @@ function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] 
           </div>
         </QCard>
       </div>
+    </div>
+  )
+}
+
+// Tiny per-card pulse: their risk/opportunity balance from real call data.
+function CardPulse({ row, days }: { row: Row; days: Days }) {
+  const sigs = useMemo(() => personCalls(row.name, row.demoAccounts, days).flatMap((c) => c.signals), [row, days])
+  const r = sigs.filter((x) => x.type === 'risk').length
+  const o = sigs.filter((x) => x.type === 'opportunity').length
+  if (r + o === 0) return null
+  return (
+    <div className="mt-2.5 w-full">
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-bg-2">
+        <div style={{ width: `${Math.round((100 * r) / (r + o))}%`, background: 'var(--risk)' }} />
+        <div className="flex-1" style={{ background: 'var(--opp)' }} />
+      </div>
+      <div className="mt-1 text-[9.5px] font-semibold text-muted-2">{r} risk{r !== 1 ? 's' : ''} · {o} opp{o !== 1 ? 's' : ''} on their patch</div>
+    </div>
+  )
+}
+
+// Four-bucket calls-per-week bars - a sparkline without a charting library.
+function WeeklyBars({ theirCalls, days }: { theirCalls: Call[]; days: Days }) {
+  const buckets = useMemo(() => {
+    const n = Math.max(2, Math.ceil(days / 7))
+    const now = Date.now()
+    return Array.from({ length: n }, (_, i) => {
+      const start = now - (n - i) * 7 * DAY
+      const end = start + 7 * DAY
+      return theirCalls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end }).length
+    })
+  }, [theirCalls, days])
+  const max = Math.max(1, ...buckets)
+  return (
+    <div>
+      <div className="flex h-10 items-end gap-1">
+        {buckets.map((v, i) => (
+          <div key={i} className="flex-1 rounded-t" style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%`, background: 'var(--accent)', opacity: v ? 0.9 : 0.25 }} title={`${v} call${v !== 1 ? 's' : ''}`} />
+        ))}
+      </div>
+      <div className="mt-1 text-[10px] text-muted-2">calls per week · last {days} days</div>
     </div>
   )
 }
