@@ -7,14 +7,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity, ChevronLeft } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
 import { signals } from '../../data/signals'
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts } from '../../data/org'
-import { HEALTH_COLOR } from '../../data/types'
+import { HEALTH_COLOR, SIGNAL_META } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
@@ -359,6 +359,8 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
         </div>
       </div>
 
+      <PersonCharts theirCalls={theirCalls} days={days} color={color} />
+
       <PersonFootprint days={days} theirCalls={theirCalls} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -442,6 +444,117 @@ function DeliveryPulse({ days }: { days: Days }) {
   )
 }
 
+// The person's chart row: engagement over time, what their calls surface, and
+// where their time goes. Field names are the real derivations (calls attended,
+// signals produced, signal types, calls per account); hover anything for numbers.
+function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: Days; color: string }) {
+  const weekly = useMemo(() => {
+    const n = Math.max(3, Math.ceil(days / 7))
+    const now = Date.now()
+    return Array.from({ length: n }, (_, i) => {
+      const start = now - (n - i) * 7 * DAY
+      const end = start + 7 * DAY
+      const wk = theirCalls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end })
+      return {
+        week: new Date(end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        calls: wk.length,
+        signals: wk.reduce((t, c) => t + c.signals.length, 0),
+      }
+    })
+  }, [theirCalls, days])
+
+  const mix = useMemo(() => {
+    const sigs = theirCalls.flatMap((c) => c.signals)
+    return (['risk', 'opportunity', 'update', 'people'] as const)
+      .map((t) => ({ name: SIGNAL_META[t].label + 's', value: sigs.filter((x) => x.type === t).length, color: SIGNAL_META[t].color }))
+      .filter((x) => x.value > 0)
+  }, [theirCalls])
+
+  const byAccount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const c of theirCalls) { if (c.accountId) m.set(c.accountId, (m.get(c.accountId) || 0) + 1) }
+    const rows = [...m.entries()].map(([id, n]) => ({ id, n })).sort((a, b) => b.n - a.n)
+    return { rows, max: Math.max(1, ...rows.map((r) => r.n)) }
+  }, [theirCalls])
+
+  const tooltipStyle = { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="glass rounded-2xl p-5 lg:col-span-2">
+        <div className="eyebrow">Engagement over time</div>
+        <p className="mt-0.5 text-[11px] text-muted-2">How many calls they were in each week (teal), and how many signals those calls produced (amber). Hover any point for the exact numbers.</p>
+        <div className="mt-3 h-[190px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={weekly} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+              <CartesianGrid stroke="var(--line)" vertical={false} />
+              <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="calls" name="Calls attended" stroke={color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="signals" name="Signals produced" stroke="var(--people)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="glass rounded-2xl p-5">
+        <div className="eyebrow">What their calls surface</div>
+        <p className="mt-0.5 text-[11px] text-muted-2">The mix of intelligence coming out of their conversations - risks, opportunities, delivery updates and people signals.</p>
+        {mix.length === 0 ? (
+          <p className="py-10 text-center text-[12px] text-muted-2">No signals from their calls in this window.</p>
+        ) : (
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-[140px] w-[140px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={mix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={64} paddingAngle={2} isAnimationActive={false}>
+                    {mix.map((x, i) => <Cell key={i} fill={x.color} stroke="var(--surface)" />)}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              {mix.map((x) => (
+                <div key={x.name} className="flex items-center gap-2 text-[12px]">
+                  <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: x.color }} />
+                  <span className="truncate text-muted">{x.name}</span>
+                  <span className="font-semibold">{x.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="glass rounded-2xl p-5 lg:col-span-3">
+        <div className="eyebrow">Where their time goes</div>
+        <p className="mt-0.5 text-[11px] text-muted-2">Their calls split across the accounts they cover, coloured by each account's current health.</p>
+        <div className="mt-3.5 space-y-2.5">
+          {byAccount.rows.length === 0 ? (
+            <p className="py-4 text-center text-[12px] text-muted-2">No account activity in this window.</p>
+          ) : byAccount.rows.map((r) => {
+            const acc = accounts.find((a) => a.id === r.id)
+            const hc = acc ? HEALTH_COLOR[acc.health] : 'var(--muted-2)'
+            return (
+              <div key={r.id} className="flex items-center gap-2.5" title={`${r.n} call${r.n !== 1 ? 's' : ''} on ${accountName(r.id)}`}>
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: hc }} />
+                <span className="w-[120px] shrink-0 truncate text-[12px] font-semibold">{accountName(r.id)}</span>
+                <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-2">
+                  <div className="h-full rounded-full" style={{ width: `${Math.round((100 * r.n) / byAccount.max)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${hc} 55%, transparent), ${hc})` }} />
+                </div>
+                <span className="w-[56px] shrink-0 text-right text-[11px] font-medium text-muted">{r.n} call{r.n !== 1 ? 's' : ''}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // One person's real footprint: what their conversations put into the brain.
 function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] }) {
   const theirSignals = theirCalls.flatMap((c) => c.signals)
@@ -454,10 +567,7 @@ function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] 
     <div className="glass mt-4 rounded-2xl p-5">
       <div className="eyebrow">Their footprint · last {days} days</div>
       <p className="mt-0.5 text-[11px] text-muted-2">What their conversations put into the brain, and the state of the accounts they cover.</p>
-      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <QCard label="Their activity">
-          <WeeklyBars theirCalls={theirCalls} days={days} />
-        </QCard>
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <QCard label="Risks surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--risk)' }}>{risks}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
         <QCard label="Opportunities surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--opp)' }}>{opps}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
         <QCard label="Open items on their accounts"><span className="text-2xl font-bold">{openOnAccounts}</span><span className="ml-1.5 text-[11px] text-muted">awaiting action</span></QCard>
@@ -488,30 +598,6 @@ function CardPulse({ row, days }: { row: Row; days: Days }) {
         <div className="flex-1" style={{ background: 'var(--opp)' }} />
       </div>
       <div className="mt-1 text-[9.5px] font-semibold text-muted-2">{r} risk{r !== 1 ? 's' : ''} · {o} opp{o !== 1 ? 's' : ''} on their patch</div>
-    </div>
-  )
-}
-
-// Four-bucket calls-per-week bars - a sparkline without a charting library.
-function WeeklyBars({ theirCalls, days }: { theirCalls: Call[]; days: Days }) {
-  const buckets = useMemo(() => {
-    const n = Math.max(2, Math.ceil(days / 7))
-    const now = Date.now()
-    return Array.from({ length: n }, (_, i) => {
-      const start = now - (n - i) * 7 * DAY
-      const end = start + 7 * DAY
-      return theirCalls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end }).length
-    })
-  }, [theirCalls, days])
-  const max = Math.max(1, ...buckets)
-  return (
-    <div>
-      <div className="flex h-10 items-end gap-1">
-        {buckets.map((v, i) => (
-          <div key={i} className="flex-1 rounded-t" style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%`, background: 'var(--accent)', opacity: v ? 0.9 : 0.25 }} title={`${v} call${v !== 1 ? 's' : ''}`} />
-        ))}
-      </div>
-      <div className="mt-1 text-[10px] text-muted-2">calls per week · last {days} days</div>
     </div>
   )
 }
