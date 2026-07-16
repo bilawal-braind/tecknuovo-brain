@@ -103,7 +103,8 @@ function Greeting() {
   if (!raw) return null
   const first = raw[0].toUpperCase() + raw.slice(1)
   const h = new Date().getHours()
-  const [hello, Icon] = h < 12 ? ['Good morning', Sunrise] : h < 17 ? ['Good afternoon', Sun] : ['Good evening', Moon]
+  const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  const Icon = h < 12 ? Sunrise : h < 17 ? Sun : Moon
   return (
     <motion.span
       initial={{ opacity: 0, y: -6 }}
