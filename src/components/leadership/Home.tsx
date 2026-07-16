@@ -250,8 +250,8 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
             <div className={`mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
               <BriefCol icon={Activity} title="What's happening" accent="var(--accent)" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
               <BriefCol icon={HelpCircle} title="Why" accent="var(--update)" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-              {hasWatch && <BriefCol icon={Eye} title="Watch for" accent="var(--people)" paragraphs={brief.content.watch_for!} onOpenAccount={onOpenAccount} />}
-              <BriefCol icon={AlertTriangle} title="What needs you" accent="var(--risk)" onOpenAccount={onOpenAccount}
+              {hasWatch && <BriefCol icon={Eye} title="Watch for" accent="var(--people)" bullets paragraphs={brief.content.watch_for!} onOpenAccount={onOpenAccount} />}
+              <BriefCol icon={AlertTriangle} title="What needs you" accent="var(--risk)" bullets onOpenAccount={onOpenAccount}
                 paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
             </div>
             <div className="mt-4 flex justify-center">
@@ -274,7 +274,10 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
   )
 }
 
-function BriefCol({ icon: Icon, title, paragraphs, accent, onOpenAccount }: { icon: typeof Activity; title: string; paragraphs: string[]; accent: string; onOpenAccount: (id: string) => void }) {
+function BriefCol({ icon: Icon, title, paragraphs, accent, onOpenAccount, bullets = false }: { icon: typeof Activity; title: string; paragraphs: string[]; accent: string; onOpenAccount: (id: string) => void; bullets?: boolean }) {
+  // The model writes intro paragraphs and "- " bullet lines; arrays (watch_for,
+  // needs_you) are bullets by nature. Render each in its proper shape.
+  const blocks = paragraphs.flatMap((p) => p.split(/\n+/)).map((l) => l.trim()).filter(Boolean)
   return (
     <div className="flex flex-col rounded-xl border p-4"
       style={{ borderColor: `color-mix(in srgb, ${accent} 28%, var(--line))`, background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 7%, var(--surface)), var(--surface) 70%)` }}>
@@ -285,9 +288,18 @@ function BriefCol({ icon: Icon, title, paragraphs, accent, onOpenAccount }: { ic
         <span className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: accent }}>{title}</span>
       </div>
       <div className="mt-2.5 space-y-2">
-        {paragraphs.map((p, i) => (
-          <p key={i} className="text-[13px] leading-relaxed text-text"><Linkified text={p} onOpenAccount={onOpenAccount} /></p>
-        ))}
+        {blocks.map((raw, i) => {
+          const isBullet = bullets || /^[-•]\s+/.test(raw)
+          const text = raw.replace(/^[-•]\s+/, '')
+          return isBullet ? (
+            <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
+              <span className="min-w-0"><Linkified text={text} onOpenAccount={onOpenAccount} /></span>
+            </div>
+          ) : (
+            <p key={i} className="text-[13px] leading-relaxed text-text"><Linkified text={text} onOpenAccount={onOpenAccount} /></p>
+          )
+        })}
       </div>
     </div>
   )
