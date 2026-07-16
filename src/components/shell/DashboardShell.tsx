@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { LogOut, RefreshCw } from 'lucide-react'
+import { LogOut, Moon, RefreshCw, Sun, Sunrise } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { BrandLockup } from '../common/Brand'
@@ -103,11 +103,24 @@ function Greeting() {
   if (!raw) return null
   const first = raw[0].toUpperCase() + raw.slice(1)
   const h = new Date().getHours()
-  const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  const [hello, Icon] = h < 12 ? ['Good morning', Sunrise] : h < 17 ? ['Good afternoon', Sun] : ['Good evening', Moon]
   return (
-    <span className="hidden whitespace-nowrap text-[12px] text-muted-2 sm:inline">
-      {hello}, <span className="font-semibold text-muted">{first}</span>
-    </span>
+    <motion.span
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.15, ease: 'easeOut' }}
+      className="hidden items-center gap-2 whitespace-nowrap rounded-full border py-1.5 pl-2.5 pr-3.5 text-[12.5px] sm:inline-flex"
+      style={{
+        borderColor: 'color-mix(in srgb, var(--accent) 25%, var(--line))',
+        background: 'linear-gradient(120deg, var(--accent-l), color-mix(in srgb, var(--accent) 6%, var(--surface)))',
+        color: 'var(--accent-d)',
+      }}
+    >
+      <Icon size={14} style={{ opacity: 0.8 }} />
+      <span>
+        {hello}, <span className="font-bold">{first}</span>
+      </span>
+    </motion.span>
   )
 }
 
