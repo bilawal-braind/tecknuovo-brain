@@ -154,7 +154,7 @@ export function OpsOS() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Ops OS</h3></div>
+          <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Delivery Intel</h3></div>
           <p className="mt-0.5 text-[13px] text-muted">Who's in the conversations, how much, and where{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}. Engagement coverage, not a performance measure.</p>
         </div>
         <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
@@ -326,7 +326,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
   return (
     <div>
       <button onClick={onBack} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:text-text">
-        <ArrowLeft size={14} /> Back to Ops OS
+        <ArrowLeft size={14} /> Back to Delivery Intel
       </button>
 
       <div className="glass mt-3 rounded-2xl p-6" style={{ borderTop: `3px solid ${color}` }}>

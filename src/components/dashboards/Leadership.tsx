@@ -75,7 +75,7 @@ export function Leadership() {
         role="Leadership" persona="Katie Carruthers · Managing Director" active={view} onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null) }} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
         sections={[
           { id: 'home', label: 'Overview', icon: Sparkles },
-          { id: 'opsos', label: 'Ops OS', icon: Users },
+          { id: 'opsos', label: 'Delivery Intel', icon: Users },
         ]}
       >
         <div className="px-7 py-6">
