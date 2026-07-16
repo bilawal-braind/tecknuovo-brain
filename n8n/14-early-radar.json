@@ -75,7 +75,7 @@
     "batching": {
      "batch": {
       "batchSize": 1,
-      "delayBetweenBatches": 45000
+      "delayBetweenBatches": 75000
      }
     }
    },
@@ -88,8 +88,9 @@
     360
    ],
    "retryOnFail": true,
-   "maxTries": 3,
-   "waitBetweenTries": 5000
+   "maxTries": 2,
+   "waitBetweenTries": 5000,
+   "onError": "continueRegularOutput"
   },
   {
    "parameters": {
@@ -149,7 +150,7 @@
   },
   {
    "parameters": {
-    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts ONE ACCOUNT AT A TIME (up to 6 accounts x 2 calls x 4.5k chars), with a 45-SECOND pause between model calls and retry on rate limits - sized for a minimal gpt-4o-mini TPM quota. A full run takes ~4-5 minutes; slow is correct. Excludes already-flagged risks; max 2 items per account, 8 total, each with a verbatim evidence quote; empty when nothing genuine.\nStored in `briefs` (audience='radar'); the Leadership 'Potential risks forming' section reads it.\n\nTHE REAL FIX: raise the gpt-4o-mini deployment's tokens-per-minute in Azure OpenAI Studio (Deployments -> edit -> capacity). The current quota is too small for the Monday 07:50/07:52/07:55 generator stack long-term.",
+    "content": "## Early radar - potential risks BEFORE they're risks\nMondays 07:55 (+ manual): reads the week's RAW transcripts ONE ACCOUNT AT A TIME (up to 6 accounts x 2 calls x 4.5k chars), 75-SECOND pauses between model calls, and rate-limited accounts are SKIPPED rather than failing the whole run - whatever succeeded is saved. A full run takes ~7-8 minutes; slow is correct.\nStored in `briefs` (audience='radar').\n\nTHE REAL FIX: raise the gpt-4o-mini deployment's tokens-per-minute in Azure OpenAI Studio (Deployments -> edit -> capacity). The current quota is too small for the Monday generator stack.",
     "height": 250,
     "width": 430
    },
