@@ -50,6 +50,8 @@ type Moment = {
   callTitle?: string
   date?: string
   accountId?: string
+  strict?: boolean   // verbatim match or nothing (radar evidence)
+  context?: number   // conversation turns either side of the hit
 }
 
 type Story = { account: string; headline: string; story: string }
@@ -502,7 +504,7 @@ function ChainNode({ m }: { m: Moment }) {
         }
         if (!on) return
         const { lines } = transcriptWithMoments(c)
-        const s = snippetAround(lines, m.quote, 2)
+        const s = snippetAround(lines, m.quote, m.context ?? 2, m.strict ?? false)
         if (s) { done(s); return }
       }
       done(null)
@@ -532,7 +534,10 @@ function ChainNode({ m }: { m: Moment }) {
               ))}
             </div>
           ) : (
-            <p className="border-l-2 pl-2.5 text-[12.5px] italic leading-relaxed text-muted" style={{ borderColor: m.color }}>“{m.quote}”</p>
+            <div className="rounded-lg px-3.5 py-3" style={{ background: `color-mix(in srgb, ${m.color} 6%, var(--surface))`, boxShadow: `inset 2px 0 0 ${m.color}` }}>
+              <p className="text-[13px] italic leading-relaxed text-text">“{m.quote}”</p>
+              <p className="mt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-2">Verbatim from this week's calls</p>
+            </div>
           )}
           {m.caption && <p className="mt-2.5 text-[12px] font-medium leading-snug text-text">{m.caption}</p>}
           {m.step && <p className="mt-1 text-[11.5px] leading-snug text-muted"><span className="font-bold uppercase tracking-wide text-[9.5px] text-muted-2">The step · </span>{m.step}</p>}
@@ -573,7 +578,7 @@ function RadarSection({ computed, onOpenAccount }: { computed: { text: string; a
           return (
             <WatchCard key={`r${i}`} accountId={accId} onOpenAccount={onOpenAccount}
               text={<>{r.account && <span className="font-semibold">{r.account}: </span>}{r.insight}</>}
-              moments={r.quote ? [{ key: `rq${i}`, quote: r.quote, color: 'var(--people)', accountId: accId, caption: 'Heard in conversation this week - not yet a formal risk.' }] : []}
+              moments={r.quote ? [{ key: `rq${i}`, quote: r.quote, color: 'var(--people)', accountId: accId, caption: 'Heard in conversation this week - not yet a formal risk.', strict: true, context: 1 }] : []}
             />
           )
         })}

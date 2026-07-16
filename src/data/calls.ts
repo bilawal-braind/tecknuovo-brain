@@ -101,6 +101,20 @@ export function transcriptWithMoments(call: Call): { lines: TranscriptLine[]; mo
 const normText = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 const contentWords = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 5))
 
+// Verbatim-or-nothing: head probes and containment only - no fuzzy fallback.
+// Used where a wrong anchor is worse than no anchor (the early-radar evidence).
+function findQuoteLineStrict(normed: string[], quote: string): number {
+  const nq = normText(quote)
+  if (nq.length < 12) return -1
+  for (const len of [96, 56, 32, 18]) {
+    const probe = nq.slice(0, len)
+    if (probe.length < 12) break
+    const idx = normed.findIndex((t) => t.includes(probe))
+    if (idx >= 0) return idx
+  }
+  return normed.findIndex((t) => t.length >= 20 && nq.includes(t))
+}
+
 function findQuoteLine(normed: string[], words: Set<string>[], quote: string): number {
   const nq = normText(quote)
   if (nq.length >= 12) {
@@ -128,10 +142,10 @@ function findQuoteLine(normed: string[], words: Set<string>[], quote: string): n
 
 // A window of conversation around a quote - the "read the context" view used by
 // the Leadership macro cards. Returns the surrounding lines with the hit marked.
-export function snippetAround(lines: TranscriptLine[], quote: string, context = 2): { lines: TranscriptLine[]; hit: number } | null {
+export function snippetAround(lines: TranscriptLine[], quote: string, context = 2, strict = false): { lines: TranscriptLine[]; hit: number } | null {
   const normed = lines.map((l) => normText(l.text))
   const words = lines.map((l) => contentWords(l.text))
-  const idx = findQuoteLine(normed, words, quote)
+  const idx = strict ? findQuoteLineStrict(normed, quote) : findQuoteLine(normed, words, quote)
   if (idx < 0) return null
   const start = Math.max(0, idx - context)
   return { lines: lines.slice(start, Math.min(lines.length, idx + context + 1)), hit: idx - start }
