@@ -412,11 +412,41 @@ router.post('/signal-notes', async (req, res, next) => {
 router.get('/brief', async (req, res, next) => {
   try {
     const audience = String(req.query.audience || 'leadership').slice(0, 40);
-    const r = await q(
-      'SELECT id, audience, period_start, period_end, content, created_at FROM briefs WHERE audience = $1 ORDER BY created_at DESC LIMIT 1',
-      [audience]
-    );
+    const days = req.query.days ? Math.min(60, Math.max(1, Number(req.query.days) || 0)) : null;
+    const r = days
+      ? await q(
+          'SELECT id, audience, period_start, period_end, content, created_at FROM briefs WHERE audience = $1 AND (period_end - period_start) = $2 ORDER BY created_at DESC LIMIT 1',
+          [audience, days]
+        )
+      : await q(
+          'SELECT id, audience, period_start, period_end, content, created_at FROM briefs WHERE audience = $1 ORDER BY created_at DESC LIMIT 1',
+          [audience]
+        );
     res.json(r.rows[0] || null);
+  } catch (e) { next(e); }
+});
+
+// Regenerate the leadership brief over an arbitrary window (the dashboard's
+// 7/14/30-day toggle). The API never calls the model itself - it pings workflow
+// 13's webhook and waits; n8n owns every model call, as everywhere else.
+router.post('/brief/generate', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    if (allowed !== null) return res.status(403).json({ error: 'forbidden' }); // full-visibility users only
+    const days = Math.min(60, Math.max(1, Number((req.body || {}).days) || 7));
+    const hook = process.env.N8N_BRIEF_WEBHOOK_URL;
+    if (!hook) return res.status(503).json({ error: 'brief generator not configured (set N8N_BRIEF_WEBHOOK_URL)' });
+    const r = await fetch(hook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days }),
+    });
+    if (!r.ok) return res.status(502).json({ error: 'generator failed' });
+    const b = await q(
+      "SELECT id, audience, period_start, period_end, content, created_at FROM briefs WHERE audience = 'leadership' AND (period_end - period_start) = $1 ORDER BY created_at DESC LIMIT 1",
+      [days]
+    );
+    res.json(b.rows[0] || null);
   } catch (e) { next(e); }
 });
 

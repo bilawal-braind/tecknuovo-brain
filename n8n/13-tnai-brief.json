@@ -1,5 +1,5 @@
 {
- "name": "TN Brain \u00b7 13 \u00b7 tnAI Brief (Mondays 07:50)",
+ "name": "TN Brain \u00b7 13 \u00b7 tnAI Brief (Mondays 07:50 + on-demand)",
  "nodes": [
   {
    "parameters": {
@@ -17,8 +17,8 @@
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
    "position": [
-    220,
-    260
+    180,
+    200
    ]
   },
   {
@@ -28,23 +28,53 @@
    "type": "n8n-nodes-base.manualTrigger",
    "typeVersion": 1,
    "position": [
-    220,
-    460
+    180,
+    380
+   ]
+  },
+  {
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "tnai-brief-x7k2m9",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "id": "tb_hook",
+   "name": "On-demand (dashboard toggle)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    180,
+    560
+   ],
+   "webhookId": "tb-brief-hook"
+  },
+  {
+   "parameters": {
+    "jsCode": "const src=($json.body&&typeof $json.body==='object')?$json.body:($json.query||$json||{});\nconst raw=src.days!=null?src.days:7;\nconst days=Math.min(60,Math.max(1,parseInt(raw,10)||7));\nreturn [{json:{days}}];"
+   },
+   "id": "tb_norm",
+   "name": "Normalize input",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    420,
+    380
    ]
   },
   {
    "parameters": {
     "operation": "executeQuery",
-    "query": "SELECT jsonb_build_object(\n 'period_start', (now()::date - 7),\n 'period_end', now()::date,\n 'signals_this_week', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'type', s.type, 'summary', s.summary, 'quote', left(s.quote, 200),\n     'band', s.details->>'band', 'category', s.details->>'risk_category',\n     'networks', s.details->>'networks_total', 'value_mentioned', s.details->>'value',\n     'account', a.name, 'status', s.status, 'created', s.created_at::date))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.created_at > now() - interval '7 days'), '[]'::jsonb),\n 'signal_counts_prev_week', COALESCE((SELECT jsonb_object_agg(t.type, t.n) FROM (\n     SELECT type, count(*) AS n FROM signals\n     WHERE created_at BETWEEN now() - interval '14 days' AND now() - interval '7 days'\n     GROUP BY type) t), '{}'::jsonb),\n 'unresolved_risks', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'summary', s.summary, 'account', a.name, 'band', s.details->>'band',\n     'age_days', (now()::date - s.created_at::date)))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.type = 'risk' AND s.status IN ('new','routed') AND s.created_at < now() - interval '14 days'), '[]'::jsonb),\n 'recurring_themes', COALESCE((SELECT jsonb_agg(jsonb_build_object('account', x.account, 'category', x.category, 'times', x.n)) FROM (\n     SELECT a.name AS account, s.details->>'risk_category' AS category, count(*) AS n\n     FROM signals s JOIN accounts a ON a.id = s.account_id\n     WHERE s.type = 'risk' AND s.created_at > now() - interval '14 days' AND s.details->>'risk_category' IS NOT NULL\n     GROUP BY a.name, s.details->>'risk_category' HAVING count(*) >= 2) x), '[]'::jsonb),\n 'calls_per_account', COALESCE((SELECT jsonb_agg(jsonb_build_object('account', x.account, 'this_week', x.tw, 'prev_week', x.pw)) FROM (\n     SELECT a.name AS account,\n            count(*) FILTER (WHERE c.call_date > now() - interval '7 days') AS tw,\n            count(*) FILTER (WHERE c.call_date BETWEEN now() - interval '14 days' AND now() - interval '7 days') AS pw\n     FROM calls c JOIN accounts a ON a.id = c.account_id\n     WHERE c.call_date > now() - interval '14 days' GROUP BY a.name) x), '[]'::jsonb),\n 'weekly_report_rags', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'project', w.project_title, 'account', w.account_name, 'rag', w.rag))\n   FROM weekly_reports w WHERE w.week_ending > now() - interval '10 days'), '[]'::jsonb),\n 'open_pipeline', (SELECT jsonb_build_object('deals', count(*), 'value', COALESCE(sum(amount),0)) FROM deals WHERE is_open)\n) AS ctx;",
+    "query": "=SELECT jsonb_build_object(\n 'window_days', {{ $json.days }},\n 'period_start', (now()::date - {{ $json.days }}),\n 'period_end', now()::date,\n 'signals_this_period', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'type', s.type, 'summary', s.summary, 'quote', left(s.quote, 200),\n     'band', s.details->>'band', 'category', s.details->>'risk_category',\n     'networks', s.details->>'networks_total', 'value_mentioned', s.details->>'value',\n     'account', a.name, 'status', s.status, 'created', s.created_at::date))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.created_at > now() - interval '{{ $json.days }} days'), '[]'::jsonb),\n 'signal_counts_prev_period', COALESCE((SELECT jsonb_object_agg(t.type, t.n) FROM (\n     SELECT type, count(*) AS n FROM signals\n     WHERE created_at BETWEEN now() - interval '{{ $json.days * 2 }} days' AND now() - interval '{{ $json.days }} days'\n     GROUP BY type) t), '{}'::jsonb),\n 'unresolved_risks', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'summary', s.summary, 'account', a.name, 'band', s.details->>'band',\n     'age_days', (now()::date - s.created_at::date)))\n   FROM signals s LEFT JOIN accounts a ON a.id = s.account_id\n   WHERE s.type = 'risk' AND s.status IN ('new','routed') AND s.created_at < now() - interval '14 days'), '[]'::jsonb),\n 'recurring_themes', COALESCE((SELECT jsonb_agg(jsonb_build_object('account', x.account, 'category', x.category, 'times', x.n)) FROM (\n     SELECT a.name AS account, s.details->>'risk_category' AS category, count(*) AS n\n     FROM signals s JOIN accounts a ON a.id = s.account_id\n     WHERE s.type = 'risk' AND s.created_at > now() - interval '{{ $json.days * 2 }} days' AND s.details->>'risk_category' IS NOT NULL\n     GROUP BY a.name, s.details->>'risk_category' HAVING count(*) >= 2) x), '[]'::jsonb),\n 'calls_per_account', COALESCE((SELECT jsonb_agg(jsonb_build_object('account', x.account, 'this_period', x.tw, 'prev_period', x.pw)) FROM (\n     SELECT a.name AS account,\n            count(*) FILTER (WHERE c.call_date > now() - interval '{{ $json.days }} days') AS tw,\n            count(*) FILTER (WHERE c.call_date BETWEEN now() - interval '{{ $json.days * 2 }} days' AND now() - interval '{{ $json.days }} days') AS pw\n     FROM calls c JOIN accounts a ON a.id = c.account_id\n     WHERE c.call_date > now() - interval '{{ $json.days * 2 }} days' GROUP BY a.name) x), '[]'::jsonb),\n 'weekly_report_rags', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n     'project', w.project_title, 'account', w.account_name, 'rag', w.rag))\n   FROM weekly_reports w WHERE w.week_ending > now() - interval '{{ $json.days + 3 }} days'), '[]'::jsonb),\n 'open_pipeline', (SELECT jsonb_build_object('deals', count(*), 'value', COALESCE(sum(amount),0)) FROM deals WHERE is_open)\n) AS ctx;",
     "options": {}
    },
    "id": "tb_gather",
-   "name": "Gather the week",
+   "name": "Gather the period",
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
    "position": [
-    460,
-    360
+    640,
+    380
    ],
    "credentials": {
     "postgres": {
@@ -55,15 +85,15 @@
   },
   {
    "parameters": {
-    "jsCode": "const ctx=$json.ctx;\nconst rules='You are tnAI, the weekly analyst for the Managing Director of Tecknuovo, a UK digital-delivery consultancy. The dashboard BELOW your brief already shows the detail: per-account risk stories, potential risks forming, and opportunity heat. YOUR BRIEF IS THE EXECUTIVE SUMMARY OF THAT PICTURE - what she absorbs in thirty seconds before deciding where to scroll. PERSPECTIVE: she thinks zoomed out; never day-to-day detail; always name accounts; compare with last week where the data allows. SECTION RULES: whats_happening = a 1-2 sentence overview that states a VERDICT with at least one number (e.g. how many accounts are healthy vs at risk, or the biggest movement of the week) - BANNED openers: \\'a mix of risks and opportunities\\', \\'notable progress\\', or any sentence that could describe any week at any company. points = an ARRAY of 3-5 strings, one specific insight each: the macro risk picture with accounts named, emerging concerns with a clause on WHY each matters, where the commercial energy is gathering. Every point must carry an account name, a number or a movement - never a platitude. Do NOT recite call volumes or activity counts - use a number only when it changes the meaning (money, the age of an unresolved risk, a big swing). why = 2-3 sentences on the pattern behind the week, stated as CAUSAL claims naming accounts (X is happening because Y, seen at A and B). BANNED: abstract filler like \\'highlights the interconnected nature of\\' or \\'underscores the importance of\\' - if a sentence would survive in any company\\'s report, delete it. needs_you = at most 3 items that GENUINELY need a managing director: critical risks, account/relationship risks, anything unresolved 14+ days (state its age in days - the system does not forget). For NEW risks say \\'new this week\\' instead of quoting an age of zero, or a commercial move worth her weight. Empty array if nothing qualifies - a quiet week stated honestly builds trust; never pad. STYLE: plain UK business English, no jargon, no flattery, no hedging. Never use em dashes; use commas or hyphens. Return ONLY JSON: {\"whats_happening\":\"the 1-2 sentence overview\",\"points\":[\"...\"],\"why\":\"...\",\"needs_you\":[\"...\"]}';\nconst prompt=rules+'\\n\\nTHE DATA (past 7 days unless stated):\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
+    "jsCode": "const ctx=$json.ctx;\nconst days=$('Normalize input').first().json.days;\nconst rules='You are tnAI, the weekly analyst for the Managing Director of Tecknuovo, a UK digital-delivery consultancy. This brief covers THE LAST '+days+' DAYS. The dashboard BELOW your brief already shows the detail: per-account risk stories, potential risks forming, and opportunity heat. YOUR BRIEF IS THE EXECUTIVE SUMMARY OF THAT PICTURE - what she absorbs in thirty seconds before deciding where to scroll. PERSPECTIVE: she thinks zoomed out; never day-to-day detail; always name accounts; compare with the previous '+days+'-day period where the data allows. SECTION RULES: whats_happening = a 1-2 sentence overview that states a VERDICT with at least one number (e.g. how many accounts are healthy vs at risk, or the biggest movement of the period) - BANNED openers: \\'a mix of risks and opportunities\\', \\'notable progress\\', or any sentence that could describe any week at any company. points = an ARRAY of 3-5 strings, one specific insight each: the macro risk picture with accounts named, emerging concerns with a clause on WHY each matters, where the commercial energy is gathering. Every point must carry an account name, a number or a movement - never a platitude. Do NOT recite call volumes or activity counts - use a number only when it changes the meaning (money, the age of an unresolved risk, a big swing). why = 2-3 sentences on the pattern behind the period, stated as CAUSAL claims naming accounts (X is happening because Y, seen at A and B). BANNED: abstract filler like \\'highlights the interconnected nature of\\' or \\'underscores the importance of\\'. needs_you = at most 3 items that GENUINELY need a managing director: critical risks, account/relationship risks, anything unresolved 14+ days (state its age in days). For NEW risks say \\'new this week\\' instead of quoting an age of zero, or a commercial move worth her weight. Empty array if nothing qualifies - never pad. STYLE: plain UK business English, no jargon, no flattery, no hedging. Never use em dashes; use commas or hyphens. Return ONLY JSON: {\"whats_happening\":\"the 1-2 sentence overview\",\"points\":[\"...\"],\"why\":\"...\",\"needs_you\":[\"...\"]}';\nconst prompt=rules+'\\n\\nTHE DATA (past '+days+' days unless stated):\\n'+JSON.stringify(ctx);\nreturn [{json:{prompt}}];"
    },
    "id": "tb_prompt",
    "name": "Build prompt",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
-    680,
-    360
+    860,
+    380
    ]
   },
   {
@@ -78,8 +108,8 @@
    "type": "@n8n/n8n-nodes-langchain.chainLlm",
    "typeVersion": 1.5,
    "position": [
-    900,
-    360
+    1080,
+    380
    ]
   },
   {
@@ -94,8 +124,8 @@
    "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
    "typeVersion": 1,
    "position": [
-    900,
-    560
+    1080,
+    580
    ],
    "credentials": {
     "azureOpenAiApi": {
@@ -106,15 +136,15 @@
   },
   {
    "parameters": {
-    "jsCode": "const raw=($json.text||$json.response||$json.output||'').trim();\n// The model often puts LITERAL newlines inside JSON strings (the paragraphs we ask\n// for) - invalid JSON. Escape control chars inside strings, then parse.\nfunction parseModelJson(t){\n  const m=t.match(/\\{[\\s\\S]*\\}/); if(!m){return null;}\n  let s=m[0];\n  try{return JSON.parse(s);}catch(e){}\n  let out='',inStr=false,esc=false;\n  for(const ch of s){\n    if(esc){out+=ch;esc=false;continue;}\n    if(ch==='\\\\'){out+=ch;esc=true;continue;}\n    if(ch==='\"'){inStr=!inStr;out+=ch;continue;}\n    if(inStr&&ch==='\\n'){out+='\\\\n';continue;}\n    if(inStr&&ch==='\\r'){continue;}\n    if(inStr&&ch==='\\t'){out+='\\\\t';continue;}\n    out+=ch;\n  }\n  try{return JSON.parse(out);}catch(e){return null;}\n}\nconst obj=parseModelJson(raw);\nif(!obj){return [{json:{sql:\"SELECT 'model output could not be parsed' AS note\", parse_error:true, raw_head:raw.slice(0,300)}}];}\nconst arr=function(v,n){return Array.isArray(v)?v.slice(0,n).map(function(x){return String(x).slice(0,300)}):[]};\nconst points=Array.isArray(obj.points)?obj.points.slice(0,5).map(function(x){return String(x).slice(0,300)}):[];\nconst body=String(obj.whats_happening||'').slice(0,600)+(points.length?'\\n'+points.map(function(p){return '- '+p}).join('\\n'):'');\nconst out={\n whats_happening:body.slice(0,2000),\n why:String(obj.why||'').slice(0,1200),\n watch_for:arr(obj.watch_for,3),\n needs_you:arr(obj.needs_you,3)\n};\nif(!out.whats_happening){return [{json:{sql:\"SELECT 'empty brief - not saved' AS note\", parse_error:true}}];}\nconst e=function(s){return String(s).replace(/'/g,\"''\")};\nconst sql=\"INSERT INTO briefs (audience,period_start,period_end,content) VALUES ('leadership', now()::date-7, now()::date, '\"+e(JSON.stringify(out))+\"'::jsonb);\";\nreturn [{json:{sql,preview:out}}];"
+    "jsCode": "const raw=($json.text||$json.response||$json.output||'').trim();\nconst days=$('Normalize input').first().json.days;\nfunction parseModelJson(t){\n  const m=t.match(/\\{[\\s\\S]*\\}/); if(!m){return null;}\n  let s=m[0];\n  try{return JSON.parse(s);}catch(e){}\n  let out='',inStr=false,esc=false;\n  for(const ch of s){\n    if(esc){out+=ch;esc=false;continue;}\n    if(ch==='\\\\'){out+=ch;esc=true;continue;}\n    if(ch==='\"'){inStr=!inStr;out+=ch;continue;}\n    if(inStr&&ch==='\\n'){out+='\\\\n';continue;}\n    if(inStr&&ch==='\\r'){continue;}\n    if(inStr&&ch==='\\t'){out+='\\\\t';continue;}\n    out+=ch;\n  }\n  try{return JSON.parse(out);}catch(e){return null;}\n}\nconst obj=parseModelJson(raw);\nif(!obj){return [{json:{sql:\"SELECT 'model output could not be parsed' AS note\", parse_error:true, raw_head:raw.slice(0,300)}}];}\nconst arr=function(v,n){return Array.isArray(v)?v.slice(0,n).map(function(x){return String(x).slice(0,300)}):[]};\nconst points=Array.isArray(obj.points)?obj.points.slice(0,5).map(function(x){return String(x).slice(0,300)}):[];\nconst body=String(obj.whats_happening||'').slice(0,600)+(points.length?'\\n'+points.map(function(p){return '- '+p}).join('\\n'):'');\nconst out={\n whats_happening:body.slice(0,2000),\n why:String(obj.why||'').slice(0,1200),\n watch_for:arr(obj.watch_for,3),\n needs_you:arr(obj.needs_you,3)\n};\nif(!out.whats_happening){return [{json:{sql:\"SELECT 'empty brief - not saved' AS note\", parse_error:true}}];}\nconst e=function(s){return String(s).replace(/'/g,\"''\")};\nconst sql=\"INSERT INTO briefs (audience,period_start,period_end,content) VALUES ('leadership', now()::date - \"+days+\", now()::date, '\"+e(JSON.stringify(out))+\"'::jsonb);\";\nreturn [{json:{sql,preview:out,days:days}}];"
    },
    "id": "tb_save_sql",
    "name": "Build save SQL",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
-    1140,
-    360
+    1300,
+    380
    ]
   },
   {
@@ -128,8 +158,8 @@
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
    "position": [
-    1360,
-    360
+    1520,
+    380
    ],
    "credentials": {
     "postgres": {
@@ -140,17 +170,33 @@
   },
   {
    "parameters": {
-    "content": "## tnAI weekly brief (Leadership OS)\nEvery Monday 07:50 (after recon 07:00, org sync 07:10, HubSpot 07:30): rolls up the past 7 days - signals with quotes, unresolved 14+ day risks, RAG mix, call volume, open pipeline - and writes the MD's three-section brief (what's happening / why / what needs you). Stored in `briefs`; the dashboard reads the latest via /api/brief.\n\n**Run the db/2026-07_leadership_os.sql migration first.** Manual 'Run' trigger = regenerate on demand.",
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+    "options": {}
+   },
+   "id": "tb_respond",
+   "name": "Respond",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    1740,
+    380
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "content": "## tnAI brief - weekly + on-demand per window\nMondays 07:50 writes the 7-day brief. The dashboard's 7/14/30-day toggle calls the webhook (POST /webhook/tnai-brief-x7k2m9 {days:N}) via the API, which regenerates the brief over that window and saves it (period length = the window, so each window caches separately).\n\nAPI needs env: N8N_BRIEF_WEBHOOK_URL=https://<this-n8n-host>/webhook/tnai-brief-x7k2m9\nWorkflow must be ACTIVE for the webhook to answer.",
     "height": 250,
-    "width": 420
+    "width": 430
    },
    "id": "tb_note",
    "name": "How it works",
    "type": "n8n-nodes-base.stickyNote",
    "typeVersion": 1,
    "position": [
-    180,
-    20
+    140,
+    -40
    ]
   }
  ],
@@ -159,7 +205,7 @@
    "main": [
     [
      {
-      "node": "Gather the week",
+      "node": "Normalize input",
       "type": "main",
       "index": 0
      }
@@ -170,14 +216,36 @@
    "main": [
     [
      {
-      "node": "Gather the week",
+      "node": "Normalize input",
       "type": "main",
       "index": 0
      }
     ]
    ]
   },
-  "Gather the week": {
+  "On-demand (dashboard toggle)": {
+   "main": [
+    [
+     {
+      "node": "Normalize input",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Normalize input": {
+   "main": [
+    [
+     {
+      "node": "Gather the period",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gather the period": {
    "main": [
     [
      {
@@ -215,6 +283,17 @@
     [
      {
       "node": "Save brief",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Save brief": {
+   "main": [
+    [
+     {
+      "node": "Respond",
       "type": "main",
       "index": 0
      }

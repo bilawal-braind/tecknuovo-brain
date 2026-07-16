@@ -14,7 +14,7 @@ import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
 import type { Call, TranscriptLine } from '../../data/calls'
 import { accounts, accountName } from '../../data/org'
 import { weeklyTrend } from '../../data/trends'
-import { fetchBrief, fetchTranscript } from '../../data/api'
+import { fetchBrief, generateBrief, fetchTranscript } from '../../data/api'
 import type { ApiBrief } from '../../data/api'
 import type { Signal, Severity } from '../../data/types'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
@@ -158,7 +158,7 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
         </div>
       </div>
 
-      <TnaiBrief onOpenAccount={onOpenAccount} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
+      <TnaiBrief days={days} onOpenAccount={onOpenAccount} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={Building2} label="Accounts active" value={`${d.accountsActive}`} sub={`of ${accounts.length} in the brain`} />
@@ -215,11 +215,45 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
 }
 
 // ── tnAI brief ──
-function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
+function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [checked, setChecked] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  useEffect(() => { let on = true; fetchBrief().then((b) => { if (on) { setBrief(b); setChecked(true) } }); return () => { on = false } }, [])
+  const [msgIdx, setMsgIdx] = useState(0)
+
+  // The toggle re-evaluates the brief: a fresh one for this window shows instantly;
+  // otherwise workflow 13 regenerates it over exactly these days while we animate.
+  useEffect(() => {
+    let on = true
+    setChecked(false)
+    fetchBrief('leadership', days).then(async (b) => {
+      if (!on) return
+      const fresh = b && Date.now() - Date.parse(b.created_at) < 24 * 3600_000
+      if (fresh) { setBrief(b); setChecked(true); return }
+      if (b) setBrief(b) // show the stale one behind the scenes if generation fails
+      setGenerating(true)
+      const g = await generateBrief(days).catch(() => null)
+      if (!on) return
+      if (g) setBrief(g)
+      setGenerating(false)
+      setChecked(true)
+    })
+    return () => { on = false }
+  }, [days])
+
+  useEffect(() => {
+    if (!generating) return
+    const t = window.setInterval(() => setMsgIdx((i) => i + 1), 2600)
+    return () => window.clearInterval(t)
+  }, [generating])
+
+  const GEN_MSGS = [
+    `Re-reading the last ${days} days of calls…`,
+    'Cross-checking the weekly reports…',
+    'Weighing the open pipeline…',
+    'Writing the brief…',
+  ]
 
   const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
   const hasWatch = (brief?.content.watch_for?.length ?? 0) > 0
@@ -230,11 +264,20 @@ function TnaiBrief({ onOpenAccount, fallback }: { onOpenAccount: (id: string) =>
         <div className="flex flex-wrap items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={16} /></span>
           <span className="text-[16px] font-bold tracking-tight"><span className="lowercase">tn</span><span style={{ color: 'var(--accent-d)' }}>AI</span></span>
-          <span className="text-[12px] text-muted">· weekly brief{when ? ` · generated ${when}` : ''}</span>
+          <span className="text-[12px] text-muted">· {days === 7 ? 'weekly brief' : `last ${days} days`}{when && !generating ? ` · generated ${when}` : ''}</span>
           <span className="ml-auto rounded-full border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-muted-2">reads every call, weekly report + HubSpot</span>
         </div>
 
-        {brief && !expanded ? (
+        {generating ? (
+          <div className="mt-2 flex flex-col items-center gap-3 py-8">
+            <span className="relative grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: 'var(--accent)' }}>
+              <Sparkles size={22} className="animate-pulse" />
+              <span className="absolute inset-0 animate-ping rounded-2xl" style={{ background: 'color-mix(in srgb, var(--accent) 25%, transparent)' }} aria-hidden />
+            </span>
+            <p className="text-[13.5px] font-semibold text-text">{GEN_MSGS[msgIdx % GEN_MSGS.length]}</p>
+            <p className="text-[11px] text-muted-2">tnAI is re-evaluating the {days === 7 ? 'week' : `last ${days} days`} - usually under half a minute</p>
+          </div>
+        ) : brief && !expanded ? (
           <div className="mt-3.5">
             <p className="text-[13.5px] leading-relaxed text-text"><Linkified text={teaser} onOpenAccount={onOpenAccount} /></p>
             <div className="mt-3 flex justify-center">

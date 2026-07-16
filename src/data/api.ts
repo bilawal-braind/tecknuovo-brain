@@ -212,8 +212,12 @@ export type ApiPersonMetrics = {
   signals: number
   talk_share: number
 }
-export const fetchBrief = (audience = 'leadership') =>
-  get<ApiBrief | null>(`/api/brief?audience=${audience}`).catch(() => null)
+export const fetchBrief = (audience = 'leadership', days?: number) =>
+  get<ApiBrief | null>(`/api/brief?audience=${audience}${days ? `&days=${days}` : ''}`).catch(() => null)
+// Regenerate the leadership brief over a window (n8n does the model work; this
+// call waits for it - expect ~15-40 seconds).
+export const generateBrief = (days: number) =>
+  post<ApiBrief | null>('/api/brief/generate', { days })
 export const fetchPeopleMetrics = (days = 30) =>
   get<ApiPersonMetrics[]>(`/api/people-metrics?days=${days}`).catch(() => [] as ApiPersonMetrics[])
 
