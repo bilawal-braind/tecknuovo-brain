@@ -13,7 +13,7 @@ import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
 import { signals } from '../../data/signals'
 import type { Call } from '../../data/calls'
-import { people, accountName, accounts } from '../../data/org'
+import { people, accountName, accounts, projects } from '../../data/org'
 import { HEALTH_COLOR, SIGNAL_META } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 
@@ -72,7 +72,7 @@ function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; s
   return <img src={`/people/${candidates[idx]}.jpg`} alt={name} onError={() => setIdx((i) => i + 1)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size, ...ringStyle }} />
 }
 
-export function OpsOS() {
+export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: string) => void; onOpenAccount?: (id: string) => void } = {}) {
   const [tab, setTab] = useState<Tab>('overview')
   const [rail, setRail] = useState(true)
   const [days, setDays] = useState<Days>(30)
@@ -159,7 +159,7 @@ export function OpsOS() {
   if (selPerson) {
     const i = roster.findIndex((r) => normName(r.name) === normName(selPerson))
     const row = i >= 0 ? roster[i] : { name: selPerson, calls: 0, accounts: 0, signals: 0, talk_share: 0 }
-    return <PersonProfile row={row} color={PALETTE[Math.max(0, i) % PALETTE.length]} role={roleOf(row.name)} days={days} onBack={() => setSelPerson(null)} />
+    return <PersonProfile row={row} color={PALETTE[Math.max(0, i) % PALETTE.length]} role={roleOf(row.name)} days={days} onBack={() => setSelPerson(null)} onOpenProject={onOpenProject} onOpenAccount={onOpenAccount} />
   }
 
   return (
@@ -322,7 +322,7 @@ export function OpsOS() {
 }
 
 // ── The full-page profile ──
-function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: string; role: string; days: Days; onBack: () => void }) {
+function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAccount }: { row: Row; color: string; role: string; days: Days; onBack: () => void; onOpenProject?: (id: string) => void; onOpenAccount?: (id: string) => void }) {
   const theirCalls = useMemo<Call[]>(() => personCalls(row.name, row.demoAccounts, days), [row, days])
   const theirAccountIds = useMemo(() => {
     const fromCalls = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
@@ -330,6 +330,16 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
     return (row.demoAccounts ?? []).map((n) => accounts.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id).filter(Boolean) as string[]
   }, [theirCalls, row])
   const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 8), [theirCalls])
+  // Their projects: ones they run as DM first, then everything on their accounts.
+  const theirProjects = useMemo(() => {
+    const me = normName(displayName(row.name))
+    const mine = projects.filter((p) => {
+      const dm = p.deliveryManager ? people.find((pp) => pp.id === p.deliveryManager)?.name ?? '' : ''
+      return dm && normName(dm) === me
+    })
+    const onAccounts = projects.filter((p) => theirAccountIds.includes(p.accountId) && !mine.some((m) => m.id === p.id))
+    return [...mine, ...onAccounts].slice(0, 8)
+  }, [row, theirAccountIds])
   const yieldPerCall = row.calls ? (row.signals / row.calls).toFixed(1) : '0'
 
   return (
@@ -346,7 +356,7 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
             <div className="mt-0.5 text-[13px] text-muted">{role}</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {theirAccountIds.map((id) => (
-                <span key={id} className="rounded-full bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted">{accountName(id)}</span>
+                <button key={id} onClick={() => onOpenAccount?.(id)} className="rounded-full bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:bg-[var(--line)] hover:text-text">{accountName(id)}</button>
               ))}
             </div>
           </div>
@@ -363,7 +373,27 @@ function PersonProfile({ row, color, role, days, onBack }: { row: Row; color: st
 
       <PersonFootprint days={days} theirCalls={theirCalls} />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-line bg-surface p-5">
+          <h3 className="text-[14px] font-semibold">Their projects</h3>
+          <p className="text-[11px] text-muted-2">Click one to see its progress - delivery stage, health and the calls behind it</p>
+          <div className="mt-3 space-y-2">
+            {theirProjects.length === 0 ? (
+              <p className="py-4 text-center text-[12px] text-muted-2">No projects linked in this window.</p>
+            ) : theirProjects.map((p) => (
+              <button key={p.id} onClick={() => onOpenProject?.(p.id)}
+                className="group flex w-full items-center gap-2.5 rounded-lg bg-bg-2 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--line)]">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: HEALTH_COLOR[p.rag] }} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold">{p.name}</div>
+                  <div className="truncate text-[11px] text-muted-2">{accountName(p.accountId)} · {p.phase}</div>
+                </div>
+                <ArrowRight size={13} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="text-[14px] font-semibold">Their calls</h3>
           <p className="text-[11px] text-muted-2">Newest first · last {days} days</p>

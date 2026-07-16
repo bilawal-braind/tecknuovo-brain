@@ -86,7 +86,7 @@ export function Leadership() {
           ) : (
           <>
           {view === 'home' && <LeadershipHome onOpenAccount={(id) => setSel(id)} />}
-          {view === 'opsos' && <OpsOS />}
+          {view === 'opsos' && <OpsOS onOpenProject={(id) => setSelProject(id)} onOpenAccount={(id) => setSel(id)} />}
           {view === 'overview' && (
             <>
               <div className="mb-4"><ExecSummary items={execItems} onOpen={(id) => setSel(id)} /></div>
