@@ -235,6 +235,10 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
       if (fresh) { setBrief(b); setChecked(true); return }
       if (b) setBrief(b) // show the stale one behind the scenes if generation fails
       setGenerating(true)
+      // Debounce: someone flicking 7 -> 14 -> 30 must not stack three model calls
+      // onto a tiny Azure OpenAI quota - only the window they settle on generates.
+      await new Promise((r) => setTimeout(r, 700))
+      if (!on) return
       const g = await generateBrief(days).catch(() => null)
       if (!on) return
       if (g) setBrief(g)
