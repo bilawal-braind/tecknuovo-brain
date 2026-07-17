@@ -286,7 +286,7 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
               <button onClick={() => setExpanded(true)}
                 className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-5 py-2 text-[12px] font-semibold text-[var(--accent-d)] transition-all hover:scale-[1.03]"
                 style={{ boxShadow: '0 4px 16px color-mix(in srgb, var(--accent) 20%, transparent)' }}>
-                <Sparkles size={13} /> Read this week's full brief <ChevronDown size={13} />
+                <Sparkles size={13} /> Read the full {days === 7 ? 'weekly brief' : `${days}-day brief`} <ChevronDown size={13} />
               </button>
             </div>
           </div>
@@ -311,7 +311,7 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
               Over the last {fallback.days} days the Second Brain analysed <b>{fallback.calls} call{fallback.calls !== 1 ? 's' : ''}</b> across <b>{fallback.accounts} account{fallback.accounts !== 1 ? 's' : ''}</b>,
               surfacing <b>{fallback.opps} opportunit{fallback.opps !== 1 ? 'ies' : 'y'}</b>{fallback.attention ? <> and <b style={{ color: 'var(--risk)' }}>{fallback.attention} escalation{fallback.attention !== 1 ? 's' : ''}</b> (below)</> : <> and nothing that needs your intervention</>}.
             </p>
-            {checked && <p className="mt-2 text-[11.5px] text-muted-2">The full written brief generates every Monday at 07:50 - run workflow 13 to generate one now.</p>}
+            {checked && <p className="mt-2 text-[11.5px] text-muted-2">tnAI couldn't write the full brief just now - it will try again when you reopen this page or switch the period.</p>}
           </div>
         )}
       </div>
