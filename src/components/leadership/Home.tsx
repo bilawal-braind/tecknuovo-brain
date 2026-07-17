@@ -19,6 +19,7 @@ import type { ApiBrief } from '../../data/api'
 import type { Signal, Severity } from '../../data/types'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
+import { InfoHint } from '../common/InfoHint'
 
 type Days = 7 | 14 | 30
 const DAY = 86_400_000
@@ -170,8 +171,8 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-line bg-surface p-5">
-          <div className="eyebrow">Signal activity · recent weeks</div>
+        <div className="glass rounded-2xl p-5">
+          <span className="flex items-center gap-1.5"><div className="eyebrow">Signal activity · recent weeks</div><InfoHint text="What the brain pulled out of the calls each week, split by signal type. The mix matters more than the height: red growing faster than green is the trend to watch." /></span>
           <div className="mt-3 h-[150px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyTrend()} margin={{ top: 4, right: 4, left: -26, bottom: 0 }}>
@@ -186,10 +187,10 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
             </ResponsiveContainer>
           </div>
         </div>
-        <DonutCard title="Risk mix" sub="by framework category, this period"
+        <DonutCard hint="What kind of risk the period produced. A cluster in one category (say, People & Key Person) is a pattern, not a coincidence." title="Risk mix" sub="by framework category, this period"
           data={(() => { const m = new Map<string, number>(); for (const s of d.cards.flatMap((c) => c.rk)) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
           palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
-        <DonutCard title="Portfolio health" sub="current RAG across accounts"
+        <DonutCard hint="Every account by its current RAG state. The number to hold: how many are green this week versus last." title="Portfolio health" sub="current RAG across accounts"
           data={(['red', 'amber', 'green'] as const).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
           palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
       </div>
@@ -782,10 +783,10 @@ function Stat({ icon: Icon, label, value, sub, color }: { icon: typeof Building2
   )
 }
 
-function DonutCard({ title, sub, data, palette }: { title: string; sub: string; data: { name: string; value: number }[]; palette: string[] }) {
+function DonutCard({ title, sub, data, palette, hint }: { title: string; sub: string; data: { name: string; value: number }[]; palette: string[]; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
-      <h3 className="text-[15px] font-semibold">{title}</h3>
+    <div className="glass rounded-2xl p-5">
+      <span className="flex items-center gap-1.5"><h3 className="text-[15px] font-semibold">{title}</h3>{hint && <InfoHint text={hint} />}</span>
       <p className="text-[11.5px] text-muted-2">{sub}</p>
       {data.length === 0 ? (
         <p className="py-10 text-center text-[12px] text-muted-2">Nothing in this period.</p>

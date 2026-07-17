@@ -17,6 +17,7 @@ import type { Call } from '../../data/calls'
 import { people, accountName, accounts, projects } from '../../data/org'
 import { HEALTH_COLOR } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
+import { InfoHint } from '../common/InfoHint'
 
 type Days = 7 | 14 | 30
 type Tab = 'overview' | 'people'
@@ -64,14 +65,6 @@ function personMinutes(r: Row, days: number): number {
   return personCalls(r.name, r.demoAccounts, days).reduce((t, c) => t + callMinutes(c), 0)
 }
 
-// The coverage bar's segments: this person's calls split per account. Colour is
-// stable per account (same account = same colour on every row).
-const accColor = (id: string) => PALETTE[Math.max(0, accounts.findIndex((a) => a.id === id)) % PALETTE.length]
-function segmentsFor(r: Row, days: number): { account: string; n: number; color: string }[] {
-  const m = new Map<string, number>()
-  for (const c of personCalls(r.name, r.demoAccounts, days)) if (c.accountId) m.set(c.accountId, (m.get(c.accountId) || 0) + 1)
-  return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ account: accountName(id), n, color: accColor(id) }))
-}
 
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
 function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
@@ -251,7 +244,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 
               <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div className="glass rounded-2xl p-5 lg:col-span-2">
-                  <div className="eyebrow">Call volume, by type of call</div>
+                  <span className="flex items-center gap-1.5"><div className="eyebrow">Call volume, by type of call</div><InfoHint text="How many of each kind of call ran each week. The question it answers: is the operating rhythm holding? A dip in standups or governance usually shows up here before it shows up in delivery." /></span>
                   <p className="mt-0.5 text-[11px] text-muted-2">How many of each kind of call ran each week - standups, governance, weekly reports. Hover a point for exact counts.</p>
                   <div className="mt-3 h-[190px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -270,7 +263,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                 </div>
 
                 <div className="glass rounded-2xl p-5">
-                  <div className="eyebrow">The kinds of calls</div>
+                  <span className="flex items-center gap-1.5"><div className="eyebrow">The kinds of calls</div><InfoHint text="Where the team's conversation time goes, by meeting type, across this window." /></span>
                   <p className="mt-0.5 text-[11px] text-muted-2">Everything analysed in the last {days} days, by call type.</p>
                   {typeMix.length === 0 ? (
                     <p className="py-10 text-center text-[12px] text-muted-2">No calls in this window.</p>
@@ -305,7 +298,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 
               <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div className="glass rounded-2xl p-5">
-                  <div className="eyebrow">Where the attention went</div>
+                  <span className="flex items-center gap-1.5"><div className="eyebrow">Where the attention went</div><InfoHint text="Team calls per account, coloured by account health. The question: is our effort where the value and the risk actually are - or is a red account going quiet?" /></span>
                   <p className="mt-0.5 text-[11px] text-muted-2">Team calls per account, coloured by account health - is the effort where the value and the risk are?</p>
                   <div className="mt-3.5 space-y-2.5">
                     {attention.rows.length === 0 ? (
@@ -328,7 +321,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                 </div>
 
                 <div className="glass rounded-2xl p-5">
-                  <div className="eyebrow">Mood of the calls, by week</div>
+                  <span className="flex items-center gap-1.5"><div className="eyebrow">Mood of the calls, by week</div><InfoHint text="The tone of each call, read from what was said and flagged in it. Falling green or rising red here is the earliest warning the dashboard has - before anything is formally raised." /></span>
                   <p className="mt-0.5 text-[11px] text-muted-2">Sentiment read from each call's tone and what was flagged in it - the same read Fireflies gives, per week.</p>
                   <div className="mt-3 h-[180px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -354,8 +347,8 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
               <div className="glass mt-4 rounded-2xl p-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
-                    <div className="eyebrow">Coverage board</div>
-                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days - each bar splits into the accounts they covered (hover a segment). Click anyone to open their profile.</p>
+                    <span className="flex items-center gap-1.5"><div className="eyebrow">Coverage board</div><InfoHint text="Who is present in client conversations and how much. Engagement coverage, not a performance measure." /></span>
+                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days, with their estimated time in calls. Click anyone to open their profile.</p>
                   </div>
                   <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
                 </div>
@@ -372,14 +365,10 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                           {ticks.slice(1, 4).map((t) => (
                             <span key={t} className="absolute bottom-0 top-0 w-px bg-[var(--line-2)] opacity-60" style={{ left: `${(100 * t) / scaleMax}%` }} aria-hidden />
                           ))}
-                          {/* one segment per account they covered - hover any segment for the split */}
-                          <div className="relative flex h-full overflow-hidden rounded-full transition-all duration-700 ease-out"
-                            style={{ width: grown ? `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%` : '0%', transitionDelay: `${i * 80}ms` }}>
-                            {segmentsFor(r, days).map((seg) => (
-                              <span key={seg.account} title={`${seg.n} call${seg.n !== 1 ? 's' : ''} on ${seg.account}`}
-                                className="h-full transition-opacity hover:opacity-75"
-                                style={{ width: `${(100 * seg.n) / r.calls}%`, background: seg.color, boxShadow: 'inset -1px 0 0 var(--surface)' }} />
-                            ))}
+                          <div className="relative flex h-full items-center justify-end rounded-full pr-1.5 transition-all duration-700 ease-out"
+                            title={`${r.calls} call${r.calls !== 1 ? 's' : ''} across ${r.accounts} account${r.accounts !== 1 ? 's' : ''}`}
+                            style={{ width: grown ? `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%` : '0%', transitionDelay: `${i * 80}ms`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
+                            <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
                           </div>
                         </div>
                       </div>
@@ -401,7 +390,9 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <>
+              <CallBrief days={days} roster={roster} variant="people" />
+              <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {roster.map((r, i) => (
                 <button key={r.name} onClick={() => setSelPerson(r.name)}
                   className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
@@ -422,7 +413,8 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                   <CardMood row={r} days={days} />
                 </button>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -605,7 +597,7 @@ function ProgressBoard({ onOpenProject }: { onOpenProject?: (id: string) => void
     <div className="glass mt-4 rounded-2xl p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div className="eyebrow">Delivery progress</div>
+          <span className="flex items-center gap-1.5"><div className="eyebrow">Delivery progress</div><InfoHint text="Each project's position against its sprint plan. Amber and red bars that stop moving between weeks are the ones to ask about." /></span>
           <p className="mt-0.5 text-[11px] text-muted-2">Each project against its sprint plan, coloured by RAG. Click one to open the full project view.</p>
         </div>
         <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">progress = sprint plan</span>
@@ -674,7 +666,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
   return (
     <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="glass rounded-2xl p-5 lg:col-span-2">
-        <div className="eyebrow">Engagement over time</div>
+        <span className="flex items-center gap-1.5"><div className="eyebrow">Engagement over time</div><InfoHint text="Their week-by-week presence: calls attended and the hours those took. Sudden drops usually mean leave, handover - or meetings running untranscribed." /></span>
         <p className="mt-0.5 text-[11px] text-muted-2">How many calls they were in each week, and roughly how many hours those took. Hover any point for the exact numbers.</p>
         <div className="mt-3 h-[190px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -692,7 +684,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
       </div>
 
       <div className="glass rounded-2xl p-5">
-        <div className="eyebrow">The kinds of calls they're in</div>
+        <span className="flex items-center gap-1.5"><div className="eyebrow">The kinds of calls they're in</div><InfoHint text="The shape of their role in practice: heavy standups reads delivery-side, heavy governance reads client-side." /></span>
         <p className="mt-0.5 text-[11px] text-muted-2">Their conversations by call type - standups, governance, weekly reports, kickoffs.</p>
         {mix.length === 0 ? (
           <p className="py-10 text-center text-[12px] text-muted-2">No calls in this window.</p>
@@ -722,7 +714,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
       </div>
 
       <div className="glass rounded-2xl p-5 lg:col-span-3">
-        <div className="eyebrow">Where their time goes</div>
+        <span className="flex items-center gap-1.5"><div className="eyebrow">Where their time goes</div><InfoHint text="Their calls split across the accounts they cover, coloured by account health - are they where their accounts need them?" /></span>
         <p className="mt-0.5 text-[11px] text-muted-2">Their calls split across the accounts they cover, coloured by each account's current health.</p>
         <div className="mt-3.5 space-y-2.5">
           {byAccount.rows.length === 0 ? (
@@ -799,7 +791,8 @@ function CardMood({ row, days }: { row: Row; days: Days }) {
 
 // The tnAI read across the calls and the people - the same voice as the
 // leadership brief, composed deterministically from the call telemetry.
-function CallBrief({ days, roster }: { days: Days; roster: Row[] }) {
+// variant 'calls' opens the Overview tab; variant 'people' opens the People tab.
+function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Row[]; variant?: 'calls' | 'people' }) {
   const b = useMemo(() => {
     const cutoff = Date.now() - days * DAY
     const prevCut = Date.now() - 2 * days * DAY
@@ -808,6 +801,7 @@ function CallBrief({ days, roster }: { days: Days; roster: Row[] }) {
     if (!p.length) return null
     const delta = p.length - prev.length
     const mins = p.reduce((t, c) => t + callMinutes(c), 0)
+    const avgMins = Math.round(mins / p.length)
     const byType = new Map<string, number>()
     for (const c of p) byType.set(c.type, (byType.get(c.type) || 0) + 1)
     const topType = [...byType.entries()].sort((a, b) => b[1] - a[1])[0]
@@ -818,38 +812,53 @@ function CallBrief({ days, roster }: { days: Days; roster: Row[] }) {
     const negAccounts = [...new Set(negs.map((x) => accountName(x.c.accountId)).filter(Boolean))].slice(0, 2)
     const covered = new Set(p.map((c) => c.accountId).filter(Boolean))
     const quiet = accounts.filter((a) => !covered.has(a.id)).map((a) => a.name).slice(0, 2)
-    const top = [...roster].sort((a, b) => b.calls - a.calls)[0]
-    const avgMins = Math.round(mins / p.length)
+    const byCalls = [...roster].sort((a, b) => b.calls - a.calls)
+    const top = byCalls[0]
+    const stretched = [...roster].sort((a, b) => b.accounts - a.accounts)[0]
     const byAcc = new Map<string, number>()
     for (const c of p) if (c.accountId) byAcc.set(c.accountId, (byAcc.get(c.accountId) || 0) + 1)
     const busiest = [...byAcc.entries()].sort((a, b) => b[1] - a[1])[0]
     const progress = projects.length ? Math.round(projects.reduce((t, pr) => t + projectProgress(pr), 0) / projects.length) : 0
+    const active = roster.filter((r) => r.calls > 0).length
     const B = ({ children }: { children: ReactNode }) => <b className="font-semibold">{children}</b>
+    type Chip = { tag: string; color: string; node: ReactNode }
+    if (variant === 'people') {
+      const headline = (
+        <><B>{active} people</B> carried <B>{p.length} calls</B> across <B>{covered.size} account{covered.size !== 1 ? 's' : ''}</B> in the last {days} days - who was where, and how their conversations ran.</>
+      )
+      const chips: Chip[] = []
+      if (top?.calls) chips.push({ tag: 'Most ground', color: 'var(--accent)', node: <><B>{displayName(top.name)}</B> - {top.calls} calls across {top.accounts} account{top.accounts !== 1 ? 's' : ''}, ~{hoursLabel(personMinutes(top, days))} in the room.</> })
+      if (stretched?.accounts > 1 && stretched !== top) chips.push({ tag: 'Widest spread', color: 'var(--update)', node: <><B>{displayName(stretched.name)}</B> covers {stretched.accounts} accounts - the broadest patch on the bench.</> })
+      chips.push({ tag: 'Mood', color: 'var(--people)', node: <><B>{posPc}%</B> of the team's calls ran positive{negs.length ? <> - the {negs.length} that ran negative {negAccounts.length ? <>sat on <B>{negAccounts.join(' and ')}</B></> : <>are worth a listen</>}</> : null}.</> })
+      if (quiet.length) chips.push({ tag: 'Quiet', color: 'var(--risk)', node: <><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} had no analysed calls this window - nobody's been in the room.</> })
+      return { headline, chips }
+    }
     const headline = (
-      <>The team ran <B>{p.length} calls</B> in the last {days} days - roughly <B>{hoursLabel(mins)}</B> of client conversation, {delta === 0 ? 'level with' : delta > 0 ? <><B>{delta} up</B> on</> : <><B>{-delta} down</B> on</>} the period before{topType ? <> - <B>{topType[0].toLowerCase()}s</B> carried the rhythm with {topType[1]}</> : null}.</>
+      <>The team ran <B>{p.length} calls</B> in the last {days} days - roughly <B>{hoursLabel(mins)}</B> of client conversation, {delta === 0 ? 'level with' : delta > 0 ? <><B>{delta} up</B> on</> : <><B>{-delta} down</B> on</>} the period before.</>
     )
-    const rest: ReactNode[] = []
-    rest.push(<><B>{posPc}%</B> of calls ran positive{negs.length ? <>; <B>{negs.length} ran negative</B>{negAccounts.length ? <> - the tension sitting on <B>{negAccounts.join(' and ')}</B></> : null}</> : <> - nothing ran negative</>}. The average call took <B>~{avgMins} minutes</B>.</>)
-    if (busiest) rest.push(<><B>{accountName(busiest[0])}</B> took the most attention with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>, and the portfolio is <B>{progress}%</B> of the way through its sprint plans on average.</>)
-    if (top && top.calls) rest.push(<><B>{displayName(top.name).split(' ')[0]}</B> covered the most ground - <B>{top.calls} calls</B> across {top.accounts} account{top.accounts !== 1 ? 's' : ''}{quiet.length ? <>; <B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in</> : null}.</>)
-    else if (quiet.length) rest.push(<><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in.</>)
-    return { headline, rest }
-  }, [days, roster])
+    const chips: Chip[] = []
+    if (topType) chips.push({ tag: 'Rhythm', color: 'var(--accent)', node: <><B>{topType[0]}s</B> carried the cadence with {topType[1]} of {p.length} - the average call took <B>~{avgMins} minutes</B>.</> })
+    chips.push({ tag: 'Mood', color: 'var(--people)', node: <><B>{posPc}%</B> of calls ran positive{negs.length ? <> - <B>{negs.length} ran negative</B>{negAccounts.length ? <>, the tension sitting on <B>{negAccounts.join(' and ')}</B></> : null}</> : <> - nothing ran negative</>}.</> })
+    if (busiest) chips.push({ tag: 'Attention', color: 'var(--update)', node: <><B>{accountName(busiest[0])}</B> took the most of it with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>; the portfolio sits at <B>{progress}%</B> of its sprint plans.</> })
+    if (top?.calls || quiet.length) chips.push({ tag: 'People', color: 'var(--opp)', node: <>{top?.calls ? <><B>{displayName(top.name).split(' ')[0]}</B> covered the most ground ({top.calls} calls)</> : null}{top?.calls && quiet.length ? '; ' : null}{quiet.length ? <><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet - worth a check-in</> : null}.</> })
+    return { headline, chips }
+  }, [days, roster, variant])
   if (!b) return null
   return (
-    <div className="rounded-2xl border border-line p-5" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
+    <div className="glass rounded-2xl border border-line p-5" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), color-mix(in srgb, var(--surface) 62%, transparent) 55%)' }}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="grid h-7 w-7 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><Sparkles size={14} /></span>
         <span className="text-[14px] font-bold tracking-tight"><span className="lowercase">tn</span><span style={{ color: 'var(--accent-d)' }}>AI</span></span>
-        <span className="text-[12px] text-muted">· call intelligence</span>
+        <span className="text-[12px] text-muted">· {variant === 'people' ? 'the people read' : 'call intelligence'}</span>
         <span className="ml-auto rounded-full border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-muted-2">reads every analysed call</span>
       </div>
       <p className="mt-2.5 text-[13.5px] leading-relaxed text-text">{b.headline}</p>
-      <div className="mt-2 space-y-1.5">
-        {b.rest.map((l, i) => (
-          <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
-            <span className="min-w-0">{l}</span>
+      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+        {b.chips.map((c, i) => (
+          <div key={i} className="flex items-start gap-2.5 rounded-xl border border-line bg-surface px-3 py-2.5">
+            <span className="mt-[1px] shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+              style={{ background: `color-mix(in srgb, ${c.color} 14%, transparent)`, color: c.color }}>{c.tag}</span>
+            <span className="min-w-0 text-[12.5px] leading-relaxed text-text">{c.node}</span>
           </div>
         ))}
       </div>
