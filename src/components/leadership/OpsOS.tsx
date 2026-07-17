@@ -6,15 +6,16 @@
 // roster until their first transcribed call, then real numbers take over.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Radio, Building2, Activity, ChevronLeft } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts'
+import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Building2, ChevronLeft, Clock, ListChecks } from 'lucide-react'
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
 import { calls } from '../../data/calls'
 import { signals } from '../../data/signals'
+import { CALL_TYPE_COLOR, callMinutes, callSentiment, sentimentBand, hoursLabel, projectProgress } from '../../data/callmeta'
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts, projects } from '../../data/org'
-import { HEALTH_COLOR, SIGNAL_META } from '../../data/types'
+import { HEALTH_COLOR } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 
 type Days = 7 | 14 | 30
@@ -56,6 +57,11 @@ function personCalls(name: string, demoAccounts: string[] | undefined, days: num
   if (real.length) return real
   const wanted = new Set((demoAccounts ?? []).map((n) => n.toLowerCase()))
   return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
+}
+
+// Estimated minutes a person spent in calls this window (their calls' durations).
+function personMinutes(r: Row, days: number): number {
+  return personCalls(r.name, r.demoAccounts, days).reduce((t, c) => t + callMinutes(c), 0)
 }
 
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
@@ -120,15 +126,46 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
   const ticks = [0, 1, 2, 3, 4].map((i) => i * step)
   const earliest = useMemo(() => (calls.length ? calls[calls.length - 1].date : null), [])
 
-  const line = useMemo(() => {
+  // Call volume by week, split by the kind of call - the line chart the Ops OS
+  // conversation started from. Only types that actually occur get a line.
+  const volume = useMemo(() => {
+    const cutoff = Date.now() - days * DAY
+    const inWindow = calls.filter((c) => Date.parse(c.date) >= cutoff)
+    const types = [...new Set(inWindow.map((c) => c.type))]
+    const weeks = Math.max(2, Math.ceil(days / 7))
+    const now = Date.now()
+    const rows = Array.from({ length: weeks }, (_, i) => {
+      const start = now - (weeks - i) * 7 * DAY
+      const end = start + 7 * DAY
+      const wk = calls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end })
+      const row: Record<string, number | string> = { week: new Date(end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), total: wk.length }
+      for (const t of types) row[t] = wk.filter((c) => c.type === t).length
+      return row
+    })
+    return { types, rows }
+  }, [days])
+
+  // The kinds of calls in the window - the pie is call TYPES, not signal types.
+  const typeMix = useMemo(() => {
+    const cutoff = Date.now() - days * DAY
+    const m = new Map<string, number>()
+    for (const c of calls) if (Date.parse(c.date) >= cutoff) m.set(c.type, (m.get(c.type) || 0) + 1)
+    return [...m.entries()].map(([name, value]) => ({ name, value, color: CALL_TYPE_COLOR[name as keyof typeof CALL_TYPE_COLOR] ?? 'var(--muted-2)' })).sort((a, b) => b.value - a.value)
+  }, [days])
+
+  const mood = useMemo(() => {
     const weeks = Math.max(2, Math.ceil(days / 7))
     const now = Date.now()
     return Array.from({ length: weeks }, (_, i) => {
       const start = now - (weeks - i) * 7 * DAY
       const end = start + 7 * DAY
+      const wk = calls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end })
+      const bands = wk.map((c) => sentimentBand(callSentiment(c)))
       return {
         week: new Date(end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-        calls: calls.filter((c) => { const t = Date.parse(c.date); return t >= start && t < end }).length,
+        positive: bands.filter((b) => b === 'positive').length,
+        neutral: bands.filter((b) => b === 'neutral').length,
+        negative: bands.filter((b) => b === 'negative').length,
       }
     })
   }, [days])
@@ -167,7 +204,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Delivery Intel</h3></div>
-          <p className="mt-0.5 text-[13px] text-muted">Who's in the conversations, how much, and where{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}. Engagement coverage, not a performance measure.</p>
+          <p className="mt-0.5 text-[13px] text-muted">The team's calls - volume, type, time, coverage and the mood of the room{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}.</p>
         </div>
         <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
           {([7, 14, 30] as Days[]).map((v) => (
@@ -196,29 +233,61 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
         <div className="min-w-0 flex-1">
           {tab === 'overview' ? (
             <>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div className="glass rounded-2xl p-5">
-                  <div className="eyebrow">Team rhythm</div>
-                  <p className="mt-0.5 text-[11px] text-muted-2">Calls the brain analysed each week. A dip means a quiet week - or meetings running without transcription.</p>
-                  <div className="mt-3 h-[170px]">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="glass rounded-2xl p-5 lg:col-span-2">
+                  <div className="eyebrow">Call volume, by type of call</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">How many of each kind of call ran each week - standups, governance, weekly reports. Hover a point for exact counts.</p>
+                  <div className="mt-3 h-[190px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={line} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="opsFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
-                          </linearGradient>
-                        </defs>
+                      <LineChart data={volume.rows} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
                         <CartesianGrid stroke="var(--line)" vertical={false} />
                         <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
-                        <Area type="monotone" dataKey="calls" stroke="var(--accent)" strokeWidth={2} fill="url(#opsFill)" isAnimationActive={false} />
-                      </AreaChart>
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        {volume.types.map((t) => (
+                          <Line key={t} type="monotone" dataKey={t} name={t} stroke={CALL_TYPE_COLOR[t]} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                        ))}
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
+                <div className="glass rounded-2xl p-5">
+                  <div className="eyebrow">The kinds of calls</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">Everything analysed in the last {days} days, by call type.</p>
+                  {typeMix.length === 0 ? (
+                    <p className="py-10 text-center text-[12px] text-muted-2">No calls in this window.</p>
+                  ) : (
+                    <>
+                      <div className="mx-auto mt-1 h-[130px] w-[130px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={typeMix} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} isAnimationActive={false}>
+                              {typeMix.map((x, i) => <Cell key={i} fill={x.color} stroke="var(--surface)" />)}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {typeMix.map((x) => (
+                          <div key={x.name} className="flex items-center gap-2 text-[11.5px]">
+                            <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: x.color }} />
+                            <span className="min-w-0 flex-1 truncate text-muted">{x.name}</span>
+                            <span className="font-semibold">{x.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* the call pulse: volume, time, mood and coverage - all from the calls */}
+              <CallPulse days={days} />
+
+              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div className="glass rounded-2xl p-5">
                   <div className="eyebrow">Where the attention went</div>
                   <p className="mt-0.5 text-[11px] text-muted-2">Team calls per account, coloured by account health - is the effort where the value and the risk are?</p>
@@ -241,17 +310,36 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                     })}
                   </div>
                 </div>
+
+                <div className="glass rounded-2xl p-5">
+                  <div className="eyebrow">Mood of the calls, by week</div>
+                  <p className="mt-0.5 text-[11px] text-muted-2">Sentiment read from each call's tone and what was flagged in it - the same read Fireflies gives, per week.</p>
+                  <div className="mt-3 h-[180px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={mood} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
+                        <CartesianGrid stroke="var(--line)" vertical={false} />
+                        <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="positive" name="Positive" stackId="m" fill="var(--opp)" isAnimationActive={false} />
+                        <Bar dataKey="neutral" name="Neutral" stackId="m" fill="var(--line-2)" isAnimationActive={false} />
+                        <Bar dataKey="negative" name="Negative" stackId="m" fill="var(--risk)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
 
-              {/* the delivery pulse: real numbers from the period's calls and signals */}
-          <DeliveryPulse days={days} />
+              {/* delivery progress: sprint-plan progress per project, click through */}
+              <ProgressBoard onOpenProject={onOpenProject} />
 
           {/* the coverage board: faces + bars on a real scale, click through to people */}
               <div className="glass mt-4 rounded-2xl p-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
                     <div className="eyebrow">Coverage board</div>
-                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days. Airtime = their share of everything said. Click anyone to open their profile.</p>
+                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days, with their estimated time in calls. Click anyone to open their profile.</p>
                   </div>
                   <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
                 </div>
@@ -262,7 +350,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
-                          <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · {r.talk_share}% airtime</span>
+                          <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · ~{hoursLabel(personMinutes(r, days))} in calls</span>
                         </div>
                         <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
                           {ticks.slice(1, 4).map((t) => (
@@ -306,9 +394,9 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                     ))}
                   </div>
                   <div className="mt-auto grid w-full grid-cols-3 gap-2 pt-3">
-                    <MiniStat label="Calls" value={r.calls} />
-                    <MiniStat label="Accounts" value={r.accounts} />
-                    <MiniStat label="Signals" value={r.signals} />
+                    <MiniStat label="Calls" value={`${r.calls}`} />
+                    <MiniStat label="Accounts" value={`${r.accounts}`} />
+                    <MiniStat label="In calls" value={`~${hoursLabel(personMinutes(r, days))}`} />
                   </div>
                   <CardPulse row={r} days={days} />
                 </button>
@@ -340,7 +428,15 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
     const onAccounts = projects.filter((p) => theirAccountIds.includes(p.accountId) && !mine.some((m) => m.id === p.id))
     return [...mine, ...onAccounts].slice(0, 8)
   }, [row, theirAccountIds])
-  const yieldPerCall = row.calls ? (row.signals / row.calls).toFixed(1) : '0'
+  // Their coverage: of everything that happened on their accounts this window,
+  // how much were they actually in? theirCalls can include demo-account fallbacks,
+  // so cap at 100 - a share, not a score.
+  const coverage = useMemo(() => {
+    const cutoff = Date.now() - days * DAY
+    const accCalls = calls.filter((c) => Date.parse(c.date) >= cutoff && theirAccountIds.includes(c.accountId)).length
+    return accCalls ? Math.min(100, Math.round((100 * theirCalls.length) / accCalls)) : 0
+  }, [theirCalls, theirAccountIds, days])
+  const mins = theirCalls.reduce((t, c) => t + callMinutes(c), 0)
 
   return (
     <div>
@@ -363,9 +459,9 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <BigStat icon={Video} label="Calls" value={row.calls} sub={`last ${days} days`} color={color} />
+          <BigStat icon={Clock} label="Time in calls" value={`~${hoursLabel(mins)}`} sub="estimated from transcripts" color={color} />
           <BigStat icon={Building2} label="Accounts" value={row.accounts} sub="covered" color={color} />
-          <BigStat icon={Radio} label="Signals" value={row.signals} sub={`${yieldPerCall} per call`} color={color} />
-          <BigStat icon={Activity} label="Airtime" value={`${row.talk_share}%`} sub="of team conversations" color={color} />
+          <BigStat icon={ListChecks} label="Call coverage" value={`${coverage}%`} sub="of their accounts' calls" color={color} />
         </div>
       </div>
 
@@ -431,44 +527,86 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
   )
 }
 
-// The delivery pulse: entirely real numbers from the period's calls and the
-// signals they produced - the MD read of how delivery intelligence is flowing.
-function DeliveryPulse({ days }: { days: Days }) {
+// The call pulse: volume, time, the mood of the room and coverage - the four
+// numbers the Ops OS conversation started from, all derived from the calls.
+function CallPulse({ days }: { days: Days }) {
   const cutoff = Date.now() - days * DAY
+  const prevCutoff = Date.now() - 2 * days * DAY
   const pCalls = calls.filter((c) => Date.parse(c.date) >= cutoff)
-  const pSignals = signals.filter((sg) => Date.parse(sg.createdAt) >= cutoff)
-  const risks = pSignals.filter((sg) => sg.type === 'risk').length
-  const opps = pSignals.filter((sg) => sg.type === 'opportunity').length
-  const yieldPc = pCalls.length ? (pSignals.length / pCalls.length).toFixed(1) : '0'
-  const unresolved = signals.filter((sg) => sg.type === 'risk' && (sg.status === 'new' || sg.status === 'routed') && Date.now() - Date.parse(sg.createdAt) >= 14 * DAY).length
+  const prevCalls = calls.filter((c) => { const t = Date.parse(c.date); return t >= prevCutoff && t < cutoff })
+  const totalMins = pCalls.reduce((t, c) => t + callMinutes(c), 0)
+  const avgMins = pCalls.length ? Math.round(totalMins / pCalls.length) : 0
+  const bands = pCalls.map((c) => sentimentBand(callSentiment(c)))
+  const pos = bands.filter((b) => b === 'positive').length
+  const neg = bands.filter((b) => b === 'negative').length
+  const posPc = bands.length ? Math.round((100 * pos) / bands.length) : 0
+  const negPc = bands.length ? Math.round((100 * neg) / bands.length) : 0
   const covered = new Set(pCalls.map((c) => c.accountId).filter(Boolean)).size
   const quiet = Math.max(0, accounts.length - covered)
-  const rk = risks + opps ? Math.round((100 * risks) / (risks + opps)) : 50
+  const delta = pCalls.length - prevCalls.length
   return (
     <div className="glass mt-4 rounded-2xl p-5">
-      <div className="eyebrow">Delivery pulse · last {days} days</div>
-      <p className="mt-0.5 text-[11px] text-muted-2">Straight from the analysed calls and the signals they produced.</p>
+      <div className="eyebrow">Call pulse · last {days} days</div>
+      <p className="mt-0.5 text-[11px] text-muted-2">Volume, time, mood and coverage - all read from the analysed calls.</p>
       <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QCard label="Signal yield">
-          <span className="text-2xl font-bold">{yieldPc}</span>
-          <span className="ml-1.5 text-[11px] text-muted">per call · {pSignals.length} signals from {pCalls.length} calls</span>
+        <QCard label="Calls analysed">
+          <span className="text-2xl font-bold">{pCalls.length}</span>
+          <span className="ml-1.5 text-[11px] text-muted">{delta === 0 ? 'level with' : `${delta > 0 ? '+' : ''}${delta} vs`} the previous {days} days</span>
         </QCard>
-        <QCard label="Risk : opportunity mix">
-          <div className="flex items-baseline gap-3 text-[15px] font-bold">
-            <span style={{ color: 'var(--risk)' }}>{risks} risk{risks !== 1 ? 's' : ''}</span>
-            <span style={{ color: 'var(--opp)' }}>{opps} opp{opps !== 1 ? 's' : ''}</span>
-          </div>
-          <Split a={rk} colors={['var(--risk)', 'var(--opp)']} />
+        <QCard label="Time in calls">
+          <span className="text-2xl font-bold">~{hoursLabel(totalMins)}</span>
+          <span className="ml-1.5 text-[11px] text-muted">across the team · ~{avgMins}m per call</span>
         </QCard>
-        <QCard label="Unresolved risks · 14d+">
-          <span className="text-2xl font-bold" style={unresolved ? { color: 'var(--risk)' } : undefined}>{unresolved}</span>
-          <span className="ml-1.5 text-[11px] text-muted">still open across the portfolio</span>
+        <QCard label="Mood of the room">
+          <span className="text-2xl font-bold">{posPc}%</span>
+          <span className="ml-1.5 text-[11px] text-muted">positive{neg ? ` · ${neg} call${neg !== 1 ? 's' : ''} ran negative` : ' · none ran negative'}</span>
+          <Split a={posPc} b={100 - posPc - negPc} colors={['var(--opp)', 'var(--line-2)', 'var(--risk)']} />
         </QCard>
         <QCard label="Account coverage">
           <span className="text-2xl font-bold">{covered}</span>
           <span className="ml-1.5 text-[11px] text-muted">of {accounts.length} heard from{quiet ? ` · ${quiet} quiet` : ''}</span>
           <Split a={accounts.length ? Math.round((100 * covered) / accounts.length) : 0} colors={['var(--accent)', 'var(--line-2)']} />
         </QCard>
+      </div>
+    </div>
+  )
+}
+
+// Delivery progress: every project against its sprint plan, click through to the
+// full project view. RAG colours the bar; the % comes from "Sprint x of y".
+function ProgressBoard({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
+  const rows = useMemo(() =>
+    [...projects].sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || '')).slice(0, 8), [])
+  if (!rows.length) return null
+  return (
+    <div className="glass mt-4 rounded-2xl p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <div className="eyebrow">Delivery progress</div>
+          <p className="mt-0.5 text-[11px] text-muted-2">Each project against its sprint plan, coloured by RAG. Click one to open the full project view.</p>
+        </div>
+        <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">progress = sprint plan</span>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
+        {rows.map((p) => {
+          const pc = projectProgress(p)
+          const color = HEALTH_COLOR[p.rag]
+          return (
+            <button key={p.id} onClick={() => onOpenProject?.(p.id)} className="group rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate text-[12.5px] font-semibold">{p.name}</span>
+                <span className="shrink-0 text-[11px] font-medium text-muted">{accountName(p.accountId)} · {p.phase} · {pc}%</span>
+              </div>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-bg-2">
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, pc)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})` }} />
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10.5px] text-muted-2">
+                <span>{p.sprint}</span>
+                <ArrowRight size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -488,16 +626,15 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
       return {
         week: new Date(end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
         calls: wk.length,
-        signals: wk.reduce((t, c) => t + c.signals.length, 0),
+        hours: Math.round((wk.reduce((t, c) => t + callMinutes(c), 0) / 60) * 10) / 10,
       }
     })
   }, [theirCalls, days])
 
   const mix = useMemo(() => {
-    const sigs = theirCalls.flatMap((c) => c.signals)
-    return (['risk', 'opportunity', 'update', 'people'] as const)
-      .map((t) => ({ name: SIGNAL_META[t].label + 's', value: sigs.filter((x) => x.type === t).length, color: SIGNAL_META[t].color }))
-      .filter((x) => x.value > 0)
+    const m = new Map<string, number>()
+    for (const c of theirCalls) m.set(c.type, (m.get(c.type) || 0) + 1)
+    return [...m.entries()].map(([name, value]) => ({ name, value, color: CALL_TYPE_COLOR[name as keyof typeof CALL_TYPE_COLOR] ?? 'var(--muted-2)' })).sort((a, b) => b.value - a.value)
   }, [theirCalls])
 
   const byAccount = useMemo(() => {
@@ -513,7 +650,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
     <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="glass rounded-2xl p-5 lg:col-span-2">
         <div className="eyebrow">Engagement over time</div>
-        <p className="mt-0.5 text-[11px] text-muted-2">How many calls they were in each week (teal), and how many signals those calls produced (amber). Hover any point for the exact numbers.</p>
+        <p className="mt-0.5 text-[11px] text-muted-2">How many calls they were in each week, and roughly how many hours those took. Hover any point for the exact numbers.</p>
         <div className="mt-3 h-[190px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={weekly} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
@@ -523,17 +660,17 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
               <Tooltip contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="calls" name="Calls attended" stroke={color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-              <Line type="monotone" dataKey="signals" name="Signals produced" stroke="var(--people)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="hours" name="Hours in calls (est.)" stroke="var(--people)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className="glass rounded-2xl p-5">
-        <div className="eyebrow">What their calls surface</div>
-        <p className="mt-0.5 text-[11px] text-muted-2">The mix of intelligence coming out of their conversations - risks, opportunities, delivery updates and people signals.</p>
+        <div className="eyebrow">The kinds of calls they're in</div>
+        <p className="mt-0.5 text-[11px] text-muted-2">Their conversations by call type - standups, governance, weekly reports, kickoffs.</p>
         {mix.length === 0 ? (
-          <p className="py-10 text-center text-[12px] text-muted-2">No signals from their calls in this window.</p>
+          <p className="py-10 text-center text-[12px] text-muted-2">No calls in this window.</p>
         ) : (
           <div className="mt-2 flex items-center gap-3">
             <div className="h-[140px] w-[140px] shrink-0">
@@ -662,7 +799,7 @@ function BigStat({ icon: Icon, label, value, sub, color }: { icon: typeof Video;
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-bg-2 px-2 py-1.5 text-center">
       <div className="text-[15px] font-bold leading-tight">{value}</div>
