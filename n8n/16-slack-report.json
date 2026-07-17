@@ -1,0 +1,156 @@
+{
+ "name": "TN 16 - Slack weekly report",
+ "nodes": [
+  {
+   "id": "sl_sched",
+   "name": "Mondays 08:00",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    420,
+    300
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "0 8 * * 1"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "sl_manual",
+   "name": "Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    420,
+    480
+   ],
+   "parameters": {}
+  },
+  {
+   "id": "sl_gather",
+   "name": "Get the week",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    660,
+    380
+   ],
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT jsonb_build_object(\n 'brief', (SELECT content FROM briefs WHERE audience = 'leadership' ORDER BY created_at DESC LIMIT 1),\n 'kpis', jsonb_build_object(\n   'calls', (SELECT count(*) FROM calls WHERE call_date > now() - interval '7 days'),\n   'signals', (SELECT count(*) FROM signals WHERE created_at > now() - interval '7 days'),\n   'accounts', (SELECT count(DISTINCT account_id) FROM calls WHERE call_date > now() - interval '7 days' AND account_id IS NOT NULL)),\n 'by_account', COALESCE((SELECT jsonb_agg(x.j) FROM (\n   SELECT jsonb_build_object('account', a.name, 'type', s.type, 'summary', left(s.summary, 170), 'band', s.details->>'band') AS j\n   FROM signals s JOIN accounts a ON a.id = s.account_id\n   WHERE s.created_at > now() - interval '7 days'\n   ORDER BY a.name, s.created_at DESC LIMIT 60) x), '[]'::jsonb)\n) AS ctx;",
+    "options": {}
+   },
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "id": "sl_build",
+   "name": "Build the Slack message",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    380
+   ],
+   "parameters": {
+    "jsCode": "// Format the already-generated leadership brief + the week's signals into a\n// Slack message: macro overview, then one bullet per account with colour-coded\n// signal sub-bullets, the account's WHY beneath, and the suggested move.\n// Deterministic - no model call, so it can never rate-limit and always matches\n// the dashboard. Nesting uses em-spaces (Slack preserves them; normal spaces collapse).\nconst ctx = $json.ctx || {};\nconst brief = ctx.brief || {};\nconst k = ctx.kpis || {};\nconst E = { risk: ':red_circle:', opportunity: ':large_green_circle:', update: ':large_blue_circle:', people: ':large_yellow_circle:' };\nconst IND = '\u2003'; // em-space\n\nconst by = {};\nfor (const r of (ctx.by_account || [])) (by[r.account] = by[r.account] || []).push(r);\nconst order = Object.keys(by).sort((a, b) => {\n  const ra = by[a].filter(x => x.type === 'risk').length, rb = by[b].filter(x => x.type === 'risk').length;\n  return rb - ra || by[b].length - by[a].length;\n});\nconst whyBy = {}, actBy = {};\nfor (const a of (brief.accounts || [])) {\n  whyBy[(a.name || '').toLowerCase()] = a.why || '';\n  actBy[(a.name || '').toLowerCase()] = (a.actions || [])[0] || '';\n}\n\nconst wh = String(brief.whats_happening || '');\nconst overview = wh.split('\\n').map(s => s.trim()).filter(l => l && !/^- /.test(l)).join(' ');\nconst points = wh.split('\\n').map(s => s.trim()).filter(l => /^- /.test(l)).map(l => l.slice(2));\nconst headLines = [];\nif (overview) headLines.push(overview);\nfor (const p of points.slice(0, 5)) headLines.push('\u2022  ' + p);\n\nconst accLines = [];\nfor (const acc of order.slice(0, 8)) {\n  const sigs = by[acc];\n  const nR = sigs.filter(x => x.type === 'risk').length, nO = sigs.filter(x => x.type === 'opportunity').length;\n  const rest = sigs.length - nR - nO;\n  const bits = [];\n  if (nR) bits.push(nR + ' risk' + (nR > 1 ? 's' : ''));\n  if (nO) bits.push(nO + ' opportunit' + (nO > 1 ? 'ies' : 'y'));\n  if (rest) bits.push(rest + ' update' + (rest > 1 ? 's' : ''));\n  const lead = nR ? E.risk : nO ? E.opportunity : E.update;\n  accLines.push(lead + '  *' + acc + '*  \u2014  ' + bits.join(' \u00b7 '));\n  for (const s of sigs.slice(0, 3)) accLines.push(IND.repeat(2) + (E[s.type] || '\u25aa\ufe0f') + '  ' + s.summary + (s.band ? '  _(' + s.band + ')_' : ''));\n  const why = whyBy[acc.toLowerCase()];\n  if (why) accLines.push(IND.repeat(4) + '\u21b3 _' + why + '_');\n  const act = actBy[acc.toLowerCase()];\n  if (act) accLines.push(IND.repeat(4) + ':arrow_right:  ' + act);\n  accLines.push('');\n}\n\n// Slack caps a section at 3000 chars - chunk the account lines.\nconst chunks = [];\nlet cur = '';\nfor (const l of accLines) {\n  if ((cur + '\\n' + l).length > 2800) { chunks.push(cur); cur = l; } else cur = cur ? cur + '\\n' + l : l;\n}\nif (cur.trim()) chunks.push(cur);\n\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: '\ud83e\udde0 tnAI \u2014 the week in delivery', emoji: true } },\n  { type: 'context', elements: [{ type: 'mrkdwn', text: `${k.calls || 0} calls analysed \u00b7 ${k.signals || 0} signals \u00b7 ${k.accounts || 0} accounts \u00b7 last 7 days` }] },\n];\nif (headLines.length) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: headLines.join('\\n').slice(0, 2900) } });\nblocks.push({ type: 'divider' });\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*Account by account*' } });\nfor (const c of chunks.slice(0, 8)) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: c } });\nconst needs = brief.needs_you || [];\nif (needs.length) {\n  blocks.push({ type: 'divider' });\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':rotating_light:  *Needs you*\\n' + needs.map(n => '\u2022  ' + n).join('\\n') } });\n}\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '<https://ast.tecknuovo.com|Open the dashboard>  \u00b7  generated by tnAI from this week\\'s calls, weekly reports + HubSpot' }] });\n\nreturn [{ json: { payload: { text: 'tnAI \u2014 the week in delivery', blocks } } }];"
+   }
+  },
+  {
+   "id": "sl_send",
+   "name": "Send to Slack",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1140,
+    380
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "PASTE-YOUR-SLACK-WEBHOOK-URL-HERE",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.payload) }}",
+    "options": {}
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
+  },
+  {
+   "id": "sl_note",
+   "name": "How it works",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    380,
+    40
+   ],
+   "parameters": {
+    "content": "## 16 \u00b7 Slack weekly report\nFormats the ALREADY-GENERATED leadership brief (workflow 13) + this week's signals into a Slack message. No model call - deterministic, rate-limit-proof, always matches the dashboard.\n\n**Setup (one-time, ~3 min):**\n1. api.slack.com/apps \u2192 Create New App \u2192 From scratch \u2192 name it `tnAI` \u2192 pick the workspace\n2. Incoming Webhooks \u2192 toggle ON \u2192 Add New Webhook to Workspace \u2192 pick where it posts (your own DM: choose yourself; later: the leadership channel)\n3. Copy the webhook URL and paste it into the **Send to Slack** node's URL field\n4. Run once manually to test\n\nRuns Mondays 08:00 - ten minutes after workflow 13 writes the fresh brief.",
+    "height": 400,
+    "width": 420
+   }
+  }
+ ],
+ "connections": {
+  "Mondays 08:00": {
+   "main": [
+    [
+     {
+      "node": "Get the week",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Run": {
+   "main": [
+    [
+     {
+      "node": "Get the week",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get the week": {
+   "main": [
+    [
+     {
+      "node": "Build the Slack message",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build the Slack message": {
+   "main": [
+    [
+     {
+      "node": "Send to Slack",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "pinData": {}
+}

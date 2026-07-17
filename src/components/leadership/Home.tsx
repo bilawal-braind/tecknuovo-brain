@@ -429,7 +429,7 @@ function BulletList({ items, color, onOpenAccount }: { items: string[]; color: s
 // card with the actual signals behind the wording, click jumps to the account.
 function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAccount: (id: string) => void; accountId?: string }) {
   const parts = useMemo(() => {
-    type Part = { text: string; accountId?: string; term?: 'risk' | 'opportunity' }
+    type Part = { text: string; accountId?: string; term?: 'risk' | 'opportunity'; termAccount?: string }
     const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
     const segs: Part[] = []
     const rx = names.length ? new RegExp(`\\b(${names.map((a) => a.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi') : null
@@ -455,6 +455,13 @@ function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAcco
       }
       if (l < seg.text.length) out.push({ text: seg.text.slice(l) })
     }
+    // Scope each term to the nearest account NAMED in this text (the account
+    // mentioned before it, else the next one after) - "HMRC has seen a rise in
+    // risks" hovers HMRC's risks, not the portfolio's freshest two.
+    let prevAcc: string | undefined
+    for (const p of out) { if (p.accountId) prevAcc = p.accountId; else if (p.term) p.termAccount = prevAcc }
+    let nextAcc: string | undefined
+    for (let i = out.length - 1; i >= 0; i--) { const p = out[i]; if (p.accountId) nextAcc = p.accountId; else if (p.term && !p.termAccount) p.termAccount = nextAcc }
     return out
   }, [text])
   return (
@@ -467,7 +474,7 @@ function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAcco
             <ArrowRight size={11} className="w-0 translate-y-[1px] opacity-0 transition-all group-hover:ml-0.5 group-hover:w-[11px] group-hover:opacity-100" />
           </button>
         ) : p.term ? (
-          <SignalTerm key={i} word={p.text} kind={p.term} accountId={accountId} onOpenAccount={onOpenAccount} />
+          <SignalTerm key={i} word={p.text} kind={p.term} accountId={p.termAccount ?? accountId} context={text} onOpenAccount={onOpenAccount} />
         ) : (
           <span key={i}>{p.text}</span>
         ),
@@ -478,12 +485,20 @@ function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAcco
 
 // A colour-coded "risk"/"opportunity" mention. Hover: the freshest matching
 // signals (scoped to the account when the prose sits inside an account block).
-function SignalTerm({ word, kind, accountId, onOpenAccount }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; onOpenAccount: (id: string) => void }) {
+function SignalTerm({ word, kind, accountId, context, onOpenAccount }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; context?: string; onOpenAccount: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const items = useMemo(() => {
     const pool = allSignals.filter((sg) => sg.type === kind && (!accountId || sg.accountId === accountId))
-    return [...pool].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 2)
-  }, [kind, accountId])
+    // Rank by overlap with the sentence the word sits in, so two "risk" mentions
+    // in different bullets each surface the signals they're actually about.
+    const ctxWords = new Set((context ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 5))
+    const score = (sg: Signal) => {
+      let n = 0
+      for (const w of new Set(`${sg.summary} ${sg.quote}`.toLowerCase().split(/[^a-z0-9]+/))) if (w.length >= 5 && ctxWords.has(w)) n++
+      return n
+    }
+    return [...pool].sort((a, b) => score(b) - score(a) || b.createdAt.localeCompare(a.createdAt)).slice(0, 2)
+  }, [kind, accountId, context])
   const color = kind === 'risk' ? 'var(--risk)' : 'var(--opp)'
   if (!items.length) return <span className="font-semibold" style={{ color }}>{word}</span>
   return (
@@ -493,7 +508,8 @@ function SignalTerm({ word, kind, accountId, onOpenAccount }: { word: string; ki
         {word}
       </button>
       {open && (
-        <span className="absolute left-0 top-full z-30 mt-1.5 block w-[290px] rounded-xl border border-line bg-surface p-3 text-left shadow-xl">
+        <span className="glass absolute left-0 top-full z-30 mt-1.5 block w-[290px] rounded-2xl border p-3.5 text-left"
+          style={{ borderColor: `color-mix(in srgb, ${color} 35%, var(--line))`, boxShadow: `0 14px 44px -14px color-mix(in srgb, ${color} 50%, transparent), 0 2px 10px rgba(16,24,40,0.08)` }}>
           <span className="block text-[10px] font-bold uppercase tracking-wide" style={{ color }}>
             {kind === 'risk' ? 'The risk behind this' : 'The opportunity behind this'}{accountId ? ` · ${accountName(accountId)}` : ''}
           </span>
