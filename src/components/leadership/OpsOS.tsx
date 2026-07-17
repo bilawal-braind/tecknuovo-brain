@@ -322,7 +322,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 
                 <div className="glass rounded-2xl p-5">
                   <span className="flex items-center gap-1.5"><div className="eyebrow">Mood of the calls, by week</div><InfoHint text="The tone of each call, read from what was said and flagged in it. Falling green or rising red here is the earliest warning the dashboard has - before anything is formally raised." /></span>
-                  <p className="mt-0.5 text-[11px] text-muted-2">Sentiment read from each call's tone and what was flagged in it - the same read Fireflies gives, per week.</p>
+                  <p className="mt-0.5 text-[11px] text-muted-2">The tone of the team's calls, week by week - read from what was said and flagged in them.</p>
                   <div className="mt-3 h-[180px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={mood} margin={{ top: 6, right: 6, left: -24, bottom: 0 }}>
@@ -831,8 +831,26 @@ function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Ro
       if (stretched?.accounts > 1 && stretched !== top) chips.push({ tag: 'Widest spread', color: 'var(--update)', node: <><B>{displayName(stretched.name)}</B> covers {stretched.accounts} accounts - the broadest patch on the bench.</> })
       chips.push({ tag: 'Mood', color: 'var(--people)', node: <><B>{posPc}%</B> of the team's calls ran positive{negs.length ? <> - the {negs.length} that ran negative {negAccounts.length ? <>sat on <B>{negAccounts.join(' and ')}</B></> : <>are worth a listen</>}</> : null}.</> })
       if (quiet.length) chips.push({ tag: 'Quiet', color: 'var(--risk)', node: <><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} had no analysed calls this window - nobody's been in the room.</> })
-      return { headline, chips }
+      return { headline, chips, bench: [] as typeof bench }
     }
+    // one rich line per person: volume, hours, their dominant call type + account, mood
+    const bench = byCalls.filter((r) => r.calls > 0).slice(0, 6).map((r) => {
+      const cs = personCalls(r.name, r.demoAccounts, days)
+      const pm = cs.reduce((t, c) => t + callMinutes(c), 0)
+      const tm = new Map<string, number>()
+      const am = new Map<string, number>()
+      for (const c of cs) { tm.set(c.type, (tm.get(c.type) || 0) + 1); if (c.accountId) am.set(c.accountId, (am.get(c.accountId) || 0) + 1) }
+      const tt = [...tm.entries()].sort((x, y) => y[1] - x[1])[0]
+      const ta = [...am.entries()].sort((x, y) => y[1] - x[1])[0]
+      const bs = cs.map((c) => sentimentBand(callSentiment(c)))
+      const pp = bs.length ? Math.round((100 * bs.filter((x) => x === 'positive').length) / bs.length) : 0
+      const idx = roster.findIndex((x) => x.name === r.name)
+      return {
+        name: r.name,
+        color: PALETTE[Math.max(0, idx) % PALETTE.length],
+        line: <>{r.calls} call{r.calls !== 1 ? 's' : ''} (~{hoursLabel(pm)}){tt ? <> · mostly <B>{tt[0].toLowerCase()}s</B></> : null}{ta ? <> on <B>{accountName(ta[0])}</B></> : null} · <B>{pp}%</B> ran positive</>,
+      }
+    })
     const headline = (
       <>The team ran <B>{p.length} calls</B> in the last {days} days - roughly <B>{hoursLabel(mins)}</B> of client conversation, {delta === 0 ? 'level with' : delta > 0 ? <><B>{delta} up</B> on</> : <><B>{-delta} down</B> on</>} the period before.</>
     )
@@ -841,7 +859,7 @@ function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Ro
     chips.push({ tag: 'Mood', color: 'var(--people)', node: <><B>{posPc}%</B> of calls ran positive{negs.length ? <> - <B>{negs.length} ran negative</B>{negAccounts.length ? <>, the tension sitting on <B>{negAccounts.join(' and ')}</B></> : null}</> : <> - nothing ran negative</>}.</> })
     if (busiest) chips.push({ tag: 'Attention', color: 'var(--update)', node: <><B>{accountName(busiest[0])}</B> took the most of it with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>; the portfolio sits at <B>{progress}%</B> of its sprint plans.</> })
     if (top?.calls || quiet.length) chips.push({ tag: 'People', color: 'var(--opp)', node: <>{top?.calls ? <><B>{displayName(top.name).split(' ')[0]}</B> covered the most ground ({top.calls} calls)</> : null}{top?.calls && quiet.length ? '; ' : null}{quiet.length ? <><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet - worth a check-in</> : null}.</> })
-    return { headline, chips }
+    return { headline, chips, bench }
   }, [days, roster, variant])
   if (!b) return null
   return (
@@ -862,6 +880,24 @@ function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Ro
           </div>
         ))}
       </div>
+      {b.bench.length > 0 && (
+        <>
+          <div className="mt-3.5 flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-muted-2">Person by person</span>
+            <span className="h-px flex-1 bg-[var(--line)]" aria-hidden />
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+            {b.bench.map((p) => (
+              <div key={p.name} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2">
+                <PersonPhoto name={p.name} size={26} color={p.color} />
+                <span className="min-w-0 text-[12px] leading-relaxed text-text">
+                  <b className="font-semibold">{displayName(p.name)}</b> — {p.line}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
