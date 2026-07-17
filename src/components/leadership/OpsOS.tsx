@@ -64,6 +64,15 @@ function personMinutes(r: Row, days: number): number {
   return personCalls(r.name, r.demoAccounts, days).reduce((t, c) => t + callMinutes(c), 0)
 }
 
+// The coverage bar's segments: this person's calls split per account. Colour is
+// stable per account (same account = same colour on every row).
+const accColor = (id: string) => PALETTE[Math.max(0, accounts.findIndex((a) => a.id === id)) % PALETTE.length]
+function segmentsFor(r: Row, days: number): { account: string; n: number; color: string }[] {
+  const m = new Map<string, number>()
+  for (const c of personCalls(r.name, r.demoAccounts, days)) if (c.accountId) m.set(c.accountId, (m.get(c.accountId) || 0) + 1)
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ account: accountName(id), n, color: accColor(id) }))
+}
+
 // Photo from /people/<name-slug>.jpg; tries both name orders; initials fallback.
 function PersonPhoto({ name, size = 36, color, ring = false }: { name: string; size?: number; color: string; ring?: boolean }) {
   const candidates = useMemo(() => {
@@ -84,6 +93,9 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
   const [days, setDays] = useState<Days>(30)
   const [selPerson, setSelPerson] = useState<string | null>(null)
   const [apiRows, setApiRows] = useState<ApiPersonMetrics[] | null>(null)
+  // Bars grow in on first paint (staggered) - one flag, CSS transitions do the rest.
+  const [grown, setGrown] = useState(false)
+  useEffect(() => { const t = window.setTimeout(() => setGrown(true), 60); return () => window.clearTimeout(t) }, [])
   useEffect(() => { let on = true; fetchPeopleMetrics(days).then((r) => { if (on) setApiRows(r) }); return () => { on = false } }, [days])
 
   const derived = useMemo<ApiPersonMetrics[]>(() => {
@@ -250,7 +262,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                         <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         {volume.types.map((t) => (
-                          <Line key={t} type="monotone" dataKey={t} name={t} stroke={CALL_TYPE_COLOR[t]} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                          <Line key={t} type="monotone" dataKey={t} name={t} stroke={CALL_TYPE_COLOR[t]} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} animationDuration={850} animationEasing="ease-out" />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -267,7 +279,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                       <div className="mx-auto mt-1 h-[130px] w-[130px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
-                            <Pie data={typeMix} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} isAnimationActive={false}>
+                            <Pie data={typeMix} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} animationDuration={850} animationEasing="ease-out">
                               {typeMix.map((x, i) => <Cell key={i} fill={x.color} stroke="var(--surface)" />)}
                             </Pie>
                             <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
@@ -306,7 +318,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
                           <span className="w-[110px] shrink-0 truncate text-[12px] font-semibold">{accountName(r.id)}</span>
                           <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-2">
-                            <div className="h-full rounded-full" style={{ width: `${Math.round((100 * r.n) / attention.max)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})` }} />
+                            <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: grown ? `${Math.round((100 * r.n) / attention.max)}%` : '0%', transitionDelay: `${attention.rows.indexOf(r) * 70}ms`, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})` }} />
                           </div>
                           <span className="w-[72px] shrink-0 text-right text-[11px] font-medium text-muted">{r.n} · {attention.total ? Math.round((100 * r.n) / attention.total) : 0}%</span>
                         </div>
@@ -326,9 +338,9 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                         <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="positive" name="Positive" stackId="m" fill="var(--opp)" isAnimationActive={false} />
-                        <Bar dataKey="neutral" name="Neutral" stackId="m" fill="var(--line-2)" isAnimationActive={false} />
-                        <Bar dataKey="negative" name="Negative" stackId="m" fill="var(--risk)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                        <Bar dataKey="positive" name="Positive" stackId="m" fill="var(--opp)" animationDuration={850} animationEasing="ease-out" />
+                        <Bar dataKey="neutral" name="Neutral" stackId="m" fill="var(--line-2)" animationDuration={850} animationEasing="ease-out" />
+                        <Bar dataKey="negative" name="Negative" stackId="m" fill="var(--risk)" radius={[3, 3, 0, 0]} animationDuration={850} animationEasing="ease-out" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -343,7 +355,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
                     <div className="eyebrow">Coverage board</div>
-                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days, with their estimated time in calls. Click anyone to open their profile.</p>
+                    <p className="mt-0.5 text-[11px] text-muted-2">Calls attended per person over the last {days} days - each bar splits into the accounts they covered (hover a segment). Click anyone to open their profile.</p>
                   </div>
                   <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
                 </div>
@@ -356,13 +368,18 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                           <span className="truncate text-[13px] font-bold">{displayName(r.name)}</span>
                           <span className="shrink-0 text-[11px] font-medium text-muted">{r.calls} call{r.calls !== 1 ? 's' : ''} · {r.accounts} acct{r.accounts !== 1 ? 's' : ''} · ~{hoursLabel(personMinutes(r, days))} in calls</span>
                         </div>
-                        <div className="relative mt-1.5 h-3 overflow-hidden rounded-full bg-bg-2">
+                        <div className="relative mt-1.5 h-3.5 overflow-hidden rounded-full bg-bg-2">
                           {ticks.slice(1, 4).map((t) => (
                             <span key={t} className="absolute bottom-0 top-0 w-px bg-[var(--line-2)] opacity-60" style={{ left: `${(100 * t) / scaleMax}%` }} aria-hidden />
                           ))}
-                          <div className="relative flex h-full items-center justify-end rounded-full pr-1.5 transition-all"
-                            style={{ width: `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${PALETTE[i % PALETTE.length]} 55%, transparent), ${PALETTE[i % PALETTE.length]})` }}>
-                            <span className="text-[9px] font-bold text-white drop-shadow">{r.calls}</span>
+                          {/* one segment per account they covered - hover any segment for the split */}
+                          <div className="relative flex h-full overflow-hidden rounded-full transition-all duration-700 ease-out"
+                            style={{ width: grown ? `${Math.max(6, Math.round((100 * r.calls) / scaleMax))}%` : '0%', transitionDelay: `${i * 80}ms` }}>
+                            {segmentsFor(r, days).map((seg) => (
+                              <span key={seg.account} title={`${seg.n} call${seg.n !== 1 ? 's' : ''} on ${seg.account}`}
+                                className="h-full transition-opacity hover:opacity-75"
+                                style={{ width: `${(100 * seg.n) / r.calls}%`, background: seg.color, boxShadow: 'inset -1px 0 0 var(--surface)' }} />
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -622,6 +639,8 @@ function ProgressBoard({ onOpenProject }: { onOpenProject?: (id: string) => void
 // where their time goes. Field names are the real derivations (calls attended,
 // signals produced, signal types, calls per account); hover anything for numbers.
 function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: Days; color: string }) {
+  const [grown, setGrown] = useState(false)
+  useEffect(() => { const t = window.setTimeout(() => setGrown(true), 60); return () => window.clearTimeout(t) }, [])
   const weekly = useMemo(() => {
     const n = Math.max(3, Math.ceil(days / 7))
     const now = Date.now()
@@ -665,8 +684,8 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="calls" name="Calls attended" stroke={color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-              <Line type="monotone" dataKey="hours" name="Hours in calls (est.)" stroke="var(--people)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="calls" name="Calls attended" stroke={color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} animationDuration={850} animationEasing="ease-out" />
+              <Line type="monotone" dataKey="hours" name="Hours in calls (est.)" stroke="var(--people)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} animationDuration={850} animationEasing="ease-out" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -682,7 +701,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
             <div className="h-[140px] w-[140px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={mix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={64} paddingAngle={2} isAnimationActive={false}>
+                  <Pie data={mix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={64} paddingAngle={2} animationDuration={850} animationEasing="ease-out">
                     {mix.map((x, i) => <Cell key={i} fill={x.color} stroke="var(--surface)" />)}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle} />
@@ -716,7 +735,7 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: hc }} />
                 <span className="w-[120px] shrink-0 truncate text-[12px] font-semibold">{accountName(r.id)}</span>
                 <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-2">
-                  <div className="h-full rounded-full" style={{ width: `${Math.round((100 * r.n) / byAccount.max)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${hc} 55%, transparent), ${hc})` }} />
+                  <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: grown ? `${Math.round((100 * r.n) / byAccount.max)}%` : '0%', transitionDelay: `${byAccount.rows.indexOf(r) * 70}ms`, background: `linear-gradient(90deg, color-mix(in srgb, ${hc} 55%, transparent), ${hc})` }} />
                 </div>
                 <span className="w-[56px] shrink-0 text-right text-[11px] font-medium text-muted">{r.n} call{r.n !== 1 ? 's' : ''}</span>
               </div>
@@ -800,12 +819,21 @@ function CallBrief({ days, roster }: { days: Days; roster: Row[] }) {
     const covered = new Set(p.map((c) => c.accountId).filter(Boolean))
     const quiet = accounts.filter((a) => !covered.has(a.id)).map((a) => a.name).slice(0, 2)
     const top = [...roster].sort((a, b) => b.calls - a.calls)[0]
-    const lines: string[] = []
-    lines.push(`The team ran ${p.length} calls in the last ${days} days (~${hoursLabel(mins)} of conversation), ${delta === 0 ? 'level with' : delta > 0 ? `${delta} up on` : `${-delta} down on`} the period before${topType ? ` - ${topType[0].toLowerCase()}s carried the rhythm with ${topType[1]}` : ''}.`)
-    lines.push(`${posPc}% of calls ran positive${negs.length ? `; ${negs.length} ran negative${negAccounts.length ? `, ${negAccounts.length > 1 ? 'both' : 'the tension sitting'} on ${negAccounts.join(' and ')}` : ''}` : ' - nothing ran negative'}.`)
-    if (top && top.calls) lines.push(`${top.name.split(' ')[0]} covered the most ground - ${top.calls} calls across ${top.accounts} account${top.accounts !== 1 ? 's' : ''}${quiet.length ? `; ${quiet.join(' and ')} ${quiet.length > 1 ? 'have' : 'has'} gone quiet this window` : ''}.`)
-    else if (quiet.length) lines.push(`${quiet.join(' and ')} ${quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in.`)
-    return { headline: lines[0], rest: lines.slice(1) }
+    const avgMins = Math.round(mins / p.length)
+    const byAcc = new Map<string, number>()
+    for (const c of p) if (c.accountId) byAcc.set(c.accountId, (byAcc.get(c.accountId) || 0) + 1)
+    const busiest = [...byAcc.entries()].sort((a, b) => b[1] - a[1])[0]
+    const progress = projects.length ? Math.round(projects.reduce((t, pr) => t + projectProgress(pr), 0) / projects.length) : 0
+    const B = ({ children }: { children: ReactNode }) => <b className="font-semibold">{children}</b>
+    const headline = (
+      <>The team ran <B>{p.length} calls</B> in the last {days} days - roughly <B>{hoursLabel(mins)}</B> of client conversation, {delta === 0 ? 'level with' : delta > 0 ? <><B>{delta} up</B> on</> : <><B>{-delta} down</B> on</>} the period before{topType ? <> - <B>{topType[0].toLowerCase()}s</B> carried the rhythm with {topType[1]}</> : null}.</>
+    )
+    const rest: ReactNode[] = []
+    rest.push(<><B>{posPc}%</B> of calls ran positive{negs.length ? <>; <B>{negs.length} ran negative</B>{negAccounts.length ? <> - the tension sitting on <B>{negAccounts.join(' and ')}</B></> : null}</> : <> - nothing ran negative</>}. The average call took <B>~{avgMins} minutes</B>.</>)
+    if (busiest) rest.push(<><B>{accountName(busiest[0])}</B> took the most attention with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>, and the portfolio is <B>{progress}%</B> of the way through its sprint plans on average.</>)
+    if (top && top.calls) rest.push(<><B>{displayName(top.name).split(' ')[0]}</B> covered the most ground - <B>{top.calls} calls</B> across {top.accounts} account{top.accounts !== 1 ? 's' : ''}{quiet.length ? <>; <B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in</> : null}.</>)
+    else if (quiet.length) rest.push(<><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in.</>)
+    return { headline, rest }
   }, [days, roster])
   if (!b) return null
   return (

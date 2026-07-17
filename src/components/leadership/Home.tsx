@@ -180,7 +180,7 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
                 <YAxis allowDecimals={false} tick={{ fontSize: 10.5, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{ fill: 'var(--bg-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
                 {(['opportunity', 'risk', 'update', 'people'] as const).map((k, i) => (
-                  <Bar key={k} dataKey={k} stackId="s" fill={SIGNAL_META[k].color} isAnimationActive={false} radius={i === 3 ? [3, 3, 0, 0] : undefined} />
+                  <Bar key={k} dataKey={k} stackId="s" fill={SIGNAL_META[k].color} animationDuration={850} animationEasing="ease-out" radius={i === 3 ? [3, 3, 0, 0] : undefined} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -794,7 +794,7 @@ function DonutCard({ title, sub, data, palette }: { title: string; sub: string; 
           <div className="h-[130px] w-[130px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} isAnimationActive={false}>
+                <Pie data={data} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} animationDuration={850} animationEasing="ease-out">
                   {data.map((_, i) => <Cell key={i} fill={palette[i % palette.length]} stroke="var(--surface)" />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
