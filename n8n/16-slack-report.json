@@ -67,27 +67,6 @@
    }
   },
   {
-   "id": "sl_send",
-   "name": "Send to Slack",
-   "type": "n8n-nodes-base.httpRequest",
-   "typeVersion": 4.2,
-   "position": [
-    1140,
-    380
-   ],
-   "parameters": {
-    "method": "POST",
-    "url": "PASTE-YOUR-SLACK-WEBHOOK-URL-HERE",
-    "sendBody": true,
-    "specifyBody": "json",
-    "jsonBody": "={{ JSON.stringify($json.payload) }}",
-    "options": {}
-   },
-   "retryOnFail": true,
-   "maxTries": 3,
-   "waitBetweenTries": 5000
-  },
-  {
    "id": "sl_note",
    "name": "How it works",
    "type": "n8n-nodes-base.stickyNote",
@@ -97,10 +76,40 @@
     40
    ],
    "parameters": {
-    "content": "## 16 \u00b7 Slack weekly report\nFormats the ALREADY-GENERATED leadership brief (workflow 13) + this week's signals into a Slack message. No model call - deterministic, rate-limit-proof, always matches the dashboard.\n\n**Setup (one-time, ~3 min):**\n1. api.slack.com/apps \u2192 Create New App \u2192 From scratch \u2192 name it `tnAI` \u2192 pick the workspace\n2. Incoming Webhooks \u2192 toggle ON \u2192 Add New Webhook to Workspace \u2192 pick where it posts (your own DM: choose yourself; later: the leadership channel)\n3. Copy the webhook URL and paste it into the **Send to Slack** node's URL field\n4. Run once manually to test\n\nRuns Mondays 08:00 - ten minutes after workflow 13 writes the fresh brief.",
+    "content": "## 16 \u00b7 Slack weekly report\nFormats the ALREADY-GENERATED leadership brief (workflow 13) + this week's signals into a Slack message. No model call - deterministic, rate-limit-proof, always matches the dashboard.\n\n**Setup (one-time, ~5 min) - native Slack node:**\n1. api.slack.com/apps -> Create New App -> From scratch -> name it `tnAI` -> pick the workspace\n2. OAuth & Permissions -> Bot Token Scopes -> add: `chat:write`, `im:write`, `users:read`\n3. Install to Workspace -> copy the **Bot User OAuth Token** (starts `xoxb-`)\n4. In n8n: Credentials -> New -> **Slack API** -> paste the token\n5. Open the **Send to Slack** node -> pick the credential -> in \"Send Message To\" leave **User** and pick yourself from the dropdown\n6. Run once manually to test - the DM arrives from the tnAI app\n\nLater, to post to a leadership channel instead: invite the app to the channel (`/invite @tnAI`), switch \"Send Message To\" to Channel and pick it.\n\nRuns Mondays 08:00 - ten minutes after workflow 13 writes the fresh brief.",
     "height": 400,
     "width": 420
    }
+  },
+  {
+   "id": "sl_send",
+   "name": "Send to Slack",
+   "type": "n8n-nodes-base.slack",
+   "typeVersion": 2.2,
+   "position": [
+    1140,
+    380
+   ],
+   "parameters": {
+    "resource": "message",
+    "operation": "post",
+    "select": "user",
+    "user": {
+     "__rl": true,
+     "mode": "list",
+     "value": "",
+     "cachedResultName": "pick yourself after adding the credential"
+    },
+    "messageType": "block",
+    "blocksUi": "={{ JSON.stringify({ blocks: $json.payload.blocks }) }}",
+    "text": "={{ $json.payload.text }}",
+    "otherOptions": {
+     "includeLinkToWorkflow": false
+    }
+   },
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
   }
  ],
  "connections": {
