@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, HelpCircle } from 'lucide-react'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals, riskScope } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
@@ -259,9 +259,10 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
 
   const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
   const hasWatch = (brief?.content.watch_for?.length ?? 0) > 0
+  const chain = brief?.content.accounts ?? []
   const teaser = brief ? brief.content.whats_happening.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ') : ''
   return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-line" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
+    <div className="mt-4 rounded-2xl border border-line" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
       <div className="p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={16} /></span>
@@ -281,7 +282,7 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
           </div>
         ) : brief && !expanded ? (
           <div className="mt-3.5">
-            <p className="text-[13.5px] leading-relaxed text-text"><Linkified text={teaser} onOpenAccount={onOpenAccount} /></p>
+            <p className="text-[13.5px] leading-relaxed text-text"><RichText text={teaser} onOpenAccount={onOpenAccount} /></p>
             <div className="mt-3 flex justify-center">
               <button onClick={() => setExpanded(true)}
                 className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-5 py-2 text-[12px] font-semibold text-[var(--accent-d)] transition-all hover:scale-[1.03]"
@@ -292,12 +293,67 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
           </div>
         ) : brief ? (
           <>
-            <div className={`mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 ${hasWatch ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-              <BriefCol icon={Activity} title="What's happening" accent="var(--accent)" paragraphs={brief.content.whats_happening.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-              <BriefCol icon={HelpCircle} title="Why" accent="var(--update)" paragraphs={brief.content.why.split(/\n\n+/)} onOpenAccount={onOpenAccount} />
-              {hasWatch && <BriefCol icon={Eye} title="Watch for" accent="var(--people)" bullets paragraphs={brief.content.watch_for!} onOpenAccount={onOpenAccount} />}
-              <BriefCol icon={AlertTriangle} title="What needs you" accent="var(--risk)" bullets onOpenAccount={onOpenAccount}
-                paragraphs={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this week.']} />
+            <div className="mt-4 max-w-[860px] space-y-3">
+              {/* 1 · the headline: macro summary + the pattern behind it */}
+              <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 28%, var(--line))', background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 70%)' }}>
+                <SectionTag icon={Activity} color="var(--accent)">The headline</SectionTag>
+                <RichBlocks text={brief.content.whats_happening} onOpenAccount={onOpenAccount} />
+                {brief.content.why && (
+                  <div className="mt-3 rounded-lg px-3.5 py-2.5" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>The pattern behind it</span>
+                    <RichBlocks text={brief.content.why} onOpenAccount={onOpenAccount} />
+                  </div>
+                )}
+              </section>
+
+              {/* 2 · one chain: each account's update, its own why beneath it, then the move */}
+              {chain.length > 0 && (
+                <section>
+                  <SectionTag icon={Building2} color="var(--accent-d)">Account by account</SectionTag>
+                  <div className="ml-1 mt-2.5 space-y-2.5 border-l-2 pl-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 30%, var(--line))' }}>
+                    {chain.map((a) => {
+                      const accId = accounts.find((x) => x.name.toLowerCase() === a.name.toLowerCase())?.id
+                      return (
+                        <div key={a.name} className="relative rounded-xl border border-line bg-surface p-4">
+                          <span className="absolute -left-[23px] top-5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]" style={{ background: 'var(--accent)' }} aria-hidden />
+                          {accId ? (
+                            <button onClick={() => onOpenAccount(accId)} className="group inline-flex items-center gap-1 text-[13.5px] font-bold text-[var(--accent-d)] hover:underline">
+                              {a.name}<ArrowRight size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
+                            </button>
+                          ) : (
+                            <span className="text-[13.5px] font-bold">{a.name}</span>
+                          )}
+                          <p className="mt-1 text-[13px] leading-relaxed text-text"><RichText text={a.update} accountId={accId} onOpenAccount={onOpenAccount} /></p>
+                          {a.why && (
+                            <div className="mt-2 rounded-lg px-3 py-2 text-[12.5px] leading-relaxed" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
+                              <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>Why</span>
+                              <RichText text={a.why} accountId={accId} onOpenAccount={onOpenAccount} />
+                            </div>
+                          )}
+                          {(a.actions?.length ?? 0) > 0 && a.actions!.map((act, i) => (
+                            <div key={i} className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed">
+                              <ArrowRight size={13} className="mt-[3px] shrink-0" style={{ color: 'var(--accent)' }} />
+                              <span className="min-w-0 font-medium"><RichText text={act} accountId={accId} onOpenAccount={onOpenAccount} /></span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* 3 · watch for (when present) and what needs her */}
+              {hasWatch && (
+                <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--people) 30%, var(--line))', background: 'color-mix(in srgb, var(--people) 6%, var(--surface))' }}>
+                  <SectionTag icon={Eye} color="var(--people)">Watch for</SectionTag>
+                  <BulletList items={brief.content.watch_for!} color="var(--people)" onOpenAccount={onOpenAccount} />
+                </section>
+              )}
+              <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--risk) 30%, var(--line))', background: 'color-mix(in srgb, var(--risk) 5%, var(--surface))' }}>
+                <SectionTag icon={AlertTriangle} color="var(--risk)">What needs you</SectionTag>
+                <BulletList items={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this period.']} color="var(--risk)" onOpenAccount={onOpenAccount} />
+              </section>
             </div>
             <div className="mt-4 flex justify-center">
               <button onClick={() => setExpanded(false)} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
@@ -319,51 +375,82 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
   )
 }
 
-function BriefCol({ icon: Icon, title, paragraphs, accent, onOpenAccount, bullets = false }: { icon: typeof Activity; title: string; paragraphs: string[]; accent: string; onOpenAccount: (id: string) => void; bullets?: boolean }) {
-  // The model writes intro paragraphs and "- " bullet lines; arrays (watch_for,
-  // needs_you) are bullets by nature. Render each in its proper shape.
-  const blocks = paragraphs.flatMap((p) => p.split(/\n+/)).map((l) => l.trim()).filter(Boolean)
+function SectionTag({ icon: Icon, color, children }: { icon: typeof Activity; color: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col rounded-xl border p-4"
-      style={{ borderColor: `color-mix(in srgb, ${accent} 28%, var(--line))`, background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 7%, var(--surface)), var(--surface) 70%)` }}>
-      <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${accent} 15%, transparent)` }}>
-          <Icon size={13} style={{ color: accent }} />
-        </span>
-        <span className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: accent }}>{title}</span>
-      </div>
-      <div className="mt-2.5 space-y-2">
-        {blocks.map((raw, i) => {
-          const isBullet = bullets || /^[-•]\s+/.test(raw)
-          const text = raw.replace(/^[-•]\s+/, '')
-          return isBullet ? (
-            <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
-              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
-              <span className="min-w-0"><Linkified text={text} onOpenAccount={onOpenAccount} /></span>
-            </div>
-          ) : (
-            <p key={i} className="text-[13px] leading-relaxed text-text"><Linkified text={text} onOpenAccount={onOpenAccount} /></p>
-          )
-        })}
-      </div>
+    <div className="flex items-center gap-2">
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
+        <Icon size={13} style={{ color }} />
+      </span>
+      <span className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color }}>{children}</span>
     </div>
   )
 }
 
-function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: string) => void }) {
+// Prose from the model: paragraphs and "- " lines, each rendered rich.
+function RichBlocks({ text, onOpenAccount, accountId }: { text: string; onOpenAccount: (id: string) => void; accountId?: string }) {
+  const blocks = text.split(/\n+/).map((l) => l.trim()).filter(Boolean)
+  return (
+    <div className="mt-2 space-y-2">
+      {blocks.map((raw, i) => {
+        const isBullet = /^[-•]\s+/.test(raw)
+        const t = raw.replace(/^[-•]\s+/, '')
+        return isBullet ? (
+          <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
+            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
+            <span className="min-w-0"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} /></span>
+          </div>
+        ) : (
+          <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} /></p>
+        )
+      })}
+    </div>
+  )
+}
+
+function BulletList({ items, color, onOpenAccount }: { items: string[]; color: string; onOpenAccount: (id: string) => void }) {
+  return (
+    <div className="mt-2 space-y-1.5">
+      {items.map((t, i) => (
+        <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
+          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+          <span className="min-w-0"><RichText text={t} onOpenAccount={onOpenAccount} /></span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Rich prose: account names become live links (as before), and the words
+// "risk(s)" / "opportunity(-ies)" become colour-coded terms - hover opens a mini
+// card with the actual signals behind the wording, click jumps to the account.
+function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAccount: (id: string) => void; accountId?: string }) {
   const parts = useMemo(() => {
+    type Part = { text: string; accountId?: string; term?: 'risk' | 'opportunity' }
     const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
-    if (!names.length) return [{ text }]
-    const rx = new RegExp(`\\b(${names.map((a) => a.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi')
-    const out: { text: string; accountId?: string }[] = []
+    const segs: Part[] = []
+    const rx = names.length ? new RegExp(`\\b(${names.map((a) => a.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi') : null
     let last = 0
-    for (const m of text.matchAll(rx)) {
-      if (m.index! > last) out.push({ text: text.slice(last, m.index) })
-      const hit = names.find((a) => a.name.toLowerCase() === m[0].toLowerCase())
-      out.push({ text: m[0], accountId: hit?.id })
-      last = m.index! + m[0].length
+    if (rx) {
+      for (const m of text.matchAll(rx)) {
+        if (m.index! > last) segs.push({ text: text.slice(last, m.index) })
+        const hit = names.find((a) => a.name.toLowerCase() === m[0].toLowerCase())
+        segs.push({ text: m[0], accountId: hit?.id })
+        last = m.index! + m[0].length
+      }
     }
-    if (last < text.length) out.push({ text: text.slice(last) })
+    if (last < text.length) segs.push({ text: text.slice(last) })
+    const out: Part[] = []
+    const termRx = /\b(risks?|opportunit(?:y|ies))\b/gi
+    for (const seg of segs) {
+      if (seg.accountId) { out.push(seg); continue }
+      let l = 0
+      for (const m of seg.text.matchAll(termRx)) {
+        if (m.index! > l) out.push({ text: seg.text.slice(l, m.index) })
+        out.push({ text: m[0], term: m[0].toLowerCase().startsWith('risk') ? 'risk' : 'opportunity' })
+        l = m.index! + m[0].length
+      }
+      if (l < seg.text.length) out.push({ text: seg.text.slice(l) })
+    }
     return out
   }, [text])
   return (
@@ -375,6 +462,8 @@ function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: 
             {p.text}
             <ArrowRight size={11} className="w-0 translate-y-[1px] opacity-0 transition-all group-hover:ml-0.5 group-hover:w-[11px] group-hover:opacity-100" />
           </button>
+        ) : p.term ? (
+          <SignalTerm key={i} word={p.text} kind={p.term} accountId={accountId} onOpenAccount={onOpenAccount} />
         ) : (
           <span key={i}>{p.text}</span>
         ),
@@ -382,6 +471,41 @@ function Linkified({ text, onOpenAccount }: { text: string; onOpenAccount: (id: 
     </>
   )
 }
+
+// A colour-coded "risk"/"opportunity" mention. Hover: the freshest matching
+// signals (scoped to the account when the prose sits inside an account block).
+function SignalTerm({ word, kind, accountId, onOpenAccount }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; onOpenAccount: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const items = useMemo(() => {
+    const pool = allSignals.filter((sg) => sg.type === kind && (!accountId || sg.accountId === accountId))
+    return [...pool].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 2)
+  }, [kind, accountId])
+  const color = kind === 'risk' ? 'var(--risk)' : 'var(--opp)'
+  if (!items.length) return <span className="font-semibold" style={{ color }}>{word}</span>
+  return (
+    <span className="relative inline-block" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button onClick={() => onOpenAccount(accountId ?? items[0].accountId)}
+        className="font-semibold underline decoration-dotted underline-offset-2" style={{ color, textDecorationColor: color }}>
+        {word}
+      </button>
+      {open && (
+        <span className="absolute left-0 top-full z-30 mt-1.5 block w-[290px] rounded-xl border border-line bg-surface p-3 text-left shadow-xl">
+          <span className="block text-[10px] font-bold uppercase tracking-wide" style={{ color }}>
+            {kind === 'risk' ? 'The risk behind this' : 'The opportunity behind this'}{accountId ? ` · ${accountName(accountId)}` : ''}
+          </span>
+          {items.map((sg) => (
+            <span key={sg.id} className="mt-2 block text-[11.5px] font-normal leading-snug text-text">
+              {sg.summary}
+              {sg.quote && <span className="mt-0.5 block italic text-muted">“{sg.quote.length > 130 ? sg.quote.slice(0, 130) + '…' : sg.quote}”</span>}
+            </span>
+          ))}
+          <span className="mt-2 block text-[10px] font-medium text-muted-2">Click the word to open the account</span>
+        </span>
+      )}
+    </span>
+  )
+}
+
 
 // ── One account's macro card: headline on the face, tnAI story on expand,
 //    "View the conversations" opens the animated snippet-chain popup. ──
@@ -433,7 +557,7 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
         <div className="border-t border-line bg-surface-2 p-4">
           <div className="space-y-2.5">
             {(story?.story ?? fallbackStory).split(/\n\n+/).map((p, i) => (
-              <p key={i} className="text-[13px] leading-relaxed text-text">{p}</p>
+              <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={p} accountId={card.accountId} onOpenAccount={onOpenAccount} /></p>
             ))}
           </div>
           <div className="mt-3.5 flex flex-wrap items-center gap-2">

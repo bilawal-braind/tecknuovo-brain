@@ -202,7 +202,15 @@ export type ApiBrief = {
   audience: string
   period_start: string
   period_end: string
-  content: { whats_happening: string; why: string; needs_you: string[]; watch_for?: string[] }
+  content: {
+    whats_happening: string
+    why: string
+    needs_you: string[]
+    watch_for?: string[]
+    // The vertical chain: one entry per account that mattered, each carrying its
+    // own why and suggested actions (newer briefs; older ones just omit it).
+    accounts?: { name: string; update: string; why?: string; actions?: string[] }[]
+  }
   created_at: string
 }
 export type ApiPersonMetrics = {
