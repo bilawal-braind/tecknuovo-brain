@@ -6,7 +6,7 @@
 // roster until their first transcribed call, then real numbers take over.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Building2, ChevronLeft, Clock, ListChecks } from 'lucide-react'
+import { Users, Video, LayoutDashboard, ArrowLeft, ArrowRight, Building2, ChevronLeft, Clock, ListChecks, Sparkles } from 'lucide-react'
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 import { fetchPeopleMetrics } from '../../data/api'
 import type { ApiPersonMetrics } from '../../data/api'
@@ -233,7 +233,11 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
         <div className="min-w-0 flex-1">
           {tab === 'overview' ? (
             <>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {/* the tnAI read of the calls + the people - composed from the same
+                  telemetry the charts below draw, phrased the way the brief is */}
+              <CallBrief days={days} roster={roster} />
+
+              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div className="glass rounded-2xl p-5 lg:col-span-2">
                   <div className="eyebrow">Call volume, by type of call</div>
                   <p className="mt-0.5 text-[11px] text-muted-2">How many of each kind of call ran each week - standups, governance, weekly reports. Hover a point for exact counts.</p>
@@ -398,7 +402,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                     <MiniStat label="Accounts" value={`${r.accounts}`} />
                     <MiniStat label="In calls" value={`~${hoursLabel(personMinutes(r, days))}`} />
                   </div>
-                  <CardPulse row={r} days={days} />
+                  <CardMood row={r} days={days} />
                 </button>
               ))}
             </div>
@@ -466,6 +470,8 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
       </div>
 
       <PersonCharts theirCalls={theirCalls} days={days} color={color} />
+
+      <CallPerformance theirCalls={theirCalls} days={days} />
 
       <PersonFootprint days={days} theirCalls={theirCalls} />
 
@@ -752,19 +758,108 @@ function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] 
   )
 }
 
-// Tiny per-card pulse: their risk/opportunity balance from real call data.
-function CardPulse({ row, days }: { row: Row; days: Days }) {
-  const sigs = useMemo(() => personCalls(row.name, row.demoAccounts, days).flatMap((c) => c.signals), [row, days])
-  const r = sigs.filter((x) => x.type === 'risk').length
-  const o = sigs.filter((x) => x.type === 'opportunity').length
-  if (r + o === 0) return null
+// Tiny per-card mood bar: how this person's calls have been running.
+function CardMood({ row, days }: { row: Row; days: Days }) {
+  const bands = useMemo(() => personCalls(row.name, row.demoAccounts, days).map((c) => sentimentBand(callSentiment(c))), [row, days])
+  if (!bands.length) return null
+  const pos = bands.filter((b) => b === 'positive').length
+  const neg = bands.filter((b) => b === 'negative').length
+  const posPc = Math.round((100 * pos) / bands.length)
+  const negPc = Math.round((100 * neg) / bands.length)
   return (
     <div className="mt-2.5 w-full">
       <div className="flex h-1.5 overflow-hidden rounded-full bg-bg-2">
-        <div style={{ width: `${Math.round((100 * r) / (r + o))}%`, background: 'var(--risk)' }} />
-        <div className="flex-1" style={{ background: 'var(--opp)' }} />
+        <div style={{ width: `${posPc}%`, background: 'var(--opp)' }} />
+        <div style={{ width: `${100 - posPc - negPc}%`, background: 'var(--line-2)' }} />
+        <div className="flex-1" style={{ background: negPc ? 'var(--risk)' : 'transparent' }} />
       </div>
-      <div className="mt-1 text-[9.5px] font-semibold text-muted-2">{r} risk{r !== 1 ? 's' : ''} · {o} opp{o !== 1 ? 's' : ''} on their patch</div>
+      <div className="mt-1 text-[9.5px] font-semibold text-muted-2">{posPc}% of their calls ran positive{neg ? ` · ${neg} ran negative` : ''}</div>
+    </div>
+  )
+}
+
+// The tnAI read across the calls and the people - the same voice as the
+// leadership brief, composed deterministically from the call telemetry.
+function CallBrief({ days, roster }: { days: Days; roster: Row[] }) {
+  const b = useMemo(() => {
+    const cutoff = Date.now() - days * DAY
+    const prevCut = Date.now() - 2 * days * DAY
+    const p = calls.filter((c) => Date.parse(c.date) >= cutoff)
+    const prev = calls.filter((c) => { const t = Date.parse(c.date); return t >= prevCut && t < cutoff })
+    if (!p.length) return null
+    const delta = p.length - prev.length
+    const mins = p.reduce((t, c) => t + callMinutes(c), 0)
+    const byType = new Map<string, number>()
+    for (const c of p) byType.set(c.type, (byType.get(c.type) || 0) + 1)
+    const topType = [...byType.entries()].sort((a, b) => b[1] - a[1])[0]
+    const bands = p.map((c) => ({ c, b: sentimentBand(callSentiment(c)) }))
+    const pos = bands.filter((x) => x.b === 'positive').length
+    const negs = bands.filter((x) => x.b === 'negative')
+    const posPc = Math.round((100 * pos) / bands.length)
+    const negAccounts = [...new Set(negs.map((x) => accountName(x.c.accountId)).filter(Boolean))].slice(0, 2)
+    const covered = new Set(p.map((c) => c.accountId).filter(Boolean))
+    const quiet = accounts.filter((a) => !covered.has(a.id)).map((a) => a.name).slice(0, 2)
+    const top = [...roster].sort((a, b) => b.calls - a.calls)[0]
+    const lines: string[] = []
+    lines.push(`The team ran ${p.length} calls in the last ${days} days (~${hoursLabel(mins)} of conversation), ${delta === 0 ? 'level with' : delta > 0 ? `${delta} up on` : `${-delta} down on`} the period before${topType ? ` - ${topType[0].toLowerCase()}s carried the rhythm with ${topType[1]}` : ''}.`)
+    lines.push(`${posPc}% of calls ran positive${negs.length ? `; ${negs.length} ran negative${negAccounts.length ? `, ${negAccounts.length > 1 ? 'both' : 'the tension sitting'} on ${negAccounts.join(' and ')}` : ''}` : ' - nothing ran negative'}.`)
+    if (top && top.calls) lines.push(`${top.name.split(' ')[0]} covered the most ground - ${top.calls} calls across ${top.accounts} account${top.accounts !== 1 ? 's' : ''}${quiet.length ? `; ${quiet.join(' and ')} ${quiet.length > 1 ? 'have' : 'has'} gone quiet this window` : ''}.`)
+    else if (quiet.length) lines.push(`${quiet.join(' and ')} ${quiet.length > 1 ? 'have' : 'has'} gone quiet this window - worth a check-in.`)
+    return { headline: lines[0], rest: lines.slice(1) }
+  }, [days, roster])
+  if (!b) return null
+  return (
+    <div className="rounded-2xl border border-line p-5" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><Sparkles size={14} /></span>
+        <span className="text-[14px] font-bold tracking-tight"><span className="lowercase">tn</span><span style={{ color: 'var(--accent-d)' }}>AI</span></span>
+        <span className="text-[12px] text-muted">· call intelligence</span>
+        <span className="ml-auto rounded-full border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-muted-2">reads every analysed call</span>
+      </div>
+      <p className="mt-2.5 text-[13.5px] leading-relaxed text-text">{b.headline}</p>
+      <div className="mt-2 space-y-1.5">
+        {b.rest.map((l, i) => (
+          <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
+            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
+            <span className="min-w-0">{l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// How this person's calls actually run - length, mood, shape of their week.
+function CallPerformance({ theirCalls, days }: { theirCalls: Call[]; days: Days }) {
+  if (!theirCalls.length) return null
+  const mins = theirCalls.reduce((t, c) => t + callMinutes(c), 0)
+  const avg = Math.round(mins / theirCalls.length)
+  const bands = theirCalls.map((c) => sentimentBand(callSentiment(c)))
+  const pos = bands.filter((b) => b === 'positive').length
+  const neg = bands.filter((b) => b === 'negative').length
+  const posPc = Math.round((100 * pos) / bands.length)
+  const negPc = Math.round((100 * neg) / bands.length)
+  const byType = new Map<string, number>()
+  for (const c of theirCalls) byType.set(c.type, (byType.get(c.type) || 0) + 1)
+  const topType = [...byType.entries()].sort((a, b) => b[1] - a[1])[0]
+  const perWeek = Math.round((theirCalls.length / Math.max(1, days / 7)) * 10) / 10
+  return (
+    <div className="glass mt-4 rounded-2xl p-5">
+      <div className="eyebrow">How their calls run · last {days} days</div>
+      <p className="mt-0.5 text-[11px] text-muted-2">Length, mood and the shape of their week - from the analysed calls.</p>
+      <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <QCard label="Average call"><span className="text-2xl font-bold">~{avg}m</span><span className="ml-1.5 text-[11px] text-muted">across {theirCalls.length} call{theirCalls.length !== 1 ? 's' : ''}</span></QCard>
+        <QCard label="Mood of their calls">
+          <span className="text-2xl font-bold">{posPc}%</span>
+          <span className="ml-1.5 text-[11px] text-muted">positive{neg ? ` · ${neg} ran negative` : ''}</span>
+          <Split a={posPc} b={100 - posPc - negPc} colors={['var(--opp)', 'var(--line-2)', 'var(--risk)']} />
+        </QCard>
+        <QCard label="Most of their time">
+          <span className="text-[15px] font-bold">{topType ? topType[0] : '-'}</span>
+          <span className="ml-1.5 text-[11px] text-muted">{topType ? `${topType[1]} of their ${theirCalls.length} calls` : ''}</span>
+        </QCard>
+        <QCard label="Cadence"><span className="text-2xl font-bold">{perWeek}</span><span className="ml-1.5 text-[11px] text-muted">calls per week on average</span></QCard>
+      </div>
     </div>
   )
 }
