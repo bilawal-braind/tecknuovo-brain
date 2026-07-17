@@ -43,12 +43,15 @@ export const hoursLabel = (mins: number) => (mins >= 60 ? `${Math.round((mins / 
 // flagged (opportunities lift, risks weigh); quiet calls sit near neutral with a
 // stable per-call lean, the way an uneventful check-in reads in the room.
 export function callSentiment(c: Call): number {
+  // Calibration: client calls are professional - the baseline is mildly positive,
+  // opportunities and progress lift, risks weigh but one flag doesn't make a call
+  // "negative"; only genuinely risk-dominated conversations read that way.
   if (c.signals.length) {
     let s = 0
-    for (const x of c.signals) s += x.type === 'opportunity' ? 1 : x.type === 'update' ? 0.35 : x.type === 'risk' ? -1 : -0.2
-    return Math.max(-1, Math.min(1, s / c.signals.length))
+    for (const x of c.signals) s += x.type === 'opportunity' ? 0.9 : x.type === 'update' ? 0.4 : x.type === 'risk' ? -0.55 : -0.1
+    return Math.max(-1, Math.min(1, 0.18 + s / c.signals.length))
   }
-  return ((hash(c.id) % 7) - 2) / 10
+  return ((hash(c.id) % 7) - 1) / 10
 }
 
 export type SentimentBand = 'positive' | 'neutral' | 'negative'

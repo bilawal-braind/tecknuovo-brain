@@ -390,9 +390,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
               </div>
             </>
           ) : (
-            <>
-              <CallBrief days={days} roster={roster} variant="people" />
-              <div className="mt-4 grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {roster.map((r, i) => (
                 <button key={r.name} onClick={() => setSelPerson(r.name)}
                   className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
@@ -413,8 +411,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                   <CardMood row={r} days={days} />
                 </button>
               ))}
-              </div>
-            </>
+            </div>
           )}
         </div>
       </div>
