@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { LayoutDashboard, Layers, Radio, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight, PoundSterling, BarChart3, Percent, Sparkles, Users } from 'lucide-react'
+import { Layers, AlertTriangle, TrendingUp, Building2, ShieldCheck, ArrowUpRight, PoundSterling, BarChart3, Percent, Sparkles, Users } from 'lucide-react'
 import { LeadershipHome } from '../leadership/Home'
 import { OpsOS } from '../leadership/OpsOS'
 import { DashboardShell } from '../shell/DashboardShell'

@@ -132,17 +132,27 @@ function CallCard({ call }: { call: Call }) {
 function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void }) {
   // Live calls carry only metadata in the list; the full transcript loads here, on
   // demand, and is cached back onto the call so reopening is instant. Mock/demo
-  // calls (non-UUID ids) keep their built-in representative transcript.
-  const [loading, setLoading] = useState(false)
-  const [, bump] = useState(0)
+  // calls (non-UUID ids) keep their built-in representative transcript. A LIVE call
+  // never falls back to the representative version - if the real transcript can't
+  // be loaded we say so instead of passing framed quotes off as the recording.
+  const isLive = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(call.id)
+  const [state, setState] = useState<'ready' | 'loading' | 'empty' | 'error'>(
+    call.transcript || !isLive ? 'ready' : call.hasTranscript === false ? 'empty' : 'loading',
+  )
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    if (call.transcript || !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(call.id)) return
-    setLoading(true)
+    if (call.transcript || !isLive || call.hasTranscript === false) return
+    let stale = false
+    setState('loading')
     fetchTranscript(call.id)
-      .then((r) => { if (r.transcript) call.transcript = r.transcript })
-      .catch(() => {})
-      .finally(() => { setLoading(false); bump((n) => n + 1) })
-  }, [call])
+      .then((r) => {
+        if (stale) return
+        if (r.transcript && r.transcript.trim()) { call.transcript = r.transcript; setState('ready') }
+        else setState('empty')
+      })
+      .catch(() => { if (!stale) setState('error') })
+    return () => { stale = true }
+  }, [call, isLive, attempt])
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -159,8 +169,15 @@ function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void })
           <button onClick={onClose} aria-label="Close transcript" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
         </div>
         <div className="overflow-y-auto px-5 py-4">
-          {loading ? (
+          {state === 'loading' ? (
             <p className="py-10 text-center text-[12.5px] text-muted">Loading the transcript…</p>
+          ) : state === 'empty' ? (
+            <p className="py-10 text-center text-[12.5px] text-muted">No transcript was captured for this call - the signals above carry the quotes that were extracted from it.</p>
+          ) : state === 'error' ? (
+            <div className="py-10 text-center">
+              <p className="text-[12.5px] text-muted">The transcript couldn&apos;t be loaded just now.</p>
+              <button onClick={() => setAttempt((n) => n + 1)} className="mt-3 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">Try again</button>
+            </div>
           ) : (
             <CallTranscript call={call} />
           )}

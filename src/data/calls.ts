@@ -14,6 +14,9 @@ export type Call = {
   projectId?: string
   signals: Signal[]
   transcript?: string
+  // Whether the DB row holds a transcript (the live /calls list is metadata-only, so
+  // the text itself loads on demand). undefined = unknown -> try the fetch.
+  hasTranscript?: boolean
   speakers?: Record<string, number>
 }
 

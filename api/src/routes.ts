@@ -8,8 +8,9 @@ export const router = Router();
 // Returns null  = full access (dev/token mode, or scope='all' / admin).
 // Returns [ids] = the account ids this person is allowed to see (scope='own').
 // Ownership is DERIVED from the org data (no hand-maintained list): a Client
-// Partner owns the accounts where they're the client_partner; a Delivery Manager
-// owns the accounts of projects they run - matched via people.email = the login.
+// Partner / Client Director owns the accounts where they're the client_partner or
+// client_director; a Delivery Manager owns the accounts of projects they run -
+// matched via people.email = the login.
 // Members of the leadership Entra group (IT-managed, like the transcription group)
 // get full visibility without any app-side row. Optional: unset = feature off.
 const LEADERSHIP_GROUP = (process.env.ENTRA_LEADERSHIP_GROUP_ID || '').toLowerCase();
@@ -43,7 +44,7 @@ async function allowedAccounts(req: Request): Promise<string[] | null> {
   const row = u.rows[0];
   if (row && (row.scope === 'all' || row.role === 'admin')) return null; // full access
   const r = await q(
-    `SELECT a.id FROM accounts a JOIN people pe ON pe.id = a.client_partner WHERE lower(pe.email) = lower($1)
+    `SELECT a.id FROM accounts a JOIN people pe ON pe.id IN (a.client_partner, a.client_director) WHERE lower(pe.email) = lower($1)
      UNION
      SELECT pr.account_id FROM projects pr JOIN people pe ON pe.id = pr.delivery_manager WHERE lower(pe.email) = lower($1) AND pr.account_id IS NOT NULL
      UNION
@@ -79,10 +80,10 @@ router.get('/me', async (req, res, next) => {
         [user.email, user.name]
       );
     }
-    // 2. Derive their landing dashboard from the org data: Client Partner on any
-    //    account -> partner view; otherwise delivery.
+    // 2. Derive their landing dashboard from the org data: Client Partner or
+    //    Client Director on any account -> partner view; otherwise delivery.
     const cp = await q(
-      `SELECT 1 FROM accounts a JOIN people p ON p.id = a.client_partner
+      `SELECT 1 FROM accounts a JOIN people p ON p.id IN (a.client_partner, a.client_director)
        WHERE lower(p.email) = lower($1) LIMIT 1`,
       [user.email]
     );

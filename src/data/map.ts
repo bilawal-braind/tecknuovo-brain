@@ -103,6 +103,7 @@ export const mapSignal = (s: ApiSignal): Signal => {
     status: asStatus(s.status),
     createdAt: toDate(s.created_at),
     riskCategory: typeof d.risk_category === 'string' ? d.risk_category.replace(/^\s*\d+[\s.·-]*/, '') : undefined,
+    subtype: s.subtype ?? undefined,
     callId: s.call_id ?? undefined,
     likelihood: asNum(d.likelihood),
     impact: asNum(d.impact),

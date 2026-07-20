@@ -164,6 +164,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
         projectId: meta?.project_id || liveSignals[i].projectId || undefined,
         signals: [],
         transcript: meta?.transcript || undefined,
+        hasTranscript: meta ? (meta.has_transcript ?? !!meta.transcript) : undefined,
         speakers: meta?.speaker_stats || undefined,
       }
       byCall.set(cid, call)
@@ -184,6 +185,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
       projectId: c.project_id || undefined,
       signals: [],
       transcript: c.transcript || undefined,
+      hasTranscript: c.has_transcript ?? !!c.transcript,
       speakers: c.speaker_stats || undefined,
     })
   }
