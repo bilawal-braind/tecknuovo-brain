@@ -405,11 +405,13 @@ router.post('/signals/:id/reassign', async (req, res, next) => {
     if (!acc.rows.length) return res.status(404).json({ error: 'account not found' });
     const user = (req as Request & { user?: { email?: string; name?: string } }).user;
     const who = (user?.name || user?.email || 'dashboard').slice(0, 120);
+    // $2 must resolve to ONE type - using it as both uuid and text makes Postgres
+    // throw "inconsistent types deduced", so it's uuid everywhere and re-cast for audit.
     const r = await q(
-      `UPDATE signals SET account_id = $2, project_id = NULL,
+      `UPDATE signals SET account_id = $2::uuid, project_id = NULL,
          details = details || jsonb_build_object('reassigned', jsonb_build_object(
-           'from', account_id::text, 'to', $2::text, 'to_name', $3::text, 'by', $4::text, 'at', now()::text))
-       WHERE id = $1 RETURNING id, account_id`,
+           'from', account_id::text, 'to', ($2::uuid)::text, 'to_name', $3::text, 'by', $4::text, 'at', now()::text))
+       WHERE id = $1::uuid RETURNING id, account_id`,
       [req.params.id, account_id, acc.rows[0].name, who]
     );
     await q(
