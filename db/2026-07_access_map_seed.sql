@@ -22,12 +22,12 @@ BEGIN;
 
 CREATE TEMP TABLE _access_map (patterns text[], cp text, cd text);
 INSERT INTO _access_map (patterns, cp, cd) VALUES
-  -- Central Gov 1 (Annette Cole)
-  (ARRAY['dwp%'],                          'Alice Wells',          'Annette Cole'),
-  (ARRAY['moj%','ministry of justice%'],   'Annette Cole',         'Annette Cole'),
-  (ARRAY['mod','mod %','mod(%','ministry of defence%'], 'Annette Cole', 'Annette Cole'),
-  (ARRAY['maps%'],                         'Will Walker',          'Annette Cole'),  -- board colour hints UHE pod; column says CG1 - confirm director
-  (ARRAY['kainos%'],                       'Adam Adebowale-Lowe',  'Annette Cole'),  -- board colour hints HMRC(+other); column says CG1 - confirm director
+  -- Central Gov 1 (Annette Banks)
+  (ARRAY['dwp%'],                          'Alice Wells',          'Annette Banks'),
+  (ARRAY['moj%','ministry of justice%'],   'Annette Banks',         'Annette Banks'),
+  (ARRAY['mod','mod %','mod(%','ministry of defence%'], 'Annette Banks', 'Annette Banks'),
+  (ARRAY['maps%'],                         'Will Walker',          'Annette Banks'),  -- board colour hints UHE pod; column says CG1 - confirm director
+  (ARRAY['kainos%'],                       'Adam Adebowale-Lowe',  'Annette Banks'),  -- board colour hints HMRC(+other); column says CG1 - confirm director
   -- Central Gov 2 (Kiera Battersby)
   (ARRAY['cabo%','cabinet%'],              'Adam Adebowale-Lowe',  'Kiera Battersby'),
   (ARRAY['defra%'],                        'Kiera Battersby',      'Kiera Battersby'),
@@ -38,12 +38,12 @@ INSERT INTO _access_map (patterns, cp, cd) VALUES
   (ARRAY['gvms%'],                         'Alice Wells',          'Meesha Chotai'),
   (ARRAY['kms%'],                          'Alice Wells',          'Meesha Chotai'),
   (ARRAY['netcompany%'],                   'Will Walker',          'Meesha Chotai'),
-  -- Utilities, Healthcare & Education (Jess Kilkenny-Roddy)
-  (ARRAY['thames%'],                       'Chloe Hollinshead',    'Jess Kilkenny-Roddy'),
-  (ARRAY['neso%'],                         'Luke Adams',           'Jess Kilkenny-Roddy'),
-  (ARRAY['nhs%'],                          'Adam Adebowale-Lowe',  'Jess Kilkenny-Roddy'),
-  (ARRAY['dfe%'],                          'Will Walker',          'Jess Kilkenny-Roddy'),
-  (ARRAY['voda%','vodafone%'],             'Alice Wells',          'Jess Kilkenny-Roddy');
+  -- Utilities, Healthcare & Education (Jessica Kilkenny-Roddy)
+  (ARRAY['thames%'],                       'Chloe Hollinshead',    'Jessica Kilkenny-Roddy'),
+  (ARRAY['neso%'],                         'Luke Adams',           'Jessica Kilkenny-Roddy'),
+  (ARRAY['nhs%'],                          'Adam Adebowale-Lowe',  'Jessica Kilkenny-Roddy'),
+  (ARRAY['dfe%'],                          'Will Walker',          'Jessica Kilkenny-Roddy'),
+  (ARRAY['voda%','vodafone%'],             'Alice Wells',          'Jessica Kilkenny-Roddy');
 
 -- 1. Ensure every named person exists (by name, case-insensitive - workflow 4's
 --    pattern, so the sync and this seed can never create duplicates of each other).
@@ -100,11 +100,11 @@ SELECT name FROM accounts WHERE client_partner IS NULL OR client_director IS NUL
 -- ── Emails (recommended: fill these in and run now - access works immediately and
 --    doesn't depend on display-name matching at first login) ──────────────────────
 -- UPDATE people SET email = 'alice.wells@tecknuovo.com'      WHERE lower(name) = 'alice wells'          AND email IS NULL;
--- UPDATE people SET email = 'adam.adebowale-lowe@tecknuovo.com' WHERE lower(name) = 'adam adebowale-lowe' AND email IS NULL;
+-- UPDATE people SET email = 'adam.alowe@tecknuovo.com' WHERE lower(name) = 'adam adebowale-lowe' AND email IS NULL;
 -- UPDATE people SET email = 'will.walker@tecknuovo.com'      WHERE lower(name) = 'will walker'          AND email IS NULL;
 -- UPDATE people SET email = 'chloe.hollinshead@tecknuovo.com' WHERE lower(name) = 'chloe hollinshead'   AND email IS NULL;
 -- UPDATE people SET email = 'luke.adams@tecknuovo.com'       WHERE lower(name) = 'luke adams'           AND email IS NULL;
--- UPDATE people SET email = 'annette.cole@tecknuovo.com'     WHERE lower(name) = 'annette cole'         AND email IS NULL;
+-- UPDATE people SET email = 'annette.banks@tecknuovo.com'     WHERE lower(name) = 'annette banks'         AND email IS NULL;
 -- UPDATE people SET email = 'kiera.battersby@tecknuovo.com'  WHERE lower(name) = 'kiera battersby'      AND email IS NULL;
--- UPDATE people SET email = 'jess.kilkenny-roddy@tecknuovo.com' WHERE lower(name) = 'jess kilkenny-roddy' AND email IS NULL;
+-- UPDATE people SET email = 'jessica.kilkenny-roddy@tecknuovo.com' WHERE lower(name) = 'jessica kilkenny-roddy' AND email IS NULL;
 -- UPDATE people SET email = 'meesha.chotai@tecknuovo.com'    WHERE lower(name) = 'meesha chotai'        AND email IS NULL;
