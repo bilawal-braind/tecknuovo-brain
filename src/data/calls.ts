@@ -42,7 +42,11 @@ for (const s of signals) {
 
 export const calls: Call[] = [...byKey.values()].sort((a, b) => b.date.localeCompare(a.date))
 
-export const callsForAccount = (accountId: string) => calls.filter((c) => c.accountId === accountId)
+// A call belongs on an account page when it's the account's own call OR when any of
+// its signals were filed to that account - internal multi-client calls (and manually
+// re-filed signals) surface on every account they actually concern.
+export const callsForAccount = (accountId: string) =>
+  calls.filter((c) => c.accountId === accountId || c.signals.some((s) => s.accountId === accountId))
 export const callsForProject = (projectId: string) => calls.filter((c) => c.projectId === projectId)
 export const callForSignal = (signal: Signal) => calls.find((c) => c.signals.some((s) => s.id === signal.id))
 

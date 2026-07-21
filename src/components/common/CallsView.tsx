@@ -20,25 +20,30 @@ function daysAgo(iso: string) {
   return Math.round((d(TODAY) - d(iso)) / 86400000)
 }
 
-export function CallsView({ calls, title = 'Calls', subtitle }: { calls: Call[]; title?: string; subtitle?: string }) {
+export function CallsView({ calls, title = 'Calls', subtitle, accountId }: { calls: Call[]; title?: string; subtitle?: string; accountId?: string }) {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [range, setRange] = useState<DateRange>('all')
 
+  // In an account context, a call only counts the signals filed to THAT account -
+  // a multi-client standup shows each account its own extractions, not everyone's.
+  const sigsOf = (c: Call) => (accountId ? c.signals.filter((s) => s.accountId === accountId) : c.signals)
+
   const counts = useMemo(() => ({
     all: calls.length,
-    opportunity: calls.filter((c) => c.signals.some((s) => s.type === 'opportunity')).length,
-    risk: calls.filter((c) => c.signals.some((s) => s.type === 'risk')).length,
-    update: calls.filter((c) => c.signals.some((s) => s.type === 'update')).length,
-    people: calls.filter((c) => c.signals.some((s) => s.type === 'people')).length,
-  }), [calls])
+    opportunity: calls.filter((c) => sigsOf(c).some((s) => s.type === 'opportunity')).length,
+    risk: calls.filter((c) => sigsOf(c).some((s) => s.type === 'risk')).length,
+    update: calls.filter((c) => sigsOf(c).some((s) => s.type === 'update')).length,
+    people: calls.filter((c) => sigsOf(c).some((s) => s.type === 'people')).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [calls, accountId])
 
   const ql = q.trim().toLowerCase()
   const filtered = calls.filter((c) => {
-    if (filter !== 'all' && !c.signals.some((s) => s.type === filter)) return false
+    if (filter !== 'all' && !sigsOf(c).some((s) => s.type === filter)) return false
     if (range !== 'all' && daysAgo(c.date) > Number(range)) return false
     if (ql) {
-      const hay = `${c.title} ${c.type} ${c.speaker} ${accountName(c.accountId)} ${c.signals.map((s) => s.summary + ' ' + s.quote).join(' ')}`.toLowerCase()
+      const hay = `${c.title} ${c.type} ${c.speaker} ${accountName(c.accountId)} ${sigsOf(c).map((s) => s.summary + ' ' + s.quote).join(' ')}`.toLowerCase()
       if (!hay.includes(ql)) return false
     }
     return true
@@ -72,17 +77,18 @@ export function CallsView({ calls, title = 'Calls', subtitle }: { calls: Call[];
       </div>
 
       <div className="mt-3 space-y-2.5">
-        {filtered.map((c) => <CallCard key={c.id} call={c} />)}
+        {filtered.map((c) => <CallCard key={c.id} call={c} accountId={accountId} />)}
         {filtered.length === 0 && <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No calls match your search.</p>}
       </div>
     </div>
   )
 }
 
-function CallCard({ call }: { call: Call }) {
+function CallCard({ call, accountId }: { call: Call; accountId?: string }) {
   const [open, setOpen] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
-  const types = Array.from(new Set(call.signals.map((s) => s.type)))
+  const sigs = accountId ? call.signals.filter((s) => s.accountId === accountId) : call.signals
+  const types = Array.from(new Set(sigs.map((s) => s.type)))
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition-colors hover:bg-bg-2">
@@ -100,7 +106,7 @@ function CallCard({ call }: { call: Call }) {
           <div className="flex items-center gap-1">
             {types.map((t) => <SignalBadge key={t} type={t} size="sm" />)}
           </div>
-          <span className="hidden text-[11px] text-muted-2 sm:inline">{call.signals.length} signal{call.signals.length !== 1 ? 's' : ''}</span>
+          <span className="hidden text-[11px] text-muted-2 sm:inline">{sigs.length} signal{sigs.length !== 1 ? 's' : ''}</span>
           <ChevronDown size={15} className={`text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </button>
@@ -108,7 +114,7 @@ function CallCard({ call }: { call: Call }) {
       {open && (
         <div className="border-t border-line bg-surface-2 p-3.5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">Signals from this call ({call.signals.length})</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">Signals from this call ({sigs.length})</span>
             <button onClick={() => setShowTranscript(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
               <FileText size={13} /> View transcript
             </button>
@@ -117,7 +123,7 @@ function CallCard({ call }: { call: Call }) {
           <div className="space-y-2">
             {/* Same full signal card as everywhere else - framework score, notes,
                 feedback and the HubSpot approval all work inside the account view too. */}
-            {call.signals.map((s) => <TriageCard key={s.id} signal={s} />)}
+            {sigs.map((s) => <TriageCard key={s.id} signal={s} />)}
           </div>
         </div>
       )}
