@@ -2,7 +2,7 @@
 // bootstrap.ts exactly like the other shared arrays. Empty in mock mode - views
 // that use these fall back gracefully (weekly tab keeps its "coming soon" panel,
 // the account pipeline panel simply doesn't render).
-import type { ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote } from './api'
+import type { ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote, ApiRegisterRisk } from './api'
 
 export const weeklyReports: ApiWeeklyReport[] = []
 export const stakeholders: ApiStakeholder[] = []
@@ -10,6 +10,11 @@ export const deals: ApiDeal[] = []
 
 // Team notes on signals (human log, shown on every dashboard).
 export const signalNotes: ApiSignalNote[] = []
+// Open items from the Monday Risk/Issue/Incident register (Chloe's ask: long-standing
+// register risks must be visible next to the call-signals, not a separate universe).
+export const registerRisks: ApiRegisterRisk[] = []
+export const registerRisksForAccount = (accountId: string) =>
+  registerRisks.filter((r) => r.account_id === accountId)
 export const notesForSignal = (signalId: string) => signalNotes.filter((n) => n.signal_id === signalId)
 
 export const stakeholdersForAccount = (accountId: string) =>

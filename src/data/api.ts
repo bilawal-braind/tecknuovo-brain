@@ -102,6 +102,25 @@ export const fetchCalls = () => get<ApiCall[]>('/api/calls')
 export const fetchTranscript = (callId: string) => get<{ id: string; transcript: string }>(`/api/calls/${callId}/transcript`)
 export const fetchAssociates = () => get<ApiAssociate[]>('/api/associates')
 
+// The Monday Risk/Issue/Incident register (read-only mirror, synced daily by the
+// reconciliation workflow). The API returns OPEN items only.
+export type ApiRegisterRisk = {
+  id: string
+  account_id: string | null
+  account_name: string | null
+  name: string | null
+  kind: string | null
+  likelihood: string | null
+  severity: string | null
+  impact_level: string | null
+  escalation: string | null
+  status: string | null
+  treatment_plan: string | null
+  responsible: string | null
+  last_verified: string | null
+}
+export const fetchRegisterRisks = () => get<ApiRegisterRisk[]>('/api/risks').catch(() => [] as ApiRegisterRisk[])
+
 // ── Weekly reports + CRM mirror (HubSpot, read-only) ──
 export type ApiWeeklyReport = {
   id: string

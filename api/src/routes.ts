@@ -307,6 +307,28 @@ router.get('/weekly-reports', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// The Monday Risk/Issue/Incident register (read-only mirror, synced daily by the
+// reconciliation workflow). OPEN items only - the closed history stays in the DB.
+router.get('/risks', async (req, res, next) => {
+  try {
+    const allowed = await allowedAccounts(req);
+    const params: unknown[] = [];
+    let filter = '';
+    if (allowed !== null) { params.push(allowed); filter = `AND account_id = ANY($${params.length}::uuid[])`; }
+    const r = await q(
+      `SELECT id, account_id, account_name, name, kind, likelihood, severity, impact_level,
+              escalation, status, treatment_plan, responsible, last_verified
+       FROM risks
+       WHERE COALESCE(status, '') NOT IN ('Closed', 'Transferred') ${filter}
+       ORDER BY CASE COALESCE(impact_level, '') WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 WHEN 'Low' THEN 2 ELSE 3 END,
+                last_verified DESC NULLS LAST
+       LIMIT 500`,
+      params
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
 // CRM mirror - client stakeholders and their buying power (HubSpot, read-only).
 // No emails exposed through the API; the dashboard only needs name/title/role.
 router.get('/stakeholders', async (req, res, next) => {

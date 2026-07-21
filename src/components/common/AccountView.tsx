@@ -1,9 +1,9 @@
-import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight, Briefcase, Contact } from 'lucide-react'
+import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight, Briefcase, Contact, ShieldAlert } from 'lucide-react'
 import { accountById, personName, podName, projectsForAccount } from '../../data/org'
 import { signalsForAccount } from '../../data/signals'
 import { callsForAccount } from '../../data/calls'
 import { complianceFor } from '../../data/delivery'
-import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole, weeklyReports } from '../../data/crm'
+import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole, weeklyReports, registerRisksForAccount } from '../../data/crm'
 import type { CadenceStatus } from '../../data/types'
 import { SHOW_SOW } from '../../data/source'
 import { RagDot, CoverageBadge } from './primitives'
@@ -105,12 +105,57 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
             </div>
           </div>
 
+          {/* the Monday Risk/Issue/Incident register - open items for this account */}
+          <RiskRegister accountId={account.id} />
+
           {/* commercial pipeline + client stakeholders (CRM mirror; only renders when synced) */}
           {commercial && <CrmPanel accountId={account.id} />}
         </div>
       </div>
 
       <LatestWeeklyReport accountId={account.id} />
+    </div>
+  )
+}
+
+// Open items from the Monday Risk/Issue/Incident register - the human-maintained
+// register alongside the call-extracted signals (Chloe's ask: long-standing risks
+// like Thames Water administration must be visible even when no call mentions them).
+// Renders nothing until the register sync has run (mock mode stays clean).
+const IMPACT_COLOR: Record<string, string> = { High: 'var(--risk)', Medium: 'var(--people)', Low: 'var(--muted)' }
+function RiskRegister({ accountId }: { accountId: string }) {
+  const items = registerRisksForAccount(accountId)
+  if (!items.length) return null
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <div className="mb-2.5 flex items-center gap-2">
+        <ShieldAlert size={14} className="text-muted-2" />
+        <h3 className="text-[14px] font-semibold">Risk register</h3>
+        <span className="text-[11px] text-muted-2">from Monday · open items</span>
+      </div>
+      <div className="space-y-2">
+        {items.map((r) => (
+          <div key={r.id} className="rounded-lg bg-bg-2 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[12.5px] font-semibold leading-snug">{r.name}</span>
+              {r.impact_level && (
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ color: IMPACT_COLOR[r.impact_level] ?? 'var(--muted)', background: `color-mix(in srgb, ${IMPACT_COLOR[r.impact_level] ?? 'var(--muted)'} 12%, transparent)` }}>
+                  {r.impact_level}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-[11px] text-muted">
+              {[r.kind, r.status, r.responsible].filter(Boolean).join(' · ')}
+            </div>
+            {r.treatment_plan && (
+              <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted" title={r.treatment_plan}>
+                {r.treatment_plan.length > 180 ? r.treatment_plan.slice(0, 180) + '…' : r.treatment_plan}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

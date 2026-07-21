@@ -9,14 +9,14 @@
 // Note: compliance, weekly reports, trends and observability are not produced by the
 // pipeline yet, so they stay as demo data in all modes.
 import { isLive } from './source'
-import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals, fetchSignalNotes } from './api'
-import { weeklyReports, stakeholders, deals, signalNotes } from './crm'
+import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals, fetchSignalNotes, fetchRegisterRisks } from './api'
+import { weeklyReports, stakeholders, deals, signalNotes, registerRisks } from './crm'
 import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
 import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
 import { calls } from './calls'
 import type { Call } from './calls'
-import type { ApiAccount, ApiProject, ApiSignal, ApiCall, ApiAssociate, ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote } from './api'
+import type { ApiAccount, ApiProject, ApiSignal, ApiCall, ApiAssociate, ApiWeeklyReport, ApiStakeholder, ApiDeal, ApiSignalNote, ApiRegisterRisk } from './api'
 import type { Person, Health, Signal } from './types'
 import { getAuthToken } from './auth'
 
@@ -28,14 +28,17 @@ function replace<T>(target: T[], next: T[]) {
 // Account health = a defensible read of the OPEN signals on the account, not a blunt
 // "any risk => red". Severity is weighted, and positive momentum (more opportunities than
 // risks) softens the rating by one level. Returns the RAG plus a short human reason.
-function deriveAccountHealth(sigs: Signal[]): { health: Health; reason: string } {
+function deriveAccountHealth(sigs: Signal[], registerHigh = 0): { health: Health; reason: string } {
   const open = sigs.filter((s) => s.status !== 'actioned' && s.status !== 'dismissed')
-  if (!open.length) return { health: 'green', reason: 'No open signals' }
+  if (!open.length && !registerHigh) return { health: 'green', reason: 'No open signals' }
 
   const risks = open.filter((s) => s.type === 'risk')
   const opps = open.filter((s) => s.type === 'opportunity')
   const critical = risks.filter((s) => s.severity === 'critical').length
-  const high = risks.filter((s) => s.severity === 'high').length
+  // A high-impact item on the Monday risk register weighs like a high-severity
+  // call-signal - a long-standing register risk (Thames Water administration) must
+  // colour account health even when no call mentioned it this month.
+  const high = risks.filter((s) => s.severity === 'high').length + registerHigh
   const otherRisks = risks.length - critical - high
 
   let health: Health
@@ -50,7 +53,8 @@ function deriveAccountHealth(sigs: Signal[]): { health: Health; reason: string }
 
   const parts: string[] = []
   if (critical) parts.push(`${critical} critical risk${critical > 1 ? 's' : ''}`)
-  if (high) parts.push(`${high} high-severity risk${high > 1 ? 's' : ''}`)
+  if (high - registerHigh > 0) parts.push(`${high - registerHigh} high-severity risk${high - registerHigh > 1 ? 's' : ''}`)
+  if (registerHigh) parts.push(`${registerHigh} high-impact register risk${registerHigh > 1 ? 's' : ''}`)
   if (otherRisks > 0) parts.push(`${otherRisks} lower risk${otherRisks > 1 ? 's' : ''}`)
   if (opps.length) parts.push(`${opps.length} opportunit${opps.length > 1 ? 'ies' : 'y'}`)
   let reason = parts.join(' · ') || `${open.length} open signal${open.length > 1 ? 's' : ''}`
@@ -204,7 +208,8 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   // Recompute account health from the actual open signals (overrides the API's blunt
   // "any high risk => red"), so the portfolio reads as a sensible RAG mix with a reason.
   for (const acc of liveAccounts) {
-    const h = deriveAccountHealth(liveSignals.filter((s) => s.accountId === acc.id))
+    const regHigh = registerRisks.filter((r) => r.account_id === acc.id && (r.impact_level || '') === 'High').length
+    const h = deriveAccountHealth(liveSignals.filter((s) => s.accountId === acc.id), regHigh)
     acc.health = h.health
     acc.healthReason = h.reason
   }
@@ -333,16 +338,17 @@ async function loadSnapshotRows(): Promise<Rows> {
 type LivePayload = {
   aRows: ApiAccount[]; pRows: ApiProject[]; sRows: ApiSignal[]; cRows: ApiCall[]; asRows: ApiAssociate[]
   wrRows: ApiWeeklyReport[]; stRows: ApiStakeholder[]; dlRows: ApiDeal[]; noteRows: ApiSignalNote[]
+  rkRows?: ApiRegisterRisk[]
 }
 const CACHE_KEY = () => 'tn_boot_v1_' + (getAuthToken() || 'token').slice(-24)
 const REFRESH_MS = 5 * 60_000
 
 async function fetchLive(): Promise<LivePayload> {
-  const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows] = await Promise.all([
+  const [aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows, rkRows] = await Promise.all([
     fetchAccounts(), fetchProjects(), fetchSignals(), fetchCalls(), fetchAssociates(),
-    fetchWeeklyReports(), fetchStakeholders(), fetchDeals(), fetchSignalNotes(),
+    fetchWeeklyReports(), fetchStakeholders(), fetchDeals(), fetchSignalNotes(), fetchRegisterRisks(),
   ])
-  return { aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows }
+  return { aRows, pRows, sRows, cRows, asRows, wrRows, stRows, dlRows, noteRows, rkRows }
 }
 
 function applyLive(p: LivePayload): BootResult['counts'] {
@@ -351,6 +357,7 @@ function applyLive(p: LivePayload): BootResult['counts'] {
   replace(stakeholders, p.stRows)
   replace(deals, p.dlRows)
   replace(signalNotes, p.noteRows)
+  replace(registerRisks, p.rkRows ?? [])
   return hydrate(p)
 }
 
