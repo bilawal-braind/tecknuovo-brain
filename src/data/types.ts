@@ -68,6 +68,10 @@ export type Signal = {
   // Framework scores carried through for the QA / evaluation layer (from the classifier).
   riskCategory?: string
   subtype?: string
+  // Deterministic leadership escalation, computed in the pipeline: true when a risk
+  // was voiced by a senior client stakeholder (matched against HubSpot seniority).
+  escalate?: boolean
+  raisedBy?: string
   callId?: string
   likelihood?: number
   impact?: number

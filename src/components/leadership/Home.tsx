@@ -9,7 +9,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { signals as allSignals, riskScope } from '../../data/signals'
+import { signals as allSignals } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
 import type { Call, TranscriptLine } from '../../data/calls'
 import { accounts, accountName } from '../../data/org'
@@ -33,10 +33,14 @@ function parsePounds(v?: string): number {
 }
 const gbp = (n: number) => (n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : n >= 1000 ? `£${Math.round(n / 1000)}k` : `£${n}`)
 
+// The MD escalation gate (agreed with the client, 21 Jul): Critical band always;
+// a risk voiced by a senior client stakeholder (the pipeline's deterministic
+// escalate flag, from HubSpot seniority); or a High left unresolved for 20+ days.
+// Plain fresh Highs and everything below stay on the Delivery/Partner dashboards.
 const needsHer = (s: Signal) =>
   s.type === 'risk' &&
   s.status !== 'actioned' && s.status !== 'dismissed' &&
-  (s.severity === 'critical' || riskScope(s) === 'account' || ageDays(s.createdAt) >= 14)
+  (s.severity === 'critical' || s.escalate === true || (s.severity === 'high' && ageDays(s.createdAt) >= 20))
 
 const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
 const SEV_COLOR: Record<Severity, string> = { critical: 'var(--risk)', high: 'var(--people)', medium: 'var(--muted)', low: 'var(--muted-2)' }
