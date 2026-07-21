@@ -26,8 +26,8 @@ INSERT INTO _access_map (patterns, cp, cd) VALUES
   (ARRAY['dwp%'],                          'Alice Wells',          'Annette Banks'),
   (ARRAY['moj%','ministry of justice%'],   'Annette Banks',         'Annette Banks'),
   (ARRAY['mod','mod %','mod(%','ministry of defence%'], 'Annette Banks', 'Annette Banks'),
-  (ARRAY['maps%'],                         'Will Walker',          'Annette Banks'),  -- board colour hints UHE pod; column says CG1 - confirm director
-  (ARRAY['kainos%'],                       'Adam Adebowale-Lowe',  'Annette Banks'),  -- board colour hints HMRC(+other); column says CG1 - confirm director
+  (ARRAY['maps%'],                         'Will Walker',          NULL),  -- client confirmed 21 Jul: NOT Annette's
+  (ARRAY['kainos%'],                       'Adam Adebowale-Lowe',  NULL),  -- client confirmed 21 Jul: NOT Annette's
   -- Central Gov 2 (Kiera Battersby)
   (ARRAY['cabo%','cabinet%'],              'Adam Adebowale-Lowe',  'Kiera Battersby'),
   (ARRAY['defra%'],                        'Kiera Battersby',      'Kiera Battersby'),
