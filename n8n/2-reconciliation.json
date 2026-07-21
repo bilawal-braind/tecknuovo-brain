@@ -1,5 +1,5 @@
 {
- "name": "TN Brain \u00b7 2 \u00b7 Reconciliation (07:00 Mon-Fri \u2014 refresh active accounts only)",
+ "name": "TN Brain \u00b7 2 \u00b7 Reconciliation (associates + risk register)",
  "nodes": [
   {
    "parameters": {
@@ -12,13 +12,24 @@
      ]
     }
    },
-   "id": "r_sched",
+   "id": "rec-sched",
    "name": "Every weekday 07:00",
    "type": "n8n-nodes-base.scheduleTrigger",
    "typeVersion": 1.2,
    "position": [
-    0,
+    380,
     300
+   ]
+  },
+  {
+   "parameters": {},
+   "id": "rec-run",
+   "name": "Run",
+   "type": "n8n-nodes-base.manualTrigger",
+   "typeVersion": 1,
+   "position": [
+    380,
+    460
    ]
   },
   {
@@ -27,87 +38,148 @@
     "query": "SELECT id, name FROM accounts;",
     "options": {}
    },
-   "id": "r_acc",
-   "name": "Accounts in DB",
+   "id": "rec-acc",
+   "name": "Read accounts",
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
-   "position": [
-    200,
-    300
-   ],
-   "credentials": {
-    "postgres": {
-     "id": "tv0yKxg1fyTfyh8x",
-     "name": "TN Azure DB"
-    }
-   },
-   "alwaysOutputData": true
-  },
-  {
-   "parameters": {
-    "method": "POST",
-    "url": "https://api.monday.com/v2",
-    "authentication": "genericCredentialType",
-    "genericAuthType": "httpHeaderAuth",
-    "sendHeaders": true,
-    "headerParameters": {
-     "parameters": [
-      {
-       "name": "API-Version",
-       "value": "2026-04"
-      }
-     ]
-    },
-    "sendBody": true,
-    "specifyBody": "json",
-    "jsonBody": "{\"query\":\"query { boards(ids:[1126338886]){ items_page(limit:200){ items { id name group{ title } column_values(ids:[\\\"date\\\",\\\"date6\\\",\\\"sow_status\\\",\\\"status\\\"]){ id text } subitems { column_values(ids:[\\\"numbers\\\"]){ id text } } } } } }\"}",
-    "options": {}
-   },
-   "id": "r_sow",
-   "name": "Monday: SOWs",
-   "type": "n8n-nodes-base.httpRequest",
-   "typeVersion": 4.2,
-   "position": [
-    400,
-    300
-   ],
-   "credentials": {
-    "httpHeaderAuth": {
-     "id": "yDd9RQMyxouZTh46",
-     "name": "Monday API"
-    }
-   },
-   "onError": "continueRegularOutput"
-  },
-  {
-   "parameters": {
-    "method": "POST",
-    "url": "https://api.monday.com/v2",
-    "authentication": "genericCredentialType",
-    "genericAuthType": "httpHeaderAuth",
-    "sendHeaders": true,
-    "headerParameters": {
-     "parameters": [
-      {
-       "name": "API-Version",
-       "value": "2026-04"
-      }
-     ]
-    },
-    "sendBody": true,
-    "specifyBody": "json",
-    "jsonBody": "{\"query\":\"query { boards(ids:[1692810780]){ items_page(limit:200){ items { group{ title } column_values(ids:[\\\"dropdown8__1\\\",\\\"people__1\\\"]){ id text } } } } }\"}",
-    "options": {}
-   },
-   "id": "r_cad",
-   "name": "Monday: cadence",
-   "type": "n8n-nodes-base.httpRequest",
-   "typeVersion": 4.2,
    "position": [
     600,
     300
    ],
    "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.monday.com/v2",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "API-Version",
+       "value": "2026-04"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "{\"query\":\"query { boards(ids:[1118885420]){ items_page(limit:500){ cursor items { id name column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } } }\"}",
+    "options": {}
+   },
+   "id": "rec-as1",
+   "name": "Assoc page 1",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    820,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "yDd9RQMyxouZTh46",
+     "name": "Monday API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "const j=$('Assoc page 1').first().json||{};const ip=(((j.data||{}).boards||[])[0]||{}).items_page||{};const cur=ip.cursor||null;\nconst q=cur?('query { next_items_page(limit:500, cursor:\"'+cur+'\"){ cursor items { id name group { title } column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } }'):'query { complexity { query } }';\nreturn [{json:{body: JSON.stringify({query:q})}}];"
+   },
+   "id": "rec-asq2",
+   "name": "Next assoc query 2",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1020,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.monday.com/v2",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "API-Version",
+       "value": "2026-04"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.body }}",
+    "options": {}
+   },
+   "id": "rec-as2",
+   "name": "Assoc page 2",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1220,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "yDd9RQMyxouZTh46",
+     "name": "Monday API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "const j=$('Assoc page 2').first().json||{};const ip=(j.data||{}).next_items_page||{};const cur=ip.cursor||null;\nconst q=cur?('query { next_items_page(limit:500, cursor:\"'+cur+'\"){ cursor items { id name group { title } column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } }'):'query { complexity { query } }';\nreturn [{json:{body: JSON.stringify({query:q})}}];"
+   },
+   "id": "rec-asq3",
+   "name": "Next assoc query 3",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1420,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.monday.com/v2",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "API-Version",
+       "value": "2026-04"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.body }}",
+    "options": {}
+   },
+   "id": "rec-as3",
+   "name": "Assoc page 3",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1620,
+    300
+   ],
+   "credentials": {
     "httpHeaderAuth": {
      "id": "yDd9RQMyxouZTh46",
      "name": "Monday API"
@@ -132,15 +204,15 @@
     },
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "{\"query\":\"query { boards(ids:[1118885420]){ items_page(limit:200){ items { id name column_values(ids:[\\\"role8\\\",\\\"team\\\",\\\"client_name6\\\",\\\"status0\\\"]){ id text } } } } }\"}",
+    "jsonBody": "{\"query\":\"query { boards(ids:[1583443098]){ items_page(limit:500){ cursor items { id name group { title } column_values { id text column { title } } } } } }\"}",
     "options": {}
    },
-   "id": "r_as",
-   "name": "Monday: associates",
+   "id": "rec-rk1",
+   "name": "Risks page 1",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
    "position": [
-    800,
+    1820,
     300
    ],
    "credentials": {
@@ -153,29 +225,78 @@
   },
   {
    "parameters": {
-    "jsCode": "const SQ=String.fromCharCode(39);\nconst q=s=>(s===null||s===undefined||s==='')?'NULL':SQ+String(s).split(SQ).join(SQ+SQ)+SQ;\nconst num=s=>{if(s==null||s==='')return null;const v=parseFloat(String(s).replace(/[^0-9.\\-]/g,''));return isNaN(v)?null:v;};\nconst col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};\nconst rows=(node)=>{const b=((($(node).first().json||{}).data||{}).boards)||[];return (b[0]&&b[0].items_page&&b[0].items_page.items)?b[0].items_page.items:[];};\n\n// Refresh ONLY accounts already in the brain. New/dormant accounts are NOT imported here \u2014\n// a new account is created on demand by the Main Pipeline when its first call arrives.\nconst existing=$('Accounts in DB').all().map(r=>r.json).filter(a=>a&&a.name);\nconst findAcc=(name)=>{const nl=(name||'').toLowerCase();if(!nl)return null;return existing.find(a=>{const al=a.name.toLowerCase();return al===nl||al.includes(nl)||nl.includes(al);})||null;};\n\nconst sowItems=rows('Monday: SOWs');\nconst cadItems=rows('Monday: cadence');\nconst asItems=rows('Monday: associates');\nif(!sowItems.length){return [{json:{sql:\"SELECT 'reconcile skipped: no Monday SOW data (fail-safe)' AS note;\",accounts:existing.length,projects:0,associates:0,statements:0}}];}\n\nconst stmts=[];\nlet pj=0, asc=0;\n\n// 0) Client-name directory (names ONLY \u2014 the lazy model is unchanged): every group title on the\n// SOW board is a client name. This lets the Watcher recognise a client the brain hasn't met yet;\n// the account row + its SOWs are still created on demand by the Main Pipeline on first call.\nconst dseen={};let dnames=0;\nfor(const it of sowItems){const g=(it.group&&it.group.title)?String(it.group.title).trim():'';const gl=g.toLowerCase();if(!g||dseen[gl])continue;dseen[gl]=1;dnames++;stmts.push(\"INSERT INTO client_directory (name,source,last_seen) VALUES (\"+q(g)+\",'monday_sow',now()) ON CONFLICT (name) DO UPDATE SET last_seen=now();\");}\n\n// Fresh DB (no accounts yet): still seed the directory, skip the per-account refresh.\nif(!existing.length){return [{json:{sql:stmts.length?stmts.join(' '):\"SELECT 'reconcile: nothing to do' AS note;\",accounts:0,projects:0,associates:0,statements:stmts.length}}];}\n\n// 1) Freshness stamp + pod, for every already-tracked account.\nconst groups={};\nfor(const it of cadItems){const g=(it.group&&it.group.title)?it.group.title:'';if(!g)continue;const pod=col(it.column_values,'dropdown8__1');const dm=col(it.column_values,'people__1');if(!groups[g])groups[g]={pod:null,dm:null};if(pod&&!groups[g].pod)groups[g].pod=pod;if(dm&&!groups[g].dm)groups[g].dm=dm;}\nconst gkeys=Object.keys(groups);\nfor(const a of existing){\n  stmts.push(\"UPDATE accounts SET last_verified=now() WHERE id=\"+q(a.id)+\";\");\n  const gk=gkeys.find(k=>{const kl=k.toLowerCase(),al=a.name.toLowerCase();return (kl.includes(al)||al.includes(kl))&&groups[k].pod;});\n  if(gk){stmts.push(\"UPDATE accounts SET pod=\"+q(groups[gk].pod)+\" WHERE id=\"+q(a.id)+\" AND pod IS DISTINCT FROM \"+q(groups[gk].pod)+\";\");}\n}\n\n// 2) Projects + SOW numbers + DM \u2014 ONLY for SOWs whose account is already tracked.\nfor(const it of sowItems){\n  const acc=findAcc((it.group&&it.group.title)?it.group.title:'');\n  if(!acc)continue;\n  pj++;\n  let sum=0,any=false;(it.subitems||[]).forEach(su=>{const v=num(col(su.column_values,'numbers'));if(v!==null){sum+=v;any=true;}});\n  const val=any?Math.round(sum*100)/100:null;\n  const cv=it.column_values;\n  stmts.push(\"INSERT INTO projects (monday_item_id,name,account_name,account_id,sow_value,start_date,end_date,sow_status,commercial_model,last_verified) VALUES (\"+q(it.id)+\",\"+q(it.name)+\",\"+q(acc.name)+\",\"+q(acc.id)+\",\"+(val===null?'NULL':val)+\",\"+q(col(cv,'date'))+\"::date,\"+q(col(cv,'date6'))+\"::date,\"+q(col(cv,'sow_status'))+\",\"+q(col(cv,'status'))+\",now()) ON CONFLICT (monday_item_id) DO UPDATE SET name=EXCLUDED.name,account_id=EXCLUDED.account_id,sow_value=EXCLUDED.sow_value,start_date=EXCLUDED.start_date,end_date=EXCLUDED.end_date,sow_status=EXCLUDED.sow_status,commercial_model=EXCLUDED.commercial_model,last_verified=now() WHERE projects.sow_value IS DISTINCT FROM EXCLUDED.sow_value OR projects.sow_status IS DISTINCT FROM EXCLUDED.sow_status OR projects.start_date IS DISTINCT FROM EXCLUDED.start_date OR projects.end_date IS DISTINCT FROM EXCLUDED.end_date OR projects.commercial_model IS DISTINCT FROM EXCLUDED.commercial_model;\");\n  const toks=(it.name||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);\n  let gk=gkeys.find(k=>{const kl=k.toLowerCase();return kl.includes(acc.name.toLowerCase())&&toks.some(t=>kl.includes(t))&&groups[k].dm;});\n  if(!gk)gk=gkeys.find(k=>toks.some(t=>k.toLowerCase().includes(t))&&groups[k].dm);\n  if(gk){stmts.push(\"UPDATE projects SET delivery_manager_name=\"+q(groups[gk].dm)+\" WHERE monday_item_id=\"+q(it.id)+\" AND delivery_manager_name IS DISTINCT FROM \"+q(groups[gk].dm)+\";\");}\n}\n\n// 3) Consultants \u2014 ONLY for accounts already tracked.\nfor(const it of asItems){\n  const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const acc=findAcc(cname);\n  if(!acc)continue;\n  asc++;\n  const team=col(cv,'team');const placement=col(cv,'status0');\n  stmts.push(\"INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES (\"+q(it.id)+\",\"+q(it.name)+\",\"+q(acc.id)+\",\"+q(acc.name)+\",\"+q(team)+\",\"+q(placement)+\",now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now() WHERE associates.placement_status IS DISTINCT FROM EXCLUDED.placement_status OR associates.project_or_programme IS DISTINCT FROM EXCLUDED.project_or_programme OR associates.account_id IS DISTINCT FROM EXCLUDED.account_id;\");\n}\n\nconst sql=stmts.length?stmts.join(' '):\"SELECT 'nothing to reconcile' AS note;\";\nreturn [{json:{sql,accounts:existing.length,projects:pj,associates:asc,statements:stmts.length}}];"
+    "jsCode": "const j=$('Risks page 1').first().json||{};const ip=(((j.data||{}).boards||[])[0]||{}).items_page||{};const cur=ip.cursor||null;\nconst q=cur?('query { next_items_page(limit:500, cursor:\"'+cur+'\"){ cursor items { id name group { title } column_values { id text column { title } } } } }'):'query { complexity { query } }';\nreturn [{json:{body: JSON.stringify({query:q})}}];"
    },
-   "id": "r_build",
+   "id": "rec-rkq2",
+   "name": "Next risks query 2",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2020,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://api.monday.com/v2",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "API-Version",
+       "value": "2026-04"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.body }}",
+    "options": {}
+   },
+   "id": "rec-rk2",
+   "name": "Risks page 2",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2220,
+    300
+   ],
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "yDd9RQMyxouZTh46",
+     "name": "Monday API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "const org=$('Read accounts').all().map(r=>r.json);\nconst SQ=String.fromCharCode(39);const qq=s=>SQ+String(s).split(SQ).join(SQ+SQ)+SQ;\nconst col=(cv,id)=>{const c=(cv||[]).find(x=>x.id===id);return (c&&c.text)?c.text:null;};\nconst pageItems=(node,first)=>{try{const j=$(node).first().json||{};const d=j.data||{};const ip=first?((((d.boards||[])[0]||{}).items_page)||{}):(d.next_items_page||{});return Array.isArray(ip.items)?ip.items:[];}catch(e){return [];}};\nconst stmts=[];\n// \u2500\u2500 Associates (Assigned Associates 2.2 Live, 1118885420) - ALL pages, so counts are\n// right (the old single 200-item query silently dropped ~80% of the board) \u2500\u2500\nconst asItems=[...pageItems('Assoc page 1',true),...pageItems('Assoc page 2',false),...pageItems('Assoc page 3',false)];\nfor(const it of asItems){const cv=it.column_values||[];const cname=col(cv,'client_name6')||'';const team=col(cv,'team');const placement=col(cv,'status0');\nconst acc=org.find(a=>a.name&&cname.toLowerCase().includes(String(a.name).toLowerCase()));const accId=acc?acc.id:null;\nstmts.push('INSERT INTO associates (monday_item_id,name,account_id,account_name,project_or_programme,placement_status,last_verified) VALUES ('+qq(it.id)+','+qq(it.name)+','+(accId?qq(accId):'NULL')+','+qq(cname)+','+(team?qq(team):'NULL')+','+(placement?qq(placement):'NULL')+',now()) ON CONFLICT (monday_item_id) DO UPDATE SET account_id=EXCLUDED.account_id,account_name=EXCLUDED.account_name,project_or_programme=EXCLUDED.project_or_programme,placement_status=EXCLUDED.placement_status,last_verified=now();');}\n// \u2500\u2500 Risk register (Risks, Issues and Incidents, 1583443098) - columns matched by\n// TITLE fragments (board column ids unknown; unmatched columns land in the run log) \u2500\u2500\nconst rkItems=[...pageItems('Risks page 1',true),...pageItems('Risks page 2',false)];\nconst byTitle=(it,frags)=>{for(const c of (it.column_values||[])){const t=((c.column&&c.column.title)||'').toLowerCase();if(!c.text)continue;for(const f of frags){if(t.includes(f))return c.text;}}return null;};\nconst rkCols=[...new Set(rkItems.flatMap(it=>(it.column_values||[]).map(c=>(c.column&&c.column.title)||'')))].filter(Boolean);\nfor(const it of rkItems){const acct=byTitle(it,['account','client','customer'])||((it.group&&it.group.title)||'');\nconst accRow=org.find(a=>a.name&&acct&&acct.toLowerCase().includes(a.name.toLowerCase()))||org.find(a=>a.name&&(it.name||'').toLowerCase().includes(a.name.toLowerCase()))||null;\nconst v=x=>x?qq(x):'NULL';\nstmts.push('INSERT INTO risks (monday_item_id,name,account_id,account_name,project_name,kind,likelihood,severity,impact_level,escalation,status,treatment_plan,responsible,last_verified) VALUES ('+qq(it.id)+','+qq(it.name||'')+','+(accRow?qq(accRow.id):'NULL')+','+v(acct)+','+v(byTitle(it,['project','sow']))+','+v(byTitle(it,['risk or issue','kind','type']))+','+v(byTitle(it,['likelihood','probability']))+','+v(byTitle(it,['severity']))+','+v(byTitle(it,['impact']))+','+v(byTitle(it,['escalation']))+','+v(byTitle(it,['status']))+','+v(byTitle(it,['treatment','mitigation','action']))+','+v(byTitle(it,['responsible','owner','assigned']))+',now()) ON CONFLICT (monday_item_id) DO UPDATE SET name=EXCLUDED.name,account_id=EXCLUDED.account_id,account_name=EXCLUDED.account_name,project_name=EXCLUDED.project_name,kind=EXCLUDED.kind,likelihood=EXCLUDED.likelihood,severity=EXCLUDED.severity,impact_level=EXCLUDED.impact_level,escalation=EXCLUDED.escalation,status=EXCLUDED.status,treatment_plan=EXCLUDED.treatment_plan,responsible=EXCLUDED.responsible,last_verified=now();');}\nconst sql=stmts.length?stmts.join(' '):'SELECT 1 AS noop;';\nreturn [{json:{sql,associates:asItems.length,risks:rkItems.length,risk_board_columns:rkCols}}];"
+   },
+   "id": "rec-build",
    "name": "Build reconcile SQL",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "position": [
-    1000,
+    2420,
     300
    ]
   },
   {
    "parameters": {
     "operation": "executeQuery",
-    "query": "={{ $json.sql }}",
+    "query": "{{ $json.sql }}",
     "options": {}
    },
-   "id": "r_apply",
+   "id": "rec-apply",
    "name": "Apply",
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
    "position": [
-    1200,
+    2620,
     300
    ],
    "credentials": {
@@ -188,15 +309,15 @@
   {
    "parameters": {
     "operation": "executeQuery",
-    "query": "INSERT INTO run_logs (workflow,status,detail) VALUES ('reconcile','ok', jsonb_build_object('accounts', {{ $('Build reconcile SQL').first().json.accounts }}, 'projects', {{ $('Build reconcile SQL').first().json.projects }}, 'associates', {{ $('Build reconcile SQL').first().json.associates }}, 'statements', {{ $('Build reconcile SQL').first().json.statements }}));",
+    "query": "INSERT INTO run_logs (workflow,status,detail) VALUES ('2-reconciliation','ok', jsonb_build_object('associates', {{ $('Build reconcile SQL').first().json.associates }}, 'risks', {{ $('Build reconcile SQL').first().json.risks }}));",
     "options": {}
    },
-   "id": "r_log",
+   "id": "rec-log",
    "name": "Run log",
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
    "position": [
-    1400,
+    2820,
     300
    ],
    "credentials": {
@@ -208,35 +329,18 @@
   },
   {
    "parameters": {
-    "content": "## Reconciliation \u2014 refresh ACTIVE accounts only\n07:00 weekdays. Reads the accounts already in the brain, then updates **only those** from Monday (SOW numbers/status/dates, pod, DM, consultants) \u2014 and **only where something changed**. Stamps `last_verified`.\n\nDormant accounts are left alone. A NEW account is created on demand by the Main Pipeline when its first call arrives (read-through cache).\n\nFail-safe: empty Monday response = no changes.",
-    "height": 260,
-    "width": 460
-   },
-   "id": "r_note",
-   "name": "note",
-   "type": "n8n-nodes-base.stickyNote",
-   "typeVersion": 1,
-   "position": [
-    0,
-    10
-   ]
-  },
-  {
-   "parameters": {
     "operation": "executeQuery",
-    "query": "UPDATE inbox SET status='failed' WHERE status='processing' AND attempts>=5 AND processed_at < now() - interval '1 hour' RETURNING id;",
+    "query": "UPDATE inbox SET status='failed' WHERE status='processing' AND attempts>=5 AND processed_at < now()-interval '1 hour' RETURNING id;",
     "options": {}
    },
-   "id": "dead-letter-sweep",
+   "id": "rec-dead",
    "name": "Fail poisoned inbox rows",
    "type": "n8n-nodes-base.postgres",
    "typeVersion": 2.5,
    "position": [
-    220,
-    520
+    600,
+    460
    ],
-   "alwaysOutputData": true,
-   "onError": "continueRegularOutput",
    "credentials": {
     "postgres": {
      "id": "tv0yKxg1fyTfyh8x",
@@ -250,7 +354,7 @@
    "main": [
     [
      {
-      "node": "Accounts in DB",
+      "node": "Read accounts",
       "type": "main",
       "index": 0
      },
@@ -262,40 +366,106 @@
     ]
    ]
   },
-  "Accounts in DB": {
+  "Run": {
    "main": [
     [
      {
-      "node": "Monday: SOWs",
+      "node": "Read accounts",
       "type": "main",
       "index": 0
      }
     ]
    ]
   },
-  "Monday: SOWs": {
+  "Read accounts": {
    "main": [
     [
      {
-      "node": "Monday: cadence",
+      "node": "Assoc page 1",
       "type": "main",
       "index": 0
      }
     ]
    ]
   },
-  "Monday: cadence": {
+  "Assoc page 1": {
    "main": [
     [
      {
-      "node": "Monday: associates",
+      "node": "Next assoc query 2",
       "type": "main",
       "index": 0
      }
     ]
    ]
   },
-  "Monday: associates": {
+  "Next assoc query 2": {
+   "main": [
+    [
+     {
+      "node": "Assoc page 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Assoc page 2": {
+   "main": [
+    [
+     {
+      "node": "Next assoc query 3",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Next assoc query 3": {
+   "main": [
+    [
+     {
+      "node": "Assoc page 3",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Assoc page 3": {
+   "main": [
+    [
+     {
+      "node": "Risks page 1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Risks page 1": {
+   "main": [
+    [
+     {
+      "node": "Next risks query 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Next risks query 2": {
+   "main": [
+    [
+     {
+      "node": "Risks page 2",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Risks page 2": {
    "main": [
     [
      {
@@ -329,7 +499,9 @@
    ]
   }
  },
- "settings": {
-  "executionOrder": "v1"
+ "pinData": {},
+ "meta": {
+  "templateCredsSetupCompleted": true,
+  "instanceId": "c079bda3b47b252bbd53b0a9a784b7bc49f99b65cb844d664842ae1763345827"
  }
 }
