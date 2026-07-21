@@ -72,6 +72,10 @@ export type Signal = {
   // was voiced by a senior client stakeholder (matched against HubSpot seniority).
   escalate?: boolean
   raisedBy?: string
+  // Dedup: how many calls this signal has come up in (1 = just its source call),
+  // and when it was last heard. One card that says "mentioned 4x" beats four cards.
+  mentions?: number
+  lastSeen?: string
   callId?: string
   likelihood?: number
   impact?: number

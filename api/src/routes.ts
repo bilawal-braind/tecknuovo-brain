@@ -421,6 +421,21 @@ router.post('/signals/:id/reassign', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Persist a signal's triage status (Actioned / Dismiss / reopen). Previously these
+// buttons only changed browser state, so a reviewer's response silently came back
+// on refresh - the single most trust-eroding behaviour a review tool can have.
+router.post('/signals/:id/status', async (req, res, next) => {
+  try {
+    const { status } = req.body || {};
+    const allowed = ['new', 'actioned', 'dismissed'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+    const denied = await checkSignalWrite(req, req.params.id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    const r = await q('UPDATE signals SET status = $2 WHERE id = $1 RETURNING id, status', [req.params.id, status]);
+    res.json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
 router.post('/signal-notes', async (req, res, next) => {
   try {
     const { signal_id, note, author } = req.body || {};

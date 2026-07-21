@@ -106,6 +106,8 @@ export const mapSignal = (s: ApiSignal): Signal => {
     subtype: s.subtype ?? undefined,
     escalate: d.escalate === true,
     raisedBy: typeof d.raised_by === 'string' && d.raised_by ? d.raised_by : undefined,
+    mentions: asNum(typeof d.mentions === 'string' ? Number(d.mentions) : d.mentions),
+    lastSeen: typeof d.last_seen === 'string' ? d.last_seen.slice(0, 10) : undefined,
     callId: s.call_id ?? undefined,
     likelihood: asNum(d.likelihood),
     impact: asNum(d.impact),

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import type { Signal, SignalStatus } from '../../data/types'
+import { updateSignalStatus } from '../../data/api'
 
 type Ctx = {
   statusOf: (s: Signal) => SignalStatus
@@ -12,7 +13,14 @@ export const useSignal = () => useContext(SignalCtx)
 export function SignalProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<Record<string, SignalStatus>>({})
   const statusOf = useCallback((s: Signal) => overrides[s.id] ?? s.status, [overrides])
-  const setStatus = useCallback((id: string, status: SignalStatus) => setOverrides((p) => ({ ...p, [id]: status })), [])
+  const setStatus = useCallback((id: string, status: SignalStatus) => {
+    setOverrides((p) => ({ ...p, [id]: status }))
+    // Live signals persist to the DB - these buttons were browser-only before, so
+    // a reviewer's Actioned/Dismiss silently reverted on refresh. Mock ids stay local.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) && (status === 'new' || status === 'actioned' || status === 'dismissed')) {
+      updateSignalStatus(id, status).catch(() => {})
+    }
+  }, [])
   return <SignalCtx.Provider value={{ statusOf, setStatus }}>{children}</SignalCtx.Provider>
 }
 

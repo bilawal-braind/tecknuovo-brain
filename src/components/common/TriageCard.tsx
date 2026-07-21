@@ -42,6 +42,12 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
         </button>
         <div className="flex shrink-0 items-center gap-2">
           {scope && <span className="hidden rounded-full border px-1.5 py-0.5 text-[10px] font-semibold sm:inline" style={{ color: scope === 'account' ? 'var(--accent-d)' : 'var(--muted)', borderColor: 'var(--line)' }}>{scope === 'account' ? 'Account' : 'Delivery'}</span>}
+          {(signal.mentions ?? 1) > 1 && (
+            <span className="hidden rounded-full px-1.5 py-0.5 text-[10px] font-bold sm:inline" title={`Came up in ${signal.mentions} calls${signal.lastSeen ? ` · last heard ${fmt(signal.lastSeen)}` : ''}`}
+              style={{ color: m.color, background: `color-mix(in srgb, ${m.color} 12%, transparent)` }}>
+              ×{signal.mentions}
+            </span>
+          )}
           <SeverityTag severity={signal.severity} />
           {noteCount > 0 && (
             <span className="hidden items-center gap-1 text-[10px] font-semibold text-muted-2 sm:inline-flex" title={`${noteCount} team note${noteCount > 1 ? 's' : ''}`}>

@@ -201,6 +201,10 @@ export const addSignalNote = (signalId: string, note: string) =>
 export const reassignSignal = (signalId: string, accountId: string) =>
   post<{ id: string; account_id: string }>(`/api/signals/${signalId}/reassign`, { account_id: accountId })
 
+// Persist Actioned/Dismiss so a reviewer's response survives refresh.
+export const updateSignalStatus = (signalId: string, status: 'new' | 'actioned' | 'dismissed') =>
+  post<{ id: string; status: string }>(`/api/signals/${signalId}/status`, { status })
+
 // ── Leadership OS ──
 export type ApiBrief = {
   id: string
