@@ -9,3 +9,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO tn_api_read;
 
 -- The one allowed write:
 GRANT INSERT ON feedback TO tn_api_read;
+
+-- Reassign endpoint (human re-filing of a mis-attributed signal): the API updates
+-- only these columns on signals, nothing else. Needed when the role goes live.
+GRANT UPDATE (account_id, project_id, details, status) ON signals TO tn_api_read;

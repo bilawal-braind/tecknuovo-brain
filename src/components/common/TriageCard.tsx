@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
-import { projectById, accountName } from '../../data/org'
+import { projectById, accountName, accounts } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback, pushToHubspot, addSignalNote } from '../../data/api'
+import { submitFeedback, pushToHubspot, addSignalNote, reassignSignal } from '../../data/api'
 import { signalNotes, notesForSignal } from '../../data/crm'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
@@ -99,6 +99,8 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
 
           <NotesSection signalId={signal.id} />
 
+          <MoveSignal signal={signal} />
+
           <div className="mt-3.5 border-t border-line pt-3"><QAReview signalId={signal.id} value={verdict} onSubmit={logFeedback} /></div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -150,6 +152,55 @@ function FrameworkScore({ signal }: { signal: Signal }) {
 // creates the deal in HubSpot (Opportunity Qualification pipeline, mapped to the
 // account's company). Approval REQUIRES the deal value + close date, so a half-empty
 // deal can never be created. Declining records the decision. The ONLY outward write.
+// Re-file a mis-attributed signal onto the right account - the human correction for
+// multi-client standups and classifier misses. Persists via the API (audited, and fed
+// to the nightly lessons as a relabel). Live signals only; the source call and its
+// transcript stay attached, only the account it files under changes.
+function MoveSignal({ signal }: { signal: Signal }) {
+  const [open, setOpen] = useState(false)
+  const [target, setTarget] = useState('')
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(signal.id)) return null
+  if (state === 'done') {
+    return (
+      <p className="mt-3 rounded-lg border border-line bg-bg-2 px-3 py-2 text-[11.5px] text-muted">
+        <b className="text-text">Moved to {accountName(signal.accountId)}.</b> It now lives on that account - this list fully updates on the next refresh.
+      </p>
+    )
+  }
+  const move = () => {
+    if (!target) return
+    setState('saving')
+    reassignSignal(signal.id, target)
+      .then(() => { signal.accountId = target; signal.projectId = undefined; setState('done') })
+      .catch(() => setState('error'))
+  }
+  return (
+    <div className="mt-3">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="text-[11px] font-semibold text-muted-2 transition-colors hover:text-text">
+          Wrong account? Move this signal
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-bg-2 px-3 py-2">
+          <span className="text-[11.5px] text-muted">Move to</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className="rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-text">
+            <option value="">Choose account…</option>
+            {accounts.filter((a) => a.id !== signal.accountId).map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <button onClick={move} disabled={!target || state === 'saving'} className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>
+            {state === 'saving' ? 'Moving…' : 'Move'}
+          </button>
+          <button onClick={() => { setOpen(false); setState('idle') }} className="text-[11px] text-muted-2 hover:text-text">Cancel</button>
+          {state === 'error' && <span className="text-[11px]" style={{ color: 'var(--risk)' }}>Could not move it - try again.</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HubspotApproval({ signal }: { signal: Signal }) {
   const [state, setState] = useState<'idle' | 'form' | 'busy' | 'queued' | 'declined' | 'done'>('idle')
   const [dealName, setDealName] = useState(() => {

@@ -10,6 +10,8 @@ import { SignalsDonut } from '../common/SignalsDonut'
 import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView, money } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
+import { SHOW_SOW } from '../../data/source'
+import { fmt } from '../common/SignalLayer'
 
 type View = 'overview' | 'signals' | 'accounts' | 'commercials'
 
@@ -35,7 +37,8 @@ export function ClientPartner() {
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
         { id: 'accounts', label: 'Portfolio', icon: Building2, count: accounts.length },
-        { id: 'commercials', label: 'Commercials', icon: PoundSterling },
+        // Commercials returns when a trusted £ source (Synergist) lands - see SHOW_SOW.
+        ...(SHOW_SOW ? [{ id: 'commercials', label: 'Commercials', icon: PoundSterling }] : []),
       ]}
     >
       <div className="px-7 py-6">
@@ -59,7 +62,9 @@ export function ClientPartner() {
                   <Kpi label="Accounts" value={`${accounts.length}`} sub="in portfolio" />
                   <Kpi label="Open opportunities" value={`${opps.length}`} sub="ranked by value" color="var(--opp)" />
                   <Kpi label="Open risks" value={`${risks.length}`} sub={`${acctRiskN} account · ${risks.length - acctRiskN} delivery`} color="var(--risk)" />
-                  <Kpi label="Under management" value={money(underMgmt)} sub="total SOW value" color="var(--accent)" />
+                  {SHOW_SOW
+                    ? <Kpi label="Under management" value={money(underMgmt)} sub="total SOW value" color="var(--accent)" />
+                    : <Kpi label="Accounts at risk" value={`${accounts.filter((a) => a.health === 'red').length}`} sub="health from live signals" color="var(--accent)" />}
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -93,7 +98,7 @@ export function ClientPartner() {
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className="border-b border-line text-left">
-                        <th className="px-4 py-2.5 eyebrow">Account</th><th className="px-4 py-2.5 eyebrow">Health</th><th className="px-4 py-2.5 eyebrow">Team &amp; scope</th><th className="px-4 py-2.5 eyebrow">SOW</th><th className="px-4 py-2.5 eyebrow">Budget burn</th><th className="px-4 py-2.5 eyebrow">Headroom</th>
+                        <th className="px-4 py-2.5 eyebrow">Account</th><th className="px-4 py-2.5 eyebrow">Health</th><th className="px-4 py-2.5 eyebrow">Team &amp; scope</th>{SHOW_SOW && <><th className="px-4 py-2.5 eyebrow">SOW</th><th className="px-4 py-2.5 eyebrow">Budget burn</th><th className="px-4 py-2.5 eyebrow">Headroom</th></>}<th className="px-4 py-2.5 eyebrow">Last contact</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -112,9 +117,12 @@ export function ClientPartner() {
                             {ps.length} project{ps.length !== 1 ? 's' : ''} · {consultants} consultant{consultants !== 1 ? 's' : ''}
                             {extensions > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)' }}>{extensions} ext</span>}
                           </td>
-                          <td className="px-4 py-3">{money(a.sowValue)}</td>
-                          <td className="px-4 py-3"><BurnBar pct={a.budgetBurnPct} /></td>
-                          <td className="px-4 py-3 text-muted">{money(a.headroom)}</td>
+                          {SHOW_SOW && <>
+                            <td className="px-4 py-3">{money(a.sowValue)}</td>
+                            <td className="px-4 py-3"><BurnBar pct={a.budgetBurnPct} /></td>
+                            <td className="px-4 py-3 text-muted">{money(a.headroom)}</td>
+                          </>}
+                          <td className="px-4 py-3 text-muted">{a.lastContact ? fmt(a.lastContact) : '—'}</td>
                         </tr>
                         )
                       })}

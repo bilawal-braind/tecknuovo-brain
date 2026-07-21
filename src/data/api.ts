@@ -196,6 +196,11 @@ export const fetchSignalNotes = () => get<ApiSignalNote[]>('/api/signal-notes').
 export const addSignalNote = (signalId: string, note: string) =>
   post<ApiSignalNote>('/api/signal-notes', { signal_id: signalId, note })
 
+// Re-file a mis-attributed signal onto the right account (persisted + audited;
+// recorded as a relabel so the nightly lessons learn from the correction).
+export const reassignSignal = (signalId: string, accountId: string) =>
+  post<{ id: string; account_id: string }>(`/api/signals/${signalId}/reassign`, { account_id: accountId })
+
 // ── Leadership OS ──
 export type ApiBrief = {
   id: string

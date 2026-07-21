@@ -390,6 +390,37 @@ router.get('/signal-notes', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Re-file a signal onto the right account - the human correction for a mis-attributed
+// signal (multi-client standups, classifier misses). Persisted, audited in the signal's
+// details, and recorded as a relabel in feedback so the nightly lessons learn from it.
+// The signal keeps its call pointer, so the source transcript stays fully traceable;
+// project_id is cleared because the old project belongs to the old account.
+router.post('/signals/:id/reassign', async (req, res, next) => {
+  try {
+    const { account_id } = req.body || {};
+    const denied = await checkSignalWrite(req, req.params.id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    if (!isUuid(account_id)) return res.status(400).json({ error: 'invalid account_id' });
+    const acc = await q('SELECT id, name FROM accounts WHERE id = $1', [account_id]);
+    if (!acc.rows.length) return res.status(404).json({ error: 'account not found' });
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
+    const who = (user?.name || user?.email || 'dashboard').slice(0, 120);
+    const r = await q(
+      `UPDATE signals SET account_id = $2, project_id = NULL,
+         details = details || jsonb_build_object('reassigned', jsonb_build_object(
+           'from', account_id::text, 'to', $2::text, 'to_name', $3::text, 'by', $4::text, 'at', now()::text))
+       WHERE id = $1 RETURNING id, account_id`,
+      [req.params.id, account_id, acc.rows[0].name, who]
+    );
+    await q(
+      `INSERT INTO feedback (signal_id, account_id, verdict, reason, given_by)
+       VALUES ($1, $2, 'relabel', $3, $4)`,
+      [req.params.id, account_id, 'account corrected to ' + acc.rows[0].name, who]
+    );
+    res.json({ id: r.rows[0].id, account_id: r.rows[0].account_id });
+  } catch (e) { next(e); }
+});
+
 router.post('/signal-notes', async (req, res, next) => {
   try {
     const { signal_id, note, author } = req.body || {};

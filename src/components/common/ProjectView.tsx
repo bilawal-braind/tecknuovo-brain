@@ -5,6 +5,7 @@ import { RagDot, SignalBadge } from './primitives'
 import { CallsView } from './CallsView'
 import { money } from './AccountView'
 import { fmt } from './SignalLayer'
+import { SHOW_SOW } from '../../data/source'
 
 const PHASES = ['Discovery', 'Design', 'Build', 'Test', 'Go-live', 'Run'] as const
 
@@ -51,7 +52,7 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
             {commercial && (
               <>
                 <span className="text-muted">Consultants <b className="font-semibold text-text">{project.advisors.length}</b></span>
-                <span className="text-muted">Spend <b className="font-semibold text-text">{money(project.spend)}</b></span>
+                {SHOW_SOW && <span className="text-muted">Spend <b className="font-semibold text-text">{money(project.spend)}</b></span>}
                 <span className="text-muted">Client Partner <b className="font-semibold text-text">{personName(account.clientPartner)}</b></span>
                 <span className="text-muted">Client Director <b className="font-semibold text-text">{personName(account.clientDirector)}</b></span>
               </>

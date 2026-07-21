@@ -5,6 +5,7 @@ import { callsForAccount } from '../../data/calls'
 import { complianceFor } from '../../data/delivery'
 import { dealsForAccount, stakeholdersForAccount, prettyBuyingRole, weeklyReports } from '../../data/crm'
 import type { CadenceStatus } from '../../data/types'
+import { SHOW_SOW } from '../../data/source'
 import { RagDot, CoverageBadge } from './primitives'
 import { CallsView } from './CallsView'
 import { ReportCard } from './WeeklyReports'
@@ -61,7 +62,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {commercial ? (
+          {commercial && SHOW_SOW ? (
             <>
               <Stat label="SOW value" value={money(account.sowValue)} />
               <Stat label="Budget burn" value={`${account.budgetBurnPct}%`} color={account.budgetBurnPct > 75 ? 'var(--risk)' : account.budgetBurnPct > 60 ? 'var(--people)' : undefined} bar={account.budgetBurnPct} />

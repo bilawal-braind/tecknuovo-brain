@@ -16,6 +16,11 @@ export const API_TOKEN = env.VITE_API_TOKEN ?? ''
 
 // ── Auth (Microsoft Entra SSO) ──
 // 'none' (default) = no login, current behaviour. 'entra' = sign in with a TN email.
+// £ figures (SOW / budget burn / headroom) are hidden until a trusted source lands
+// (Synergist) - the HubSpot/Monday-derived sums proved misleading (client ask, 21 Jul).
+// Re-enable with VITE_SHOW_SOW=1. Genuine HubSpot pipeline deals are unaffected.
+export const SHOW_SOW = String(env.VITE_SHOW_SOW ?? '') === '1'
+
 export const AUTH_MODE: 'none' | 'entra' = env.VITE_AUTH === 'entra' ? 'entra' : 'none'
 export const ENTRA_TENANT_ID = env.VITE_ENTRA_TENANT_ID ?? ''
 export const ENTRA_CLIENT_ID = env.VITE_ENTRA_CLIENT_ID ?? ''
