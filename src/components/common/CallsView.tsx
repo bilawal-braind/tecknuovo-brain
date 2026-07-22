@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Video, ChevronDown, FileText, X } from 'lucide-react'
-import { fetchTranscript } from '../../data/api'
+import { Search, Video, ChevronDown, FileText, X, Flag } from 'lucide-react'
+import { fetchTranscript, createManualSignal } from '../../data/api'
 import type { Call } from '../../data/calls'
+import type { TranscriptLine } from '../../data/calls'
+import { signals } from '../../data/signals'
 import { transcriptWithMoments } from '../../data/calls'
-import type { SignalType } from '../../data/types'
+import type { Signal, SignalType } from '../../data/types'
 import { accountName, projectById } from '../../data/org'
 import { SignalBadge, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
@@ -208,6 +210,33 @@ export function CallTranscript({ call }: { call: Call }) {
   const { lines, moments } = transcriptWithMoments(call)
   const blockRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [flash, setFlash] = useState<number | null>(null)
+
+  // "The brain missed this" - flag any line as a signal (Chloe's quality backstop).
+  // Creates a real, human-marked signal on the call's account; the line becomes a
+  // captured block on save because the new signal joins call.signals immediately.
+  const isLiveCall = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(call.id)
+  const [flagIdx, setFlagIdx] = useState<number | null>(null)
+  const [flagType, setFlagType] = useState<SignalType>('risk')
+  const [flagSummary, setFlagSummary] = useState('')
+  const [flagState, setFlagState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const openFlag = (i: number, text: string) => { setFlagIdx(i); setFlagType('risk'); setFlagSummary(text.slice(0, 200)); setFlagState('idle') }
+  const saveFlag = (line: TranscriptLine) => {
+    setFlagState('saving')
+    createManualSignal(call.id, flagType, flagSummary.trim(), line.text)
+      .then((r) => {
+        const s: Signal = {
+          id: r.id, type: flagType, accountId: call.accountId, projectId: call.projectId, pod: '',
+          sourceCall: { title: call.title, date: call.date, type: call.type, speaker: line.speaker || '' },
+          quote: line.text, summary: flagSummary.trim(), confidence: 100, severity: 'medium',
+          suggestedOwner: { person: '-', role: '' }, suggestedAction: '', status: 'new',
+          createdAt: new Date().toISOString().slice(0, 10), subtype: 'human-flagged',
+        }
+        signals.push(s)
+        call.signals.push(s)
+        setFlagIdx(null)
+      })
+      .catch(() => setFlagState('error'))
+  }
   const jump = (i: number) => {
     blockRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setFlash(i)
@@ -280,14 +309,43 @@ export function CallTranscript({ call }: { call: Call }) {
             )
           }
           return (
-            <div key={i} className={`flex items-start gap-2.5 px-1 ${sameSpeaker ? 'mt-0.5' : 'mt-2.5'}`}>
+            <div key={i} className={`group flex items-start gap-2.5 px-1 ${sameSpeaker ? 'mt-0.5' : 'mt-2.5'}`}>
               <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold text-white ${sameSpeaker ? 'invisible' : ''}`} style={{ background: color }}>
                 {l.speaker ? initials(l.speaker) : '·'}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 {!sameSpeaker && l.speaker && <div className="text-[11.5px] font-semibold leading-tight" style={{ color }}>{l.speaker}</div>}
                 <p className="text-[13px] leading-relaxed text-text">{l.text}</p>
+                {flagIdx === i && (
+                  <div className="mt-2 rounded-lg border border-line bg-bg-2 p-2.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(Object.keys(SIGNAL_META) as SignalType[]).map((t) => (
+                        <button key={t} onClick={() => setFlagType(t)}
+                          className="rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors"
+                          style={{ borderColor: flagType === t ? SIGNAL_META[t].color : 'var(--line)', color: SIGNAL_META[t].color, background: flagType === t ? `color-mix(in srgb, ${SIGNAL_META[t].color} 12%, transparent)` : 'transparent' }}>
+                          {SIGNAL_META[t].label}
+                        </button>
+                      ))}
+                    </div>
+                    <input value={flagSummary} onChange={(e) => setFlagSummary(e.target.value)} placeholder="One line on why this matters…"
+                      className="mt-2 w-full rounded-md border border-line bg-surface px-2 py-1.5 text-[12px] text-text outline-none placeholder:text-muted-2 focus:border-[var(--accent)]" />
+                    <div className="mt-2 flex items-center gap-2">
+                      <button onClick={() => saveFlag(l)} disabled={!flagSummary.trim() || flagState === 'saving'}
+                        className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>
+                        {flagState === 'saving' ? 'Flagging…' : 'Flag as signal'}
+                      </button>
+                      <button onClick={() => setFlagIdx(null)} className="text-[11px] text-muted-2 hover:text-text">Cancel</button>
+                      {flagState === 'error' && <span className="text-[11px]" style={{ color: 'var(--risk)' }}>Could not save - try again.</span>}
+                    </div>
+                  </div>
+                )}
               </div>
+              {isLiveCall && flagIdx !== i && (
+                <button onClick={() => openFlag(i, l.text)} title="The brain missed something here? Flag this line as a signal"
+                  className="mt-0.5 shrink-0 rounded-md p-1 text-muted-2 opacity-0 transition-opacity hover:text-text group-hover:opacity-100">
+                  <Flag size={12} />
+                </button>
+              )}
             </div>
           )
         })}

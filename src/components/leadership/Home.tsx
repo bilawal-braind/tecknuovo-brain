@@ -7,12 +7,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity } from 'lucide-react'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, ShieldAlert } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
 import type { Call, TranscriptLine } from '../../data/calls'
 import { accounts, accountName } from '../../data/org'
+import { registerRisks } from '../../data/crm'
 import { weeklyTrend } from '../../data/trends'
 import { fetchBrief, generateBrief, fetchTranscript } from '../../data/api'
 import type { ApiBrief } from '../../data/api'
@@ -41,6 +42,20 @@ const needsHer = (s: Signal) =>
   s.type === 'risk' &&
   s.status !== 'actioned' && s.status !== 'dismissed' &&
   (s.severity === 'critical' || s.escalate === true || (s.severity === 'high' && ageDays(s.createdAt) >= 20))
+
+// Register escalations to the MD (Chloe, 22 Jul): a Level 2 item reaches Katie after
+// 1 open day, a Level 1 after 5. Interim rule until the new RAID methodology lands -
+// tweak the thresholds here when it does. Age = the board's own Ticket Age where
+// synced, else days since the brain first saw the item.
+const REGISTER_ESCALATION_DAYS: Record<string, number> = { 'Level 2': 1, 'Level 1': 5 }
+const registerEscalations = () =>
+  registerRisks.filter((r) => {
+    const need = REGISTER_ESCALATION_DAYS[(r.escalation || '').trim()]
+    if (need === undefined) return false
+    const synced = r.age_days != null ? Number(r.age_days) : NaN
+    const age = Number.isFinite(synced) ? synced : r.created_at ? ageDays(r.created_at) : 0
+    return age >= need
+  })
 
 const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
 const SEV_COLOR: Record<Severity, string> = { critical: 'var(--risk)', high: 'var(--people)', medium: 'var(--muted)', low: 'var(--muted-2)' }
@@ -149,6 +164,8 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
 
   const storyFor = (accountId: string) => stories.find((s) => s.account.toLowerCase() === accountName(accountId).toLowerCase())
 
+  const regEsc = registerEscalations()
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -170,9 +187,39 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={Building2} label="Accounts active" value={`${d.accountsActive}`} sub={`of ${accounts.length} in the brain`} />
         <Stat icon={Radio} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.period.length} signals extracted`} color="var(--accent)" />
-        <Stat icon={AlertTriangle} label="Needs attention" value={`${d.attentionCount}`} sub="past the escalation bar" color={d.attentionCount ? 'var(--risk)' : undefined} />
+        <Stat icon={AlertTriangle} label="Needs attention" value={`${d.attentionCount + regEsc.length}`} sub={regEsc.length ? `incl. ${regEsc.length} from the risk register` : 'past the escalation bar'} color={d.attentionCount + regEsc.length ? 'var(--risk)' : undefined} />
         <Stat icon={TrendingUp} label="Opportunities" value={`${d.opps.length}`} sub={d.oppValue ? `${gbp(d.oppValue)} surfaced` : 'surfaced this period'} color="var(--opp)" />
       </div>
+
+      {/* Escalated from the Monday risk register - Level 2 after 1 day, Level 1 after 5 */}
+      {regEsc.length > 0 && (
+        <div className="glass mt-4 rounded-2xl p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldAlert size={15} className="text-muted-2" />
+            <h3 className="text-[14px] font-semibold">Escalated from the risk register</h3>
+            <span className="text-[11px] text-muted-2">Level 2 after 1 day · Level 1 after 5 days · from Monday</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {regEsc.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-bg-2 px-3 py-2.5">
+                <span className="text-[12.5px] font-semibold">{r.name}</span>
+                {r.impact_level && (
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{ color: r.impact_level === 'High' ? 'var(--risk)' : r.impact_level === 'Medium' ? 'var(--people)' : 'var(--muted)', background: `color-mix(in srgb, ${r.impact_level === 'High' ? 'var(--risk)' : r.impact_level === 'Medium' ? 'var(--people)' : 'var(--muted)'} 12%, transparent)` }}>
+                    {r.impact_level}
+                  </span>
+                )}
+                <span className="text-[11px] text-muted">{[r.account_name, r.escalation, r.status, r.responsible].filter(Boolean).join(' · ')}</span>
+                {r.account_id && (
+                  <button onClick={() => onOpenAccount(r.account_id as string)} className="ml-auto text-[11px] font-semibold text-[var(--accent-d)] hover:underline">
+                    Open account
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="glass rounded-2xl p-5">

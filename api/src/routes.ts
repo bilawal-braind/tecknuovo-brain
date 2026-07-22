@@ -317,7 +317,7 @@ router.get('/risks', async (req, res, next) => {
     if (allowed !== null) { params.push(allowed); filter = `AND account_id = ANY($${params.length}::uuid[])`; }
     const r = await q(
       `SELECT id, account_id, account_name, name, kind, likelihood, severity, impact_level,
-              escalation, status, treatment_plan, responsible, last_verified
+              escalation, status, treatment_plan, responsible, age_days, created_at, last_verified
        FROM risks
        WHERE COALESCE(status, '') NOT IN ('Closed', 'Transferred') ${filter}
        ORDER BY CASE COALESCE(impact_level, '') WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 WHEN 'Low' THEN 2 ELSE 3 END,
@@ -442,6 +442,36 @@ router.post('/signals/:id/reassign', async (req, res, next) => {
       [req.params.id, account_id, 'account corrected to ' + acc.rows[0].name, who]
     );
     res.json({ id: r.rows[0].id, account_id: r.rows[0].account_id });
+  } catch (e) { next(e); }
+});
+
+// Human-flagged signal from a transcript line - the quality backstop when the
+// classifier misses something. Files to the call's account/project, marked as
+// human-sourced in details, and shows on dashboards like any other signal.
+router.post('/signals', async (req, res, next) => {
+  try {
+    const { call_id, type, quote, summary } = req.body || {};
+    const types = ['risk', 'opportunity', 'update', 'people'];
+    if (!isUuid(call_id)) return res.status(400).json({ error: 'invalid call_id' });
+    if (!types.includes(type)) return res.status(400).json({ error: `type must be one of: ${types.join(', ')}` });
+    if (!summary || !String(summary).trim()) return res.status(400).json({ error: 'summary required' });
+    const call = await q('SELECT id, account_id, project_id FROM calls WHERE id = $1', [call_id]);
+    if (!call.rows.length) return res.status(404).json({ error: 'call not found' });
+    const allowed = await allowedAccounts(req);
+    if (allowed !== null && !(call.rows[0].account_id && allowed.includes(String(call.rows[0].account_id)))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
+    const who = (user?.name || user?.email || 'dashboard').slice(0, 120);
+    const r = await q(
+      `INSERT INTO signals (call_id, account_id, project_id, type, subtype, summary, quote, suggested_action, confidence, details)
+       VALUES ($1, $2, $3, $4, 'human-flagged', $5, $6, '', NULL,
+               jsonb_build_object('source', 'human', 'flagged_by', $7::text, 'flagged_at', now()::text))
+       RETURNING id, created_at`,
+      [call_id, call.rows[0].account_id, call.rows[0].project_id, type,
+       String(summary).trim().slice(0, 300), String(quote || '').slice(0, 500), who]
+    );
+    res.status(201).json(r.rows[0]);
   } catch (e) { next(e); }
 });
 

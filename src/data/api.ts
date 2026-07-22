@@ -117,6 +117,8 @@ export type ApiRegisterRisk = {
   status: string | null
   treatment_plan: string | null
   responsible: string | null
+  age_days: number | string | null
+  created_at?: string
   last_verified: string | null
 }
 export const fetchRegisterRisks = () => get<ApiRegisterRisk[]>('/api/risks').catch(() => [] as ApiRegisterRisk[])
@@ -223,6 +225,11 @@ export const reassignSignal = (signalId: string, accountId: string) =>
 // Persist Actioned/Dismiss so a reviewer's response survives refresh.
 export const updateSignalStatus = (signalId: string, status: 'new' | 'actioned' | 'dismissed') =>
   post<{ id: string; status: string }>(`/api/signals/${signalId}/status`, { status })
+
+// Human-flagged signal from a transcript line - the quality backstop for anything
+// the classifier missed. Shows on dashboards like any other signal.
+export const createManualSignal = (callId: string, type: string, summary: string, quote: string) =>
+  post<{ id: string; created_at: string }>('/api/signals', { call_id: callId, type, summary, quote })
 
 // ── Leadership OS ──
 export type ApiBrief = {
