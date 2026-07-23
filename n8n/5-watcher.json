@@ -1,418 +1,418 @@
 {
-  "name": "TN Brain · 5 · Watcher (Teams → inbox)",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 30
-            }
-          ]
-        }
-      },
-      "id": "w_sched",
-      "name": "Every 30 min",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT graph_user_id, display_name FROM watchlist WHERE active = true;",
-        "options": {}
-      },
-      "id": "w_list",
-      "name": "Read watchlist",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        220,
-        300
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "tv0yKxg1fyTfyh8x",
-          "name": "TN Azure DB"
-        }
+ "name": "TN Brain \u00b7 5 \u00b7 Watcher (Teams \u2192 inbox)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 30
       }
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}',startDateTime={{ $now.minus({ minutes: 75 }).toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }},endDateTime={{ $now.toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }})",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "oAuth2Api",
-        "sendQuery": false,
-        "options": {}
-      },
-      "id": "w_getall",
-      "name": "Get transcripts (window)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        460,
-        300
-      ],
-      "credentials": {
-        "oAuth2Api": {
-          "id": "QIB3e7FDXq9aL6tW",
-          "name": "Microsoft Graph API"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// One watchlist member failing (404/permission blip) must not kill everyone's sweep:\n// keep only responses that actually contain a transcript array.\nconst ok=$input.all().filter(i=>Array.isArray(i.json&&i.json.value));\nconst dropped=$input.all().length-ok.length;\nif(dropped>0)console.log('watcher: skipped '+dropped+' failed Graph response(s)');\nreturn ok;"
-      },
-      "id": "w_valid",
-      "name": "Keep valid responses",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        580,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "fieldToSplitOut": "value",
-        "options": {}
-      },
-      "id": "w_split",
-      "name": "Each transcript",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
-      "position": [
-        700,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $('Read watchlist').item.json.graph_user_id }}/onlineMeetings/{{ $json.meetingId }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "oAuth2Api",
-        "options": {}
-      },
-      "id": "w_meet",
-      "name": "Get meeting subject",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        940,
-        300
-      ],
-      "credentials": {
-        "oAuth2Api": {
-          "id": "QIB3e7FDXq9aL6tW",
-          "name": "Microsoft Graph API"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// Client-facing filter: keep a meeting only if at least one participant is outside TN.\nconst INTERNAL_DOMAINS=['tecknuovo.com']; // TN internal email domain(s) — confirm/extend if TN uses others\nconst p=$json.participants||{};\nconst ppl=[];if(p.organizer)ppl.push(p.organizer);(p.attendees||[]).forEach(a=>ppl.push(a));\nconst upns=ppl.map(a=>((a&&a.upn)||'').toLowerCase()).filter(Boolean);\nconst externals=upns.filter(u=>{const d=u.split('@')[1]||'';return d&&!INTERNAL_DOMAINS.includes(d);});\nconst external_domains=[...new Set(externals.map(u=>u.split('@')[1]))];\nconst attendee_check=upns.length?'ok':'unavailable';\n// Fail-open: if Graph gave no participant data, keep the call (the watchlist is the primary control) but flag it.\nconst is_external=attendee_check==='ok'?externals.length>0:true;\nreturn { json: { is_external, external_domains, attendee_check, subject: $json.subject||'' } };"
-      },
-      "id": "w_att",
-      "name": "Attendee check",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1180,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://graph.microsoft.com/beta/users/{{ $('Read watchlist').item.json.graph_user_id }}/onlineMeetings/{{ $('Each transcript').item.json.meetingId }}/transcripts/{{ $('Each transcript').item.json.id }}/content",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "oAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "$format",
-              "value": "text/vtt"
-            }
-          ]
-        },
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "text"
-            }
-          }
-        }
-      },
-      "id": "w_content",
-      "name": "Get transcript content",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1660,
-        300
-      ],
-      "credentials": {
-        "oAuth2Api": {
-          "id": "QIB3e7FDXq9aL6tW",
-          "name": "Microsoft Graph API"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "function vttToText(v){\n  if(!v) return '';\n  const turns=[]; let cur=null; let inCue=false;\n  for(const raw of String(v).split(/\\r?\\n/)){\n    const l=raw.trim();\n    if(!l){ inCue=false; continue; }\n    if(/-->/.test(l)){ inCue=true; continue; }   // timestamp: cue payload follows\n    if(!inCue) continue;                          // WEBVTT header / cue id / NOTE -> skip\n    const m=l.match(/^<v\\s+([^>]+)>([\\s\\S]*)$/i);\n    if(m){\n      const speaker=m[1].trim();\n      const text=m[2].replace(/<\\/v>/ig,'').replace(/<[^>]+>/g,'').trim();\n      if(cur && cur.speaker===speaker){ cur.text += ' ' + text; }\n      else { cur={speaker,text}; turns.push(cur); }\n    } else {\n      const text=l.replace(/<[^>]+>/g,'').trim();\n      if(!text) continue;\n      if(cur){ cur.text += ' ' + text; } else { cur={speaker:'',text}; turns.push(cur); }\n    }\n  }\n  return turns.map(t => (t.speaker?t.speaker+': ':'')+t.text.replace(/\\s+/g,' ').trim()).filter(Boolean).join('\\n');\n}\nconst e = s => String(s==null?'':s).replace(/'/g,\"''\");\nconst tid     = ($('Each transcript').item.json.id) || '';\nconst subject = ($('Get meeting subject').item.json.subject) || '';\nconst text    = vttToText($('Get transcript content').item.json.data || $('Get transcript content').item.json.body || '');\nconst ac  = $('Attendee check').item.json;\nconst ext = JSON.stringify(ac.external_domains||[]);\nconst sql =\n  \"INSERT INTO inbox (source, dedup_key, payload, status) \" +\n  \"SELECT 'teams', '\" + e(tid) + \"', jsonb_build_object(\" +\n    \"'account', COALESCE((SELECT name FROM accounts WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), (SELECT name FROM client_directory WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), 'UNKNOWN'),\" +\n    \"'title', '\" + e(subject) + \"',\" +\n    \"'external_domains', '\" + e(ext) + \"'::jsonb,\" +\n    \"'attendee_check', '\" + e(ac.attendee_check||'') + \"',\" +\n    \"'dedup_key', '\" + e(tid) + \"',\" +\n    \"'transcript', '\" + e(text) + \"'\" +\n  \"), 'pending' \" +\n  \"WHERE '\" + e(text) + \"' <> '' \" +\n  \"ON CONFLICT (dedup_key) DO NOTHING RETURNING id;\";\nreturn { json: { sql, transcript_id: tid, subject, chars: text.length } };"
-      },
-      "id": "w_build",
-      "name": "Build inbox insert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1900,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "={{ $json.sql }}",
-        "options": {}
-      },
-      "id": "w_insert",
-      "name": "Insert to inbox",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        2140,
-        300
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "tv0yKxg1fyTfyh8x",
-          "name": "TN Azure DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "w_isnew",
-      "name": "New call? (insert returned id)",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2380,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "",
-          "cachedResultName": "TN Brain · 1 · Main Pipeline (inbox-driven)"
-        },
-        "options": {}
-      },
-      "id": "w_trigger",
-      "name": "Trigger pipeline (per new call)",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        2620,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## Watcher — Teams transcripts → inbox\nEvery 30 min: read the watchlist → pull each person's transcripts from the last 75 min (2.5× the interval; dedup on transcript id makes the overlap free) → one inbox row per transcript → fire the Main Pipeline once per NEW row only.\n\nALL calls are ingested for now (internal + client). 'Attendee check' records the external attendee domains in the payload, so filtering to client-facing-only later is a one-node change.\n\n**Account matching:** title vs `accounts` + `client_directory` (the full Monday client list, kept warm by the 07:00 reconcile). No match → UNKNOWN → the pipeline classifies anyway and stores the signals UNLINKED (no fake account).",
-        "height": 260,
-        "width": 420
-      },
-      "id": "w_note1",
-      "name": "How it works",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        0,
-        -20
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## ⚠️ After importing\n1. **'Trigger pipeline (per new call)'** → select 'TN Brain · 1 · Main Pipeline'.\n2. Run the one-off SQL first (creates client_directory) — see db/2026-07_client_directory.sql.\n3. Confirm credentials on the HTTP nodes (Microsoft Graph API) + Postgres nodes (TN Azure DB).\n\n**Window:** last 75 min per 30-min sweep. If n8n is down >45 min, run once manually with a wider window (edit `minutes: 75`), then set it back — dedup makes backfill safe.",
-        "height": 300,
-        "width": 460
-      },
-      "id": "w_note2",
-      "name": "Setup checklist",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1420,
-        -60
-      ]
+     ]
     }
-  ],
-  "connections": {
-    "Every 30 min": {
-      "main": [
-        [
-          {
-            "node": "Read watchlist",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read watchlist": {
-      "main": [
-        [
-          {
-            "node": "Get transcripts (window)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get transcripts (window)": {
-      "main": [
-        [
-          {
-            "node": "Keep valid responses",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Each transcript": {
-      "main": [
-        [
-          {
-            "node": "Get meeting subject",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get meeting subject": {
-      "main": [
-        [
-          {
-            "node": "Attendee check",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get transcript content": {
-      "main": [
-        [
-          {
-            "node": "Build inbox insert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build inbox insert": {
-      "main": [
-        [
-          {
-            "node": "Insert to inbox",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insert to inbox": {
-      "main": [
-        [
-          {
-            "node": "New call? (insert returned id)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "New call? (insert returned id)": {
-      "main": [
-        [
-          {
-            "node": "Trigger pipeline (per new call)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Attendee check": {
-      "main": [
-        [
-          {
-            "node": "Get transcript content",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Keep valid responses": {
-      "main": [
-        [
-          {
-            "node": "Each transcript",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+   },
+   "id": "w_sched",
+   "name": "Every 30 min",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
   },
-  "settings": {
-    "executionOrder": "v1"
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "SELECT graph_user_id, display_name FROM watchlist WHERE active = true;",
+    "options": {}
+   },
+   "id": "w_list",
+   "name": "Read watchlist",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "GET",
+    "url": "=https://graph.microsoft.com/beta/users/{{ $json.graph_user_id }}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='{{ $json.graph_user_id }}',startDateTime={{ $now.minus({ minutes: 75 }).toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }},endDateTime={{ $now.toUTC().toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }})",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "oAuth2Api",
+    "sendQuery": false,
+    "options": {}
+   },
+   "id": "w_getall",
+   "name": "Get transcripts (window)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    460,
+    300
+   ],
+   "credentials": {
+    "oAuth2Api": {
+     "id": "QIB3e7FDXq9aL6tW",
+     "name": "Microsoft Graph API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// One watchlist member failing (404/permission blip) must not kill everyone's sweep:\n// keep only responses that actually contain a transcript array.\nconst ok=$input.all().filter(i=>Array.isArray(i.json&&i.json.value));\nconst dropped=$input.all().length-ok.length;\nif(dropped>0)console.log('watcher: skipped '+dropped+' failed Graph response(s)');\nreturn ok;"
+   },
+   "id": "w_valid",
+   "name": "Keep valid responses",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    580,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "fieldToSplitOut": "value",
+    "options": {}
+   },
+   "id": "w_split",
+   "name": "Each transcript",
+   "type": "n8n-nodes-base.splitOut",
+   "typeVersion": 1,
+   "position": [
+    700,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "GET",
+    "url": "=https://graph.microsoft.com/v1.0/users/{{ $('Read watchlist').item.json.graph_user_id }}/onlineMeetings/{{ $json.meetingId }}",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "oAuth2Api",
+    "options": {}
+   },
+   "id": "w_meet",
+   "name": "Get meeting subject",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    940,
+    300
+   ],
+   "credentials": {
+    "oAuth2Api": {
+     "id": "QIB3e7FDXq9aL6tW",
+     "name": "Microsoft Graph API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "mode": "runOnceForEachItem",
+    "jsCode": "// Client-facing filter: keep a meeting only if at least one participant is outside TN.\nconst INTERNAL_DOMAINS=['tecknuovo.com']; // TN internal email domain(s) \u2014 confirm/extend if TN uses others\nconst p=$json.participants||{};\nconst ppl=[];if(p.organizer)ppl.push(p.organizer);(p.attendees||[]).forEach(a=>ppl.push(a));\nconst upns=ppl.map(a=>((a&&a.upn)||'').toLowerCase()).filter(Boolean);\nconst externals=upns.filter(u=>{const d=u.split('@')[1]||'';return d&&!INTERNAL_DOMAINS.includes(d);});\nconst external_domains=[...new Set(externals.map(u=>u.split('@')[1]))];\nconst attendee_check=upns.length?'ok':'unavailable';\n// Fail-open: if Graph gave no participant data, keep the call (the watchlist is the primary control) but flag it.\nconst is_external=attendee_check==='ok'?externals.length>0:true;\nreturn { json: { is_external, external_domains, attendee_check, subject: $json.subject||'' } };"
+   },
+   "id": "w_att",
+   "name": "Attendee check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1180,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "GET",
+    "url": "=https://graph.microsoft.com/beta/users/{{ $('Read watchlist').item.json.graph_user_id }}/onlineMeetings/{{ $('Each transcript').item.json.meetingId }}/transcripts/{{ $('Each transcript').item.json.id }}/content",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "oAuth2Api",
+    "sendQuery": true,
+    "queryParameters": {
+     "parameters": [
+      {
+       "name": "$format",
+       "value": "text/vtt"
+      }
+     ]
+    },
+    "options": {
+     "response": {
+      "response": {
+       "responseFormat": "text"
+      }
+     }
+    }
+   },
+   "id": "w_content",
+   "name": "Get transcript content",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1660,
+    300
+   ],
+   "credentials": {
+    "oAuth2Api": {
+     "id": "QIB3e7FDXq9aL6tW",
+     "name": "Microsoft Graph API"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "mode": "runOnceForEachItem",
+    "jsCode": "function vttToText(v){\n  if(!v) return '';\n  const turns=[]; let cur=null; let inCue=false;\n  for(const raw of String(v).split(/\\r?\\n/)){\n    const l=raw.trim();\n    if(!l){ inCue=false; continue; }\n    if(/-->/.test(l)){ inCue=true; continue; }   // timestamp: cue payload follows\n    if(!inCue) continue;                          // WEBVTT header / cue id / NOTE -> skip\n    const m=l.match(/^<v\\s+([^>]+)>([\\s\\S]*)$/i);\n    if(m){\n      const speaker=m[1].trim();\n      const text=m[2].replace(/<\\/v>/ig,'').replace(/<[^>]+>/g,'').trim();\n      if(cur && cur.speaker===speaker){ cur.text += ' ' + text; }\n      else { cur={speaker,text}; turns.push(cur); }\n    } else {\n      const text=l.replace(/<[^>]+>/g,'').trim();\n      if(!text) continue;\n      if(cur){ cur.text += ' ' + text; } else { cur={speaker:'',text}; turns.push(cur); }\n    }\n  }\n  return turns.map(t => (t.speaker?t.speaker+': ':'')+t.text.replace(/\\s+/g,' ').trim()).filter(Boolean).join('\\n');\n}\nconst e = s => String(s==null?'':s).replace(/'/g,\"''\");\nconst tid     = ($('Each transcript').item.json.id) || '';\nconst subject = ($('Get meeting subject').item.json.subject) || '';\nconst text    = vttToText($('Get transcript content').item.json.data || $('Get transcript content').item.json.body || '');\nconst ac  = $('Attendee check').item.json;\nconst ext = JSON.stringify(ac.external_domains||[]);\n// Leadership-only meetings (Meesha, 22 Jul): these titles are visible ONLY on the\n// leadership dashboard. Extend this list when more names are agreed.\nconst LEADERSHIP_TITLES = ['business leadership', 'customer leadership', 'leadership team meeting'];\nconst visibility = LEADERSHIP_TITLES.some(t => (subject || '').toLowerCase().includes(t)) ? 'leadership' : 'all';\nconst sql =\n  \"INSERT INTO inbox (source, dedup_key, payload, status) \" +\n  \"SELECT 'teams', '\" + e(tid) + \"', jsonb_build_object(\" +\n    \"'account', COALESCE((SELECT name FROM accounts WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), (SELECT name FROM client_directory WHERE '\" + e(subject) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1), 'UNKNOWN'),\" +\n    \"'title', '\" + e(subject) + \"',\" +\n    \"'visibility', '\" + visibility + \"',\" +\n    \"'external_domains', '\" + e(ext) + \"'::jsonb,\" +\n    \"'attendee_check', '\" + e(ac.attendee_check||'') + \"',\" +\n    \"'dedup_key', '\" + e(tid) + \"',\" +\n    \"'transcript', '\" + e(text) + \"'\" +\n  \"), 'pending' \" +\n  \"WHERE '\" + e(text) + \"' <> '' \" +\n  \"ON CONFLICT (dedup_key) DO NOTHING RETURNING id;\";\nreturn { json: { sql, transcript_id: tid, subject, chars: text.length } };"
+   },
+   "id": "w_build",
+   "name": "Build inbox insert",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1900,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "executeQuery",
+    "query": "={{ $json.sql }}",
+    "options": {}
+   },
+   "id": "w_insert",
+   "name": "Insert to inbox",
+   "type": "n8n-nodes-base.postgres",
+   "typeVersion": 2.5,
+   "position": [
+    2140,
+    300
+   ],
+   "credentials": {
+    "postgres": {
+     "id": "tv0yKxg1fyTfyh8x",
+     "name": "TN Azure DB"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "leftValue": "={{ $json.id }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "w_isnew",
+   "name": "New call? (insert returned id)",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    2380,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "workflowId": {
+     "__rl": true,
+     "mode": "list",
+     "value": "",
+     "cachedResultName": "TN Brain \u00b7 1 \u00b7 Main Pipeline (inbox-driven)"
+    },
+    "options": {}
+   },
+   "id": "w_trigger",
+   "name": "Trigger pipeline (per new call)",
+   "type": "n8n-nodes-base.executeWorkflow",
+   "typeVersion": 1.2,
+   "position": [
+    2620,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "content": "## Watcher \u2014 Teams transcripts \u2192 inbox\nEvery 30 min: read the watchlist \u2192 pull each person's transcripts from the last 75 min (2.5\u00d7 the interval; dedup on transcript id makes the overlap free) \u2192 one inbox row per transcript \u2192 fire the Main Pipeline once per NEW row only.\n\nALL calls are ingested for now (internal + client). 'Attendee check' records the external attendee domains in the payload, so filtering to client-facing-only later is a one-node change.\n\n**Account matching:** title vs `accounts` + `client_directory` (the full Monday client list, kept warm by the 07:00 reconcile). No match \u2192 UNKNOWN \u2192 the pipeline classifies anyway and stores the signals UNLINKED (no fake account).",
+    "height": 260,
+    "width": 420
+   },
+   "id": "w_note1",
+   "name": "How it works",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    0,
+    -20
+   ]
+  },
+  {
+   "parameters": {
+    "content": "## \u26a0\ufe0f After importing\n1. **'Trigger pipeline (per new call)'** \u2192 select 'TN Brain \u00b7 1 \u00b7 Main Pipeline'.\n2. Run the one-off SQL first (creates client_directory) \u2014 see db/2026-07_client_directory.sql.\n3. Confirm credentials on the HTTP nodes (Microsoft Graph API) + Postgres nodes (TN Azure DB).\n\n**Window:** last 75 min per 30-min sweep. If n8n is down >45 min, run once manually with a wider window (edit `minutes: 75`), then set it back \u2014 dedup makes backfill safe.",
+    "height": 300,
+    "width": 460
+   },
+   "id": "w_note2",
+   "name": "Setup checklist",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    1420,
+    -60
+   ]
   }
+ ],
+ "connections": {
+  "Every 30 min": {
+   "main": [
+    [
+     {
+      "node": "Read watchlist",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read watchlist": {
+   "main": [
+    [
+     {
+      "node": "Get transcripts (window)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get transcripts (window)": {
+   "main": [
+    [
+     {
+      "node": "Keep valid responses",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Each transcript": {
+   "main": [
+    [
+     {
+      "node": "Get meeting subject",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get meeting subject": {
+   "main": [
+    [
+     {
+      "node": "Attendee check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get transcript content": {
+   "main": [
+    [
+     {
+      "node": "Build inbox insert",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build inbox insert": {
+   "main": [
+    [
+     {
+      "node": "Insert to inbox",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Insert to inbox": {
+   "main": [
+    [
+     {
+      "node": "New call? (insert returned id)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "New call? (insert returned id)": {
+   "main": [
+    [
+     {
+      "node": "Trigger pipeline (per new call)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Attendee check": {
+   "main": [
+    [
+     {
+      "node": "Get transcript content",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Keep valid responses": {
+   "main": [
+    [
+     {
+      "node": "Each transcript",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
 }

@@ -11,6 +11,8 @@ import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
 import type { Verdict } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
+import { calls } from '../../data/calls'
+import { TranscriptModal } from './CallsView'
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
 // the suggested action, and the full call transcript behind it.
@@ -23,6 +25,11 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   const done = status === 'actioned' || status === 'dismissed'
   const scope = riskScope(signal)
   const noteCount = notesForSignal(signal.id).length
+  // Full context on demand: the complete transcript of the source call, opened
+  // straight from the signal card - so a reviewer can judge a signal against the
+  // recording without leaving the QA/review surface.
+  const [showTranscript, setShowTranscript] = useState(false)
+  const sourceCall = signal.callId ? calls.find((c) => c.id === signal.callId) : undefined
 
   // One shared verdict for the row control and the fuller panel in the expanded card.
   const logFeedback = (v: Verdict, note?: string) => {
@@ -77,7 +84,13 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
           {/* Reason - why it was flagged */}
           <div className="mt-3 eyebrow text-muted-2">Why it was flagged</div>
           <p className="mt-1 border-l-2 pl-2.5 text-[13px] italic leading-relaxed text-muted" style={{ borderColor: m.color }}>“{signal.quote}”</p>
-          <div className="mt-1 text-[11px] text-muted-2">{signal.sourceCall.title} · {signal.sourceCall.type}{signal.sourceCall.speaker ? ` · ${signal.sourceCall.speaker}` : ''} · via Microsoft Teams</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-2">
+            <span>{signal.sourceCall.title} · {signal.sourceCall.type}{signal.sourceCall.speaker ? ` · ${signal.sourceCall.speaker}` : ''} · via Microsoft Teams</span>
+            {sourceCall && (
+              <button onClick={() => setShowTranscript(true)} className="font-semibold hover:underline" style={{ color: 'var(--accent-d)' }}>View transcript</button>
+            )}
+          </div>
+          {showTranscript && sourceCall && <TranscriptModal call={sourceCall} onClose={() => setShowTranscript(false)} />}
 
           {/* Action - what to do next. The "so what" of the signal, so it carries the
               signal's own colour as a callout without shouting over the rest of the card. */}

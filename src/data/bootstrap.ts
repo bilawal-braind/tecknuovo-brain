@@ -169,6 +169,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
         signals: [],
         transcript: meta?.transcript || undefined,
         hasTranscript: meta ? (meta.has_transcript ?? !!meta.transcript) : undefined,
+        visibility: meta?.visibility || undefined,
         speakers: meta?.speaker_stats || undefined,
       }
       byCall.set(cid, call)
@@ -190,6 +191,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
       signals: [],
       transcript: c.transcript || undefined,
       hasTranscript: c.has_transcript ?? !!c.transcript,
+      visibility: c.visibility || undefined,
       speakers: c.speaker_stats || undefined,
     })
   }

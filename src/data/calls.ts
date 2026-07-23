@@ -17,6 +17,8 @@ export type Call = {
   // Whether the DB row holds a transcript (the live /calls list is metadata-only, so
   // the text itself loads on demand). undefined = unknown -> try the fetch.
   hasTranscript?: boolean
+  // 'leadership' = only leadership/admin ever receive this call (server-filtered)
+  visibility?: string
   speakers?: Record<string, number>
 }
 

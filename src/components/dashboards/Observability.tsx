@@ -5,8 +5,12 @@ import { observabilityChecks, reviewItems } from '../../data/observability'
 import type { ObservabilityCheck, Trend, SignalType } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { accountName } from '../../data/org'
+import { signals } from '../../data/signals'
+import { isLive } from '../../data/source'
 import { SignalBadge, ConfidenceBar } from '../common/primitives'
+import { TriageCard } from '../common/TriageCard'
 import { fmt } from '../common/SignalLayer'
+
 
 type View = 'checks' | 'review'
 type Verdict = { kind: 'correct' | 'incorrect' | 'relabel'; newType?: SignalType; note?: string }
@@ -23,6 +27,13 @@ export function Observability() {
   const below = observabilityChecks.filter((c) => c.score < c.target).length
   const reviewed = Object.keys(feedback).length
 
+  // Live mode reviews the REAL signal stream (newest first) with the full triage
+  // card - quote, reasoning, notes, feedback and the source call's transcript one
+  // click away. Mock mode keeps its built-in demo review items.
+  const liveReview = isLive
+    ? [...signals].sort((a, b) => (b.sourceCall.date || '').localeCompare(a.sourceCall.date || '')).slice(0, 40)
+    : []
+
   const submit = (id: string, kind: Verdict['kind'], newType?: SignalType) => {
     setFeedback((p) => ({ ...p, [id]: { kind, newType, note: note[id] } }))
     setRelabeling(null)
@@ -33,7 +44,7 @@ export function Observability() {
       role="Observability" persona="AI accuracy & the feedback loop" active={view} onSelect={(v) => setView(v as View)}
       sections={[
         { id: 'checks', label: 'Quality checks', icon: Gauge, count: observabilityChecks.length },
-        { id: 'review', label: 'Review & feedback', icon: ClipboardCheck, count: reviewItems.length - reviewed },
+        { id: 'review', label: 'Review & feedback', icon: ClipboardCheck, count: isLive ? liveReview.length : reviewItems.length - reviewed },
       ]}
     >
       <div className="px-7 py-6">
@@ -91,10 +102,12 @@ export function Observability() {
                 <h3 className="text-[15px] font-semibold">Review &amp; feedback</h3>
                 <p className="mt-0.5 text-[13px] text-muted">For each call, see what the AI decided and why - then tell it where it's right or wrong. Your feedback is logged and the system learns from it.</p>
               </div>
-              <div className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] text-muted">Reviewed <b className="text-text">{reviewed}</b> / {reviewItems.length}</div>
+              {!isLive && <div className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] text-muted">Reviewed <b className="text-text">{reviewed}</b> / {reviewItems.length}</div>}
+              {isLive && <div className="rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] text-muted">Latest <b className="text-text">{liveReview.length}</b> signals</div>}
             </div>
             <div className="mt-3 space-y-3">
-              {reviewItems.map((it) => (
+              {isLive && liveReview.map((s) => <TriageCard key={s.id} signal={s} showAccount />)}
+              {!isLive && reviewItems.map((it) => (
                 <ReviewItemCard
                   key={it.id} it={it} verdict={feedback[it.id]} relabeling={relabeling === it.id}
                   note={note[it.id] ?? ''} onNote={(v) => setNote((p) => ({ ...p, [it.id]: v }))}

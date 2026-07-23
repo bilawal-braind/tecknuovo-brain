@@ -83,6 +83,7 @@ export type ApiCall = {
   has_transcript?: boolean
   speaker_stats?: Record<string, number> | null
   source: string | null
+  visibility?: string | null
 }
 
 export type ApiAssociate = {

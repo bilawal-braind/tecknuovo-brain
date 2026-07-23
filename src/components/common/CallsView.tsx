@@ -100,6 +100,9 @@ function CallCard({ call, accountId }: { call: Call; accountId?: string }) {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-[13px] font-semibold">{call.title}</span>
               <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-medium text-muted">{call.type}</span>
+              {call.visibility === 'leadership' && (
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: 'var(--accent-d)', background: 'var(--accent-l)' }} title="Leadership-only meeting - visible to leadership and admin only">Leadership</span>
+              )}
             </div>
             <div className="mt-0.5 text-[11px] text-muted">{[accountName(call.accountId), call.projectId ? projectById(call.projectId)?.name : null, call.speaker || null, fmt(call.date)].filter(Boolean).join(' · ')}</div>
           </div>
@@ -137,7 +140,7 @@ function CallCard({ call, accountId }: { call: Call; accountId?: string }) {
   )
 }
 
-function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void }) {
+export function TranscriptModal({ call, onClose }: { call: Call; onClose: () => void }) {
   // Live calls carry only metadata in the list; the full transcript loads here, on
   // demand, and is cached back onto the call so reopening is instant. Mock/demo
   // calls (non-UUID ids) keep their built-in representative transcript. A LIVE call

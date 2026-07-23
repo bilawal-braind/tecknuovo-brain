@@ -55,6 +55,19 @@ async function allowedAccounts(req: Request): Promise<string[] | null> {
   return r.rows.map((x) => String(x.id));
 }
 
+// Leadership-only calls (Meesha, 22 Jul): meetings from Katie's diary titled
+// Business/Customer Leadership or Leadership Team Meeting are stamped
+// visibility='leadership' at ingestion. Only leadership + admin roles (or the
+// leadership Entra group) ever receive them, their transcripts or their signals -
+// filtered here at the SQL layer, not hidden in the UI.
+async function leadershipVisible(req: Request): Promise<boolean> {
+  const user = (req as Request & { user?: { email?: string; groups?: string[] } }).user;
+  if (!user?.email) return true; // token/dev mode
+  if (inLeadershipGroup(user)) return true;
+  const u = await q('SELECT role FROM app_users WHERE lower(email) = lower($1)', [user.email]);
+  return ['leadership', 'admin'].includes(u.rows[0]?.role);
+}
+
 // Who am I - role + scope for the signed-in user, so the dashboard shows the right views.
 router.get('/me', async (req, res, next) => {
   try {
@@ -159,10 +172,12 @@ router.get('/calls', async (req, res, next) => {
   try {
     const allowed = await allowedAccounts(req);
     const params: unknown[] = [];
-    let filter = '';
-    if (allowed !== null) { params.push(allowed); filter = `WHERE account_id = ANY($${params.length}::uuid[])`; }
+    const conds: string[] = [];
+    if (allowed !== null) { params.push(allowed); conds.push(`account_id = ANY($${params.length}::uuid[])`); }
+    if (!(await leadershipVisible(req))) conds.push(`COALESCE(visibility, 'all') <> 'leadership'`);
+    const filter = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const r = await q(
-      `SELECT id, account_id, project_id, title, call_date, source, speaker_stats,
+      `SELECT id, account_id, project_id, title, call_date, source, speaker_stats, visibility,
               (transcript IS NOT NULL AND transcript <> '') AS has_transcript
        FROM calls ${filter} ORDER BY call_date DESC NULLS LAST LIMIT 500`,
       params
@@ -175,10 +190,13 @@ router.get('/calls', async (req, res, next) => {
 router.get('/calls/:id/transcript', async (req, res, next) => {
   try {
     if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid call id' });
-    const r = await q('SELECT id, account_id, transcript FROM calls WHERE id = $1', [req.params.id]);
+    const r = await q('SELECT id, account_id, transcript, visibility FROM calls WHERE id = $1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'not found' });
     const allowed = await allowedAccounts(req);
     if (allowed !== null && !(r.rows[0].account_id && allowed.includes(String(r.rows[0].account_id)))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    if (r.rows[0].visibility === 'leadership' && !(await leadershipVisible(req))) {
       return res.status(403).json({ error: 'forbidden' });
     }
     res.json({ id: r.rows[0].id, transcript: r.rows[0].transcript || '' });
@@ -239,8 +257,10 @@ router.get('/qa', async (req, res, next) => {
               (SELECT count(*)::int FROM feedback WHERE verdict = 'correct') AS agreed`
     );
     const params: unknown[] = [];
-    let filter = '';
-    if (allowed !== null) { params.push(allowed); filter = `WHERE s.account_id = ANY($${params.length}::uuid[])`; }
+    const conds: string[] = [];
+    if (allowed !== null) { params.push(allowed); conds.push(`s.account_id = ANY($${params.length}::uuid[])`); }
+    if (!(await leadershipVisible(req))) conds.push(`COALESCE(s.visibility, 'all') <> 'leadership'`);
+    const filter = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const audit = await q(
       `SELECT s.id, s.type, s.summary, s.quote, s.confidence, s.details,
               a.name AS account, p.name AS project, c.title AS call_title, s.created_at,
@@ -268,6 +288,7 @@ router.get('/signals', async (req, res, next) => {
       if (req.query[key]) { params.push(req.query[key]); where.push(`s.${col} = $${params.length}`); }
     }
     if (allowed !== null) { params.push(allowed); where.push(`s.account_id = ANY($${params.length}::uuid[])`); }
+    if (!(await leadershipVisible(req))) where.push(`COALESCE(s.visibility, 'all') <> 'leadership'`);
     // NaN-proof paging: ?limit=abc must not become a 500.
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -455,7 +476,7 @@ router.post('/signals', async (req, res, next) => {
     if (!isUuid(call_id)) return res.status(400).json({ error: 'invalid call_id' });
     if (!types.includes(type)) return res.status(400).json({ error: `type must be one of: ${types.join(', ')}` });
     if (!summary || !String(summary).trim()) return res.status(400).json({ error: 'summary required' });
-    const call = await q('SELECT id, account_id, project_id FROM calls WHERE id = $1', [call_id]);
+    const call = await q('SELECT id, account_id, project_id, visibility FROM calls WHERE id = $1', [call_id]);
     if (!call.rows.length) return res.status(404).json({ error: 'call not found' });
     const allowed = await allowedAccounts(req);
     if (allowed !== null && !(call.rows[0].account_id && allowed.includes(String(call.rows[0].account_id)))) {
@@ -464,12 +485,13 @@ router.post('/signals', async (req, res, next) => {
     const user = (req as Request & { user?: { email?: string; name?: string } }).user;
     const who = (user?.name || user?.email || 'dashboard').slice(0, 120);
     const r = await q(
-      `INSERT INTO signals (call_id, account_id, project_id, type, subtype, summary, quote, suggested_action, confidence, details)
+      `INSERT INTO signals (call_id, account_id, project_id, type, subtype, summary, quote, suggested_action, confidence, details, visibility)
        VALUES ($1, $2, $3, $4, 'human-flagged', $5, $6, '', NULL,
-               jsonb_build_object('source', 'human', 'flagged_by', $7::text, 'flagged_at', now()::text))
+               jsonb_build_object('source', 'human', 'flagged_by', $7::text, 'flagged_at', now()::text), $8)
        RETURNING id, created_at`,
       [call_id, call.rows[0].account_id, call.rows[0].project_id, type,
-       String(summary).trim().slice(0, 300), String(quote || '').slice(0, 500), who]
+       String(summary).trim().slice(0, 300), String(quote || '').slice(0, 500), who,
+       call.rows[0].visibility === 'leadership' ? 'leadership' : 'all']
     );
     res.status(201).json(r.rows[0]);
   } catch (e) { next(e); }
