@@ -15,6 +15,7 @@ import { signals } from '../../data/signals'
 import { CALL_TYPE_COLOR, callMinutes, callSentiment, sentimentBand, hoursLabel, projectProgress } from '../../data/callmeta'
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts, projects } from '../../data/org'
+import { isLive } from '../../data/source'
 import { HEALTH_COLOR } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 import { InfoHint } from '../common/InfoHint'
@@ -55,9 +56,17 @@ type Row = ApiPersonMetrics & { demoAccounts?: string[]; isDemo?: boolean }
 function personCalls(name: string, demoAccounts: string[] | undefined, days: number): Call[] {
   const cutoff = Date.now() - days * DAY
   const real = calls.filter((c) => Date.parse(c.date) >= cutoff && ((c.speakers && name in c.speakers) || c.speaker === name))
-  if (real.length) return real
+  // Live mode never pads with demo-account calls - an empty window is the truth.
+  if (real.length || isLive) return real
   const wanted = new Set((demoAccounts ?? []).map((n) => n.toLowerCase()))
   return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
+}
+
+// Account chips for a person: their demo list in mock mode, the accounts of
+// their actual transcribed calls in live mode.
+function personAccountNames(r: Row, days: number): string[] {
+  if (r.demoAccounts?.length) return r.demoAccounts
+  return [...new Set(personCalls(r.name, undefined, days).map((c) => accountName(c.accountId)).filter(Boolean))]
 }
 
 // Estimated minutes a person spent in calls this window (their calls' durations).
@@ -111,9 +120,18 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 
   const rows = apiRows && apiRows.length ? apiRows : derived
 
-  // The display roster: FEATURED people in order; real metrics when present,
-  // demo figures otherwise (marked internally, never zero-padded).
+  // The display roster. LIVE: real speakers from analysed calls, ranked by call
+  // count - kept to TN staff (matched against the synced org people) when we can
+  // identify enough of them, everyone who spoke otherwise. No demo padding: a
+  // person with no transcribed calls simply isn't on the board yet.
+  // MOCK: the curated FEATURED roster with its illustrative figures.
   const roster = useMemo<Row[]>(() => {
+    if (isLive) {
+      const isTN = (n: string) => people.some((p) => normName(p.name) === normName(n))
+      const active = rows.filter((r) => r.calls > 0)
+      const tn = active.filter((r) => isTN(r.name))
+      return (tn.length >= 3 ? tn : active).slice(0, 10)
+    }
     const byKey = new Map(rows.map((r) => [normName(r.name), r]))
     return FEATURED.map((f) => {
       const real = byKey.get(normName(f.name))
@@ -399,7 +417,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                   <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
                   <div className="w-full truncate text-[11.5px] text-muted">{roleOf(r.name)}</div>
                   <div className="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1">
-                    {(r.demoAccounts ?? []).slice(0, 3).map((n) => (
+                    {personAccountNames(r, days).slice(0, 3).map((n) => (
                       <span key={n} className="rounded-full bg-bg-2 px-2 py-0.5 text-[10px] font-semibold text-muted">{n}</span>
                     ))}
                   </div>
@@ -424,7 +442,7 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
   const theirCalls = useMemo<Call[]>(() => personCalls(row.name, row.demoAccounts, days), [row, days])
   const theirAccountIds = useMemo(() => {
     const fromCalls = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
-    if (fromCalls.length) return fromCalls
+    if (fromCalls.length || isLive) return fromCalls
     return (row.demoAccounts ?? []).map((n) => accounts.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id).filter(Boolean) as string[]
   }, [theirCalls, row])
   const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 8), [theirCalls])
