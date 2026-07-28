@@ -1,6 +1,37 @@
 # STATE — living logbook
 
-_Last updated: 14 Jul 2026_
+_Last updated: 28 Jul 2026_
+
+## 15–28 Jul (client-feedback cycle — all live)
+- **Access model**: scope now derived from org data by EMAIL — CP/CD from accounts columns
+  (wf4 sync) + DM by project — with self-wiring on first login (unique display-name match
+  binds people.email). app_users holds only overrides. Chloe/Annette/named leadership wired.
+- **Monday consolidation (client-confirmed 21 Jul)**: live boards = Live Projects & Allocations
+  1599188575 (wf4), Assigned Associates 2.2 Live 1118885420 (wf2, NOW PAGINATED 3×500 — the
+  unpaginated 200-cap undercounted Defra 23→2), Risks/Issues/Incidents 1583443098 (wf2, NEW:
+  register ingest incl. age_days). DEAD: Active SOW's 1126338886, Stakeholder List 5096768090,
+  cadence 1692810780. Projects now come ONLY from weekly reports ('wr:' prefix, wf9); stale
+  SOW-board projects with no data attached cleaned 28 Jul (19 of 26 candidates had live
+  consultants — kept).
+- **Risk register displayed**: account pages (register panel + health integration) + Katie's
+  escalations by register level age (Level 2 >1 day, Level 1 >5 days, via risks.age_days).
+- **Katie's gate narrowed**: Critical band ∥ senior client voice (details.escalate via HubSpot
+  stakeholder seniority match in wf1) ∥ High ≥20 days.
+- **Multi-client calls**: per-signal account attribution in wf1 (stand-ups bulletproof) +
+  persisted Move/reassign button (POST /signals/:id/reassign, audited, feeds lessons).
+- **Signal dedup**: wf1 context includes account's open signals (30d); LLM returns recurrences
+  → merge mentions/last_seen instead of re-inserting (×N chip on cards).
+- **Signal lifecycle**: Actioned/Dismiss persisted (POST /signals/:id/status); flag-missed-signal
+  from a transcript line (POST /signals, subtype human-flagged).
+- **NHS split**: NHS K&R / NHS CNWL / NHS (fallback); stray CNWL account merged.
+- **Leadership-only meetings (28 Jul)**: visibility column on calls+signals; wf5/wf1 stamp
+  Katie's 'Business Leadership'/'Customer Leadership'/'Leadership Team Meeting' titles;
+  API filters calls/transcripts/signals/QA to leadership+admin roles, SQL-enforced;
+  human-flagged signals inherit; Leadership chip in UI.
+- **Observability review tab**: live mode shows the real signal stream; every signal card has
+  a "View transcript" link (full source context).
+- **SOW values hidden** (VITE_SHOW_SOW gate) — Synergist is the only trusted source.
+- Notion arch doc §21 (28 Jul) = the full live-system reference incl. all 16 workflows.
 
 ## Phase: LIVE + HARDENED — handover prep
 The system is **live and processing real calls end-to-end**: Teams call → Watcher → inbox →
@@ -13,7 +44,9 @@ Two full audits done (API + all workflows): no SQL injection, no secrets in the 
 leaks; every critical fixed. Next milestone: **handover docs + user guides** (braindai-doc-style
 skill — Cowork only) and the client-side hosting migration.
 
-## The 11 workflows (all in `dashboards/n8n/`, repo = source of truth)
+## The workflows (all in `n8n/`, repo = source of truth; list below predates 13–16)
+Since 14 Jul four more exist: 13 tnAI Brief (Mon 07:50 + webhook), 14 Early Radar (Mon 07:55),
+15 Account Stories (Mon 07:52) — all writing to `briefs` — and 16 Slack weekly report (Mon 08:00).
 Import-in-place to keep workflow IDs (open the workflow → ⋯ menu → Import from File → Save).
 Delete-and-reimport changes the ID and the watcher's "Trigger pipeline" node must be re-picked.
 1 Main Pipeline (per call + 5-min sweep) · 2 Recon 07:00 (+ NEW dead-letter sweep: inbox rows

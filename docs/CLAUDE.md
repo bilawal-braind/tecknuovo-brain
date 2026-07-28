@@ -33,8 +33,9 @@ A structured, hierarchical second brain (à la Karpathy's "second brain"):
 - **Never** save client PII (e.g. Monday stakeholder data) to memory or disk.
 
 ## Repo map
-- `db/` — schema + migrations.  `n8n/` — workflow JSONs.  `api/` — Read API (TS/Node).  `dashboards/` — React app (4 dashboards).
-- `CLAUDE.md` — this file.  `STATE.md` — living logbook.  `OPERATING-MODEL.md` — how Tecknuovo works (Workshop 0).  `SIGNAL-RUBRIC.md` — signal definitions, risk/opportunity frameworks, routing, dashboards (Workshop 2).
+- Repo root = the React dashboard app (`src/`, Vite). `db/` — schema + dated migrations.  `n8n/` — the 16 workflow JSONs (source of truth; import-in-place).  `api/` — Read API (Express/TS, :4000).
+- `docs/CLAUDE.md` — this file.  `docs/STATE.md` — living logbook.  `docs/OPERATING-MODEL.md` — how Tecknuovo works (Workshop 0).  `docs/SIGNAL-RUBRIC.md` — signal definitions, risk/opportunity frameworks, routing, dashboards (Workshop 2).
+- Backend deep-dive for new joiners: Notion "Architecture & Decisions" **§21 · The Live System** (28 Jul 2026).
 
 ## Status pointer
 See `STATE.md` for what's validated / pending / next.
