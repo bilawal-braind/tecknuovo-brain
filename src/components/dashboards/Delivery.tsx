@@ -3,7 +3,7 @@ import { LayoutDashboard, Radio, FileText, ArrowRight, Cloud, Sparkles } from 'l
 import { motion } from 'framer-motion'
 import { DashboardShell } from '../shell/DashboardShell'
 import { projects, accountName } from '../../data/org'
-import { signals, rankByImpact } from '../../data/signals'
+import { signals, topByImpact } from '../../data/signals'
 import { calls } from '../../data/calls'
 import { TriageCard } from '../common/TriageCard'
 import { ExecSummary } from '../common/ExecSummary'
@@ -23,6 +23,9 @@ export function Delivery() {
   const [view, setView] = useState<View>('overview')
   const [sel, setSel] = useState<string | null>(null)
   const [selProject, setSelProject] = useState<string | null>(null)
+  // Set when navigation came from a specific signal - the destination view opens
+  // that signal's card expanded and scrolled into view, not just the account.
+  const [focusSignal, setFocusSignal] = useState<string | null>(null)
 
   const offTrack = useMemo(() => projects.filter((p) => p.rag !== 'green').length, [])
   const toAction = useMemo(() => signals.filter((s) => s.status === 'new').length, [])
@@ -30,9 +33,16 @@ export function Delivery() {
     const cutoff = Date.now() - 7 * 86_400_000
     return calls.filter((c) => Date.parse(c.date) >= cutoff).length
   }, [])
-  const keySignals = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')).slice(0, 5), [])
+  const keySignals = useMemo(() => topByImpact(signals.filter((s) => s.type !== 'update'), 5), [])
 
-  const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null) }
+  const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }
+  // A signal line opens its own context: the project view when it's project-level,
+  // otherwise the account view - in both cases anchored to that signal's card.
+  const openSignal = (s: { id: string; accountId: string; projectId?: string }) => {
+    setFocusSignal(s.id)
+    setSel(s.accountId)
+    setSelProject(s.projectId ?? null)
+  }
 
   return (
     <DashboardShell
@@ -45,9 +55,9 @@ export function Delivery() {
     >
       <div className="px-7 py-6">
         {selProject ? (
-          <ProjectView projectId={selProject} onBack={() => setSelProject(null)} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back'} commercial={false} />
+          <ProjectView projectId={selProject} focusSignalId={focusSignal ?? undefined} onBack={() => { setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back'} commercial={false} />
         ) : sel ? (
-          <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back" commercial={false} />
+          <AccountView accountId={sel} focusSignalId={focusSignal ?? undefined} onBack={() => { setSel(null); setFocusSignal(null) }} onOpenProject={(id) => setSelProject(id)} backLabel="Back" commercial={false} />
         ) : (
           <>
             {view === 'overview' && (
@@ -56,7 +66,7 @@ export function Delivery() {
                 <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across every delivery today.</p>
 
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-                  <ExecSummary items={keySignals} onOpen={(id) => setSel(id)} />
+                  <ExecSummary items={keySignals} onOpen={openSignal} />
                   <SignalsDonut signals={signals} />
                 </div>
 

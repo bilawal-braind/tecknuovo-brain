@@ -8,7 +8,7 @@ import { fmt } from './SignalLayer'
 
 // "Today's intelligence" - an AI executive summary. On load it shows a brief "reading the
 // calls" moment, then streams in layered lines (signal-type badge + account link + takeaway).
-export function ExecSummary({ items, onOpen }: { items: Signal[]; onOpen: (accountId: string) => void }) {
+export function ExecSummary({ items, onOpen }: { items: Signal[]; onOpen: (signal: Signal) => void }) {
   const [phase, setPhase] = useState<'thinking' | 'done'>('thinking')
   const [shown, setShown] = useState(0)
   const timers = useRef<number[]>([])
@@ -66,13 +66,13 @@ export function ExecSummary({ items, onOpen }: { items: Signal[]; onOpen: (accou
       ) : (
         <>
           <p className="mt-3 text-[15px] font-semibold leading-snug">{lead}</p>
-          <p className="mt-0.5 text-[12px] text-muted">The Second Brain skimmed every call across your accounts - click any line to open the account.</p>
+          <p className="mt-0.5 text-[12px] text-muted">The Second Brain skimmed every call across your accounts - click any line to open it in context.</p>
           <ul className="mt-3 space-y-0.5">
             {items.map((s, i) => {
               const visible = i < shown
               return (
                 <li key={s.id} className="transition-all duration-300 ease-out" style={{ opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(5px)' }}>
-                  <button onClick={() => onOpen(s.accountId)} className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
+                  <button onClick={() => onOpen(s)} className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
                     <span className="shrink-0"><SignalBadge type={s.type} size="sm" /></span>
                     <span className="flex-1 truncate text-[13px]">
                       <span className="font-semibold">{accountName(s.accountId)}</span>

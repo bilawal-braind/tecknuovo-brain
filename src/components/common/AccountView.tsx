@@ -21,7 +21,7 @@ const CAD_LABEL: Record<CadenceStatus, string> = {
   done: 'Held', missed: 'Missed', overdue: 'Overdue', 'not-due': 'Not due',
 }
 
-export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Back', commercial = true }: { accountId: string; onBack: () => void; onOpenProject?: (projectId: string) => void; backLabel?: string; commercial?: boolean }) {
+export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Back', commercial = true, focusSignalId }: { accountId: string; onBack: () => void; onOpenProject?: (projectId: string) => void; backLabel?: string; commercial?: boolean; focusSignalId?: string }) {
   const account = accountById(accountId)
   if (!account)
     return (
@@ -81,7 +81,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.7fr_1fr]">
         {/* calls on this account */}
-        <CallsView calls={calls} accountId={account.id} title="Calls on this account" subtitle="Every call captured across this account's projects, newest first. Open one to see what was pulled from it." />
+        <CallsView calls={calls} accountId={account.id} focusSignalId={focusSignalId} title="Calls on this account" subtitle="Every call captured across this account's projects, newest first. Open one to see what was pulled from it." />
 
         {/* projects + cadence */}
         <div className="space-y-4">

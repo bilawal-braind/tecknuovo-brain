@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare } from 'lucide-react'
 import type { Signal } from '../../data/types'
@@ -16,8 +16,14 @@ import { TranscriptModal } from './CallsView'
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
 // the suggested action, and the full call transcript behind it.
-export function TriageCard({ signal, onOpenAccount, showAccount = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean }) {
-  const [open, setOpen] = useState(false)
+export function TriageCard({ signal, onOpenAccount, showAccount = false, initiallyOpen = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean; initiallyOpen?: boolean }) {
+  const [open, setOpen] = useState(initiallyOpen)
+  // Deep-linked from an overview line: start expanded and bring the card into view.
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (initiallyOpen) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const { statusOf, setStatus } = useSignal()
   const m = SIGNAL_META[signal.type]
@@ -38,7 +44,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
   }
 
   return (
-    <div className={`overflow-hidden rounded-xl border border-line bg-surface transition-opacity ${done ? 'opacity-60' : ''}`} style={{ borderLeft: `3px solid ${m.color}` }}>
+    <div ref={cardRef} className={`overflow-hidden rounded-xl border border-line bg-surface transition-opacity ${done ? 'opacity-60' : ''}`} style={{ borderLeft: `3px solid ${m.color}` }}>
       <div className="flex w-full items-start gap-3 p-3">
         <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
           <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>
@@ -64,7 +70,13 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false }: { sig
           {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
           <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
           {done ? (
-            <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>
+              {/* Meesha's ask: an accidental Dismiss (or Actioned) must be reversible -
+                  puts the signal straight back in the queue, persisted like the original click. */}
+              <button onClick={() => setStatus(signal.id, 'new')} title="Undo - put this signal back in the queue"
+                className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-semibold text-muted transition-colors hover:text-text">Undo</button>
+            </span>
           ) : (
             <FeedbackControl verdict={verdict} onVote={logFeedback} onRelabel={() => setOpen(true)} />
           )}

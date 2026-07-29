@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { LayoutDashboard, Radio, Building2, PoundSterling, ArrowRight, Search } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts, projectsForAccount } from '../../data/org'
-import { signals, rankByImpact, riskScope } from '../../data/signals'
+import { signals, rankByImpact, topByImpact, riskScope } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
 import { TriageCard } from '../common/TriageCard'
 import { ExecSummary } from '../common/ExecSummary'
@@ -19,16 +19,23 @@ export function ClientPartner() {
   const [view, setView] = useState<View>('overview')
   const [sel, setSel] = useState<string | null>(null)
   const [selProject, setSelProject] = useState<string | null>(null)
+  const [focusSignal, setFocusSignal] = useState<string | null>(null)
   const [acctQ, setAcctQ] = useState('')
 
   const actionable = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')), [])
   const opps = actionable.filter((s) => s.type === 'opportunity')
   const risks = actionable.filter((s) => s.type === 'risk')
   const acctRiskN = risks.filter((r) => riskScope(r) === 'account').length
-  const keySignals = actionable.slice(0, 5)
+  const keySignals = topByImpact(signals.filter((s) => s.type !== 'update'), 5)
+  // A signal line opens its own context (project when project-level), anchored to the card.
+  const openSignal = (s: { id: string; accountId: string; projectId?: string }) => {
+    setFocusSignal(s.id)
+    setSel(s.accountId)
+    setSelProject(s.projectId ?? null)
+  }
   const underMgmt = useMemo(() => accounts.reduce((s, a) => s + a.sowValue, 0), [])
 
-  const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null) }
+  const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }
 
   return (
     <DashboardShell
@@ -43,9 +50,9 @@ export function ClientPartner() {
     >
       <div className="px-7 py-6">
         {selProject ? (
-          <ProjectView projectId={selProject} onBack={() => setSelProject(null)} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} backLabel="Back" />
+          <ProjectView projectId={selProject} focusSignalId={focusSignal ?? undefined} onBack={() => { setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }} backLabel="Back" />
         ) : sel ? (
-          <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
+          <AccountView accountId={sel} focusSignalId={focusSignal ?? undefined} onBack={() => { setSel(null); setFocusSignal(null) }} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
         ) : (
           <>
             {view === 'overview' && (
@@ -54,7 +61,7 @@ export function ClientPartner() {
                 <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across your accounts today.</p>
 
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-                  <ExecSummary items={keySignals} onOpen={(id) => setSel(id)} />
+                  <ExecSummary items={keySignals} onOpen={openSignal} />
                   <SignalsDonut signals={signals} />
                 </div>
 

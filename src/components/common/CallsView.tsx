@@ -22,7 +22,7 @@ function daysAgo(iso: string) {
   return Math.round((d(TODAY) - d(iso)) / 86400000)
 }
 
-export function CallsView({ calls, title = 'Calls', subtitle, accountId }: { calls: Call[]; title?: string; subtitle?: string; accountId?: string }) {
+export function CallsView({ calls, title = 'Calls', subtitle, accountId, focusSignalId }: { calls: Call[]; title?: string; subtitle?: string; accountId?: string; focusSignalId?: string }) {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [range, setRange] = useState<DateRange>('all')
@@ -79,15 +79,17 @@ export function CallsView({ calls, title = 'Calls', subtitle, accountId }: { cal
       </div>
 
       <div className="mt-3 space-y-2.5">
-        {filtered.map((c) => <CallCard key={c.id} call={c} accountId={accountId} />)}
+        {filtered.map((c) => <CallCard key={c.id} call={c} accountId={accountId} focusSignalId={focusSignalId} />)}
         {filtered.length === 0 && <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No calls match your search.</p>}
       </div>
     </div>
   )
 }
 
-function CallCard({ call, accountId }: { call: Call; accountId?: string }) {
-  const [open, setOpen] = useState(false)
+function CallCard({ call, accountId, focusSignalId }: { call: Call; accountId?: string; focusSignalId?: string }) {
+  // Deep link from an overview line: the call holding the focused signal starts open.
+  const hasFocus = !!focusSignalId && call.signals.some((s) => s.id === focusSignalId)
+  const [open, setOpen] = useState(hasFocus)
   const [showTranscript, setShowTranscript] = useState(false)
   const sigs = accountId ? call.signals.filter((s) => s.accountId === accountId) : call.signals
   const types = Array.from(new Set(sigs.map((s) => s.type)))
@@ -128,7 +130,7 @@ function CallCard({ call, accountId }: { call: Call; accountId?: string }) {
           <div className="space-y-2">
             {/* Same full signal card as everywhere else - framework score, notes,
                 feedback and the HubSpot approval all work inside the account view too. */}
-            {sigs.map((s) => <TriageCard key={s.id} signal={s} />)}
+            {sigs.map((s) => <TriageCard key={s.id} signal={s} initiallyOpen={s.id === focusSignalId} />)}
           </div>
         </div>
       )}

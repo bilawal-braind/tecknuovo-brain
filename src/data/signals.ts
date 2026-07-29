@@ -1,6 +1,5 @@
 import type { Signal, SignalType } from './types'
 import { SEVERITY_RANK } from './types'
-import { accountById } from './org'
 
 // ~36 mock signals across the real Tecknuovo accounts, types and calls.
 // Quotes are believable, not real. Plain hyphens only - no em/en dashes.
@@ -95,10 +94,34 @@ export const riskScope = (s: Signal): 'account' | 'delivery' | null => {
 export const accountRisks = () => signals.filter((s) => riskScope(s) === 'account')
 export const deliveryRisks = () => signals.filter((s) => riskScope(s) === 'delivery')
 
-// rank risks by severity × account value; opportunities by value/severity
+// Rank by what needs attention NOW: severity band first (a senior-client-voice
+// escalation outranks its band), newest as the tiebreak. This used to be weighted
+// by SOW value, but the SOW board is dead and its values untrusted - so a big
+// stale number could pin one account's signals to the top of every overview.
 export const rankByImpact = (list: Signal[]) =>
   [...list].sort((a, b) => {
-    const av = (accountById(a.accountId)?.sowValue ?? 0) * SEVERITY_RANK[a.severity]
-    const bv = (accountById(b.accountId)?.sowValue ?? 0) * SEVERITY_RANK[b.severity]
-    return bv - av
+    const av = SEVERITY_RANK[a.severity] + (a.escalate ? 1 : 0)
+    const bv = SEVERITY_RANK[b.severity] + (b.escalate ? 1 : 0)
+    return bv - av || b.createdAt.localeCompare(a.createdAt)
   })
+
+// The overview/brief slice: top-N OPEN signals with no account monopolising the
+// list (max perAccount each first; leftover slots backfill by rank). A noisy
+// account can't make the whole portfolio "look on fire".
+export const topByImpact = (list: Signal[], n: number, perAccount = 2) => {
+  const ranked = rankByImpact(list.filter((s) => s.status === 'new'))
+  const picked: Signal[] = []
+  const perAcc = new Map<string, number>()
+  for (const s of ranked) {
+    if (picked.length >= n) break
+    const c = perAcc.get(s.accountId) ?? 0
+    if (c >= perAccount) continue
+    perAcc.set(s.accountId, c + 1)
+    picked.push(s)
+  }
+  for (const s of ranked) {
+    if (picked.length >= n) break
+    if (!picked.includes(s)) picked.push(s)
+  }
+  return picked
+}

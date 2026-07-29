@@ -5,7 +5,7 @@ import { LeadershipHome } from '../leadership/Home'
 import { OpsOS } from '../leadership/OpsOS'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts, pods, podName, personName, accountById, accountName } from '../../data/org'
-import { signals, signalsByType, rankByImpact } from '../../data/signals'
+import { signals, signalsByType, rankByImpact, topByImpact } from '../../data/signals'
 import { weeklyTrend } from '../../data/trends'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
 import { RagDot, CoverageBadge } from '../common/primitives'
@@ -53,6 +53,7 @@ export function Leadership() {
   const [view, setView] = useState<View>('home')
   const [sel, setSel] = useState<string | null>(null)
   const [selProject, setSelProject] = useState<string | null>(null)
+  const [focusSignal, setFocusSignal] = useState<string | null>(null)
 
   const t = useMemo(() => {
     const atRisk = accounts.filter((a) => a.health === 'red').length
@@ -66,13 +67,19 @@ export function Leadership() {
     () => accounts.filter((a) => a.health !== 'green').sort((a, b) => ({ red: 0, amber: 1, green: 2 }[a.health] - { red: 0, amber: 1, green: 2 }[b.health])),
     [],
   )
-  const execItems = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')).slice(0, 5), [])
+  const execItems = useMemo(() => topByImpact(signals.filter((s) => s.type !== 'update'), 5), [])
+  // A signal line opens its own context (project when project-level), anchored to the card.
+  const openSignal = (s: { id: string; accountId: string; projectId?: string }) => {
+    setFocusSignal(s.id)
+    setSel(s.accountId)
+    setSelProject(s.projectId ?? null)
+  }
   const topOpps = useMemo(() => rankByImpact(signalsByType('opportunity')).slice(0, 6), [])
 
   return (
     <>
       <DashboardShell
-        role="Leadership" persona="The business at a glance" active={view} onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null) }} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+        role="Leadership" persona="The business at a glance" active={view} onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }}
         sections={[
           { id: 'home', label: 'Overview', icon: Sparkles },
           { id: 'opsos', label: 'Delivery Intel', icon: Users },
@@ -80,16 +87,16 @@ export function Leadership() {
       >
         <div className="px-7 py-6">
           {selProject ? (
-            <ProjectView projectId={selProject} onBack={() => setSelProject(null)} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back to portfolio'} />
+            <ProjectView projectId={selProject} focusSignalId={focusSignal ?? undefined} onBack={() => { setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }} backLabel={sel ? `Back to ${accountName(sel)}` : 'Back to portfolio'} />
           ) : sel ? (
-            <AccountView accountId={sel} onBack={() => setSel(null)} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
+            <AccountView accountId={sel} focusSignalId={focusSignal ?? undefined} onBack={() => { setSel(null); setFocusSignal(null) }} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
           ) : (
           <>
           {view === 'home' && <LeadershipHome onOpenAccount={(id) => setSel(id)} />}
           {view === 'opsos' && <OpsOS onOpenProject={(id) => setSelProject(id)} onOpenAccount={(id) => setSel(id)} />}
           {view === 'overview' && (
             <>
-              <div className="mb-4"><ExecSummary items={execItems} onOpen={(id) => setSel(id)} /></div>
+              <div className="mb-4"><ExecSummary items={execItems} onOpen={openSignal} /></div>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <Kpi icon={Building2} label="Accounts" value={`${accounts.length}`} sub="across 4 pods" />
                 <Kpi icon={AlertTriangle} label="At risk" value={`${t.atRisk}`} sub={`${t.watch} on watch`} color="var(--risk)" />

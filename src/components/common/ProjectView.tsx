@@ -9,7 +9,7 @@ import { SHOW_SOW } from '../../data/source'
 
 const PHASES = ['Discovery', 'Design', 'Build', 'Test', 'Go-live', 'Run'] as const
 
-export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Back', commercial = true }: { projectId: string; onBack: () => void; onOpenAccount?: (accountId: string) => void; backLabel?: string; commercial?: boolean }) {
+export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Back', commercial = true, focusSignalId }: { projectId: string; onBack: () => void; onOpenAccount?: (accountId: string) => void; backLabel?: string; commercial?: boolean; focusSignalId?: string }) {
   const project = projectById(projectId)
   const account = project ? accountById(project.accountId) : undefined
   if (!project || !account) return null
@@ -111,7 +111,7 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
 
       {/* calls logged on this project */}
       <div className="mt-5">
-        <CallsView calls={projCalls} title="Calls on this project" subtitle="Every call logged here, newest first. Open one to see what was discussed and what the Second Brain pulled out of it." />
+        <CallsView calls={projCalls} focusSignalId={focusSignalId} title="Calls on this project" subtitle="Every call logged here, newest first. Open one to see what was discussed and what the Second Brain pulled out of it." />
       </div>
     </div>
   )
