@@ -80,6 +80,10 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
         </div>
       </div>
 
+      {/* week-over-week RAG journey from the weekly reports - Kiera's "did the red
+          account improve" view, front and centre before the signal detail. */}
+      <RagTrend accountId={account.id} />
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.7fr_1fr]">
         {/* calls on this account */}
         <CallsView calls={calls} accountId={account.id} focusSignalId={focusSignalId} title="Calls on this account" subtitle="Every call captured across this account's projects, newest first. Open one to see what was pulled from it." />
@@ -113,10 +117,6 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
           {commercial && <CrmPanel accountId={account.id} />}
         </div>
       </div>
-
-      {/* week-over-week RAG history from the weekly reports - Kiera's "did the red
-          account improve" view, right where she checks the account. */}
-      <RagTrend accountId={account.id} />
 
       <LatestWeeklyReport accountId={account.id} />
     </div>

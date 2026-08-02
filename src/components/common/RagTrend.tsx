@@ -1,101 +1,139 @@
 import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { TrendingUp } from 'lucide-react'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
 import { weeklyReports } from '../../data/crm'
 
 // Kiera's ask (25 Jul call): "if Cabinet Office was red this week, I want to see
-// that next week it improved" - the RAG history per project, week by week,
-// straight from the synced weekly reports. Renders nothing when the account has
-// no reports (mock mode stays clean).
-const RAG_COLOR: Record<string, string> = {
-  green: 'var(--opp)', amber: 'var(--people)', red: 'var(--risk)', grey: 'var(--muted-2)',
-}
+// that next week it improved" - the RAG journey per project as an animated line
+// graph, right at the top of the account view. Green sits high, red sits low, so
+// a recovering project literally climbs. Renders nothing when the account has no
+// weekly reports (mock mode stays clean).
+const RAG_LEVEL: Record<string, number> = { green: 3, amber: 2, red: 1 }
+const LEVEL_COLOR: Record<number, string> = { 3: 'var(--opp)', 2: 'var(--people)', 1: 'var(--risk)' }
+const LEVEL_LABEL: Record<number, string> = { 3: 'Green', 2: 'Amber', 1: 'Red' }
+const PALETTE = ['#1A8B91', '#7C5CFF', '#E68A00', '#1F62C4', '#B4468E', '#5C7C8A', '#1F7A3A', '#D64545']
+
 const fmtWeek = (w: string) => {
   const d = new Date(w)
   return isNaN(d.getTime()) ? w.slice(5, 10) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-type Cell = { rag: string; phase: string | null; summary: string | null } | null
+// Dots carry the information: coloured by that week's RAG, not by the project line.
+function RagDot(props: { cx?: number; cy?: number; value?: number; index?: number }) {
+  const { cx, cy, value } = props
+  if (cx == null || cy == null || value == null) return <g />
+  const color = LEVEL_COLOR[Math.round(value)] ?? 'var(--muted-2)'
+  return (
+    <g key={`${cx}-${cy}`}>
+      <circle cx={cx} cy={cy} r={7} fill={color} opacity={0.18} />
+      <circle cx={cx} cy={cy} r={4} fill={color} stroke="var(--surface)" strokeWidth={1.5} />
+    </g>
+  )
+}
+
+function RagTooltip({ active, payload, label }: { active?: boolean; payload?: { name?: string; value?: number; color?: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl border border-line bg-surface px-3 py-2 text-[12px] shadow-lg">
+      <div className="font-semibold">w/e {label}</div>
+      <div className="mt-1 space-y-0.5">
+        {payload.map((p) => (
+          <div key={p.name} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-muted">{p.name}</span>
+            <span className="font-bold" style={{ color: LEVEL_COLOR[Math.round(p.value ?? 0)] }}>{LEVEL_LABEL[Math.round(p.value ?? 0)] ?? '-'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function RagTrend({ accountId }: { accountId: string }) {
-  const { weeks, rows, moves } = useMemo(() => {
+  const { weeks, titles, data, moves } = useMemo(() => {
     const mine = weeklyReports.filter((w) => w.account_id === accountId)
     const weeks = [...new Set(mine.map((w) => w.week_ending))].sort().slice(-8)
     const titles = [...new Set(mine.map((w) => w.project_title))].sort()
-    const byKey = new Map<string, Cell>()
-    for (const w of mine) byKey.set(`${w.project_title}|${w.week_ending}`, { rag: (w.rag || 'grey').toLowerCase(), phase: w.phase, summary: w.summary })
-    const rows = titles.map((t) => ({ title: t, cells: weeks.map((wk) => byKey.get(`${t}|${wk}`) ?? null) }))
-    // What moved in the latest week vs the week before - the line Kiera scans for.
-    const moves = rows.flatMap((r) => {
-      const n = r.cells.length
-      const prev = r.cells[n - 2], last = r.cells[n - 1]
-      if (n < 2 || !prev || !last || prev.rag === last.rag) return []
-      return [{ title: r.title, from: prev.rag, to: last.rag }]
+    const byKey = new Map<string, string>()
+    for (const w of mine) byKey.set(`${w.project_title}|${w.week_ending}`, (w.rag || '').toLowerCase())
+    // one row per week, one numeric series per project (missing week = gap in the line)
+    const data = weeks.map((wk) => {
+      const row: Record<string, number | string | null> = { week: fmtWeek(wk) }
+      for (const t of titles) row[t] = RAG_LEVEL[byKey.get(`${t}|${wk}`) ?? ''] ?? null
+      return row
     })
-    return { weeks, rows, moves }
+    // what moved in the latest reported week - the line Kiera scans for
+    const moves = titles.flatMap((t) => {
+      const seen = weeks.map((wk) => RAG_LEVEL[byKey.get(`${t}|${wk}`) ?? ''] ?? null).filter((v): v is number => v != null)
+      const n = seen.length
+      if (n < 2 || seen[n - 1] === seen[n - 2]) return []
+      return [{ title: t, from: seen[n - 2], to: seen[n - 1], up: seen[n - 1] > seen[n - 2] }]
+    })
+    return { weeks, titles, data, moves }
   }, [accountId])
-  if (weeks.length < 2 && !rows.length) return null
-  if (!rows.length) return null
+  if (!weeks.length || !titles.length) return null
 
   return (
-    <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      className="glass relative mt-4 overflow-hidden rounded-2xl border border-line p-5"
+      style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 55%)' }}
+    >
+      <div className="ai-sheen pointer-events-none absolute inset-x-0 top-0 h-[2px]" />
       <div className="flex flex-wrap items-center gap-2">
-        <TrendingUp size={14} className="text-muted-2" />
-        <h3 className="text-[14px] font-semibold">Delivery trend</h3>
+        <span className="grid h-7 w-7 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)', boxShadow: '0 0 16px color-mix(in srgb, var(--accent) 60%, transparent)' }}>
+          <TrendingUp size={14} />
+        </span>
+        <h3 className="text-[14px] font-bold tracking-tight">Delivery trend</h3>
         <span className="text-[11px] text-muted-2">RAG by week · from the weekly reports</span>
-      </div>
-
-      {moves.length > 0 && (
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {moves.map((m) => (
-            <span key={m.title} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-2 px-2.5 py-1 text-[11px] font-medium text-muted">
-              <b className="font-semibold text-text">{m.title}</b>
-              <span className="h-2 w-2 rounded-full" style={{ background: RAG_COLOR[m.from] ?? RAG_COLOR.grey }} />
-              →
-              <span className="h-2 w-2 rounded-full" style={{ background: RAG_COLOR[m.to] ?? RAG_COLOR.grey }} />
-              <span className="capitalize">{m.to}</span> this week
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-3 overflow-x-auto">
-        <div className="min-w-[420px]">
-          {/* week header, aligned over the cell track */}
-          <div className="flex items-center gap-3">
-            <span className="w-[150px] shrink-0" aria-hidden />
-            <div className="flex min-w-0 flex-1 gap-1">
-              {weeks.map((w) => (
-                <span key={w} className="flex-1 text-center text-[10px] font-semibold text-muted-2">{fmtWeek(w)}</span>
-              ))}
-            </div>
-          </div>
-          <div className="mt-1.5 space-y-1.5">
-            {rows.map((r) => (
-              <div key={r.title} className="flex items-center gap-3">
-                <span className="w-[150px] shrink-0 truncate text-[12px] font-semibold" title={r.title}>{r.title}</span>
-                <div className="flex min-w-0 flex-1 gap-1">
-                  {r.cells.map((c, i) => (
-                    <span
-                      key={i}
-                      className="h-5 flex-1 rounded-md"
-                      title={c ? `${r.title} · w/e ${fmtWeek(weeks[i])} · ${c.rag.toUpperCase()}${c.phase ? ` · ${c.phase}` : ''}` : `no report w/e ${fmtWeek(weeks[i])}`}
-                      style={c
-                        ? { background: `color-mix(in srgb, ${RAG_COLOR[c.rag] ?? RAG_COLOR.grey} 82%, transparent)`, boxShadow: `inset 0 0 0 1px ${RAG_COLOR[c.rag] ?? RAG_COLOR.grey}` }
-                        : { background: 'var(--bg-2)', boxShadow: 'inset 0 0 0 1px var(--line)' }}
-                    />
-                  ))}
-                </div>
-              </div>
+        {moves.length > 0 && (
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            {moves.map((m) => (
+              <motion.span
+                key={m.title}
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                style={{
+                  color: LEVEL_COLOR[m.to],
+                  borderColor: `color-mix(in srgb, ${LEVEL_COLOR[m.to]} 35%, transparent)`,
+                  background: `color-mix(in srgb, ${LEVEL_COLOR[m.to]} 9%, var(--surface))`,
+                }}
+              >
+                {m.title}: {LEVEL_LABEL[m.from]} → {LEVEL_LABEL[m.to]} {m.up ? '▲' : '▼'}
+              </motion.span>
             ))}
           </div>
-          <div className="mt-2 flex items-center gap-3 pl-[162px] text-[10px] font-medium text-muted-2">
-            {(['green', 'amber', 'red'] as const).map((k) => (
-              <span key={k} className="inline-flex items-center gap-1 capitalize"><span className="h-2 w-2 rounded-full" style={{ background: RAG_COLOR[k] }} />{k}</span>
-            ))}
-            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--bg-2)', boxShadow: 'inset 0 0 0 1px var(--line)' }} />no report</span>
-          </div>
-        </div>
+        )}
       </div>
-    </div>
+
+      <div className="mt-3 h-[210px]" style={{ filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.10))' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 10, right: 14, left: -14, bottom: 0 }}>
+            <CartesianGrid stroke="var(--line)" vertical={false} />
+            <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+            <YAxis
+              domain={[0.5, 3.5]} ticks={[1, 2, 3]} allowDecimals={false}
+              tickFormatter={(v: number) => LEVEL_LABEL[v] ?? ''}
+              tick={{ fontSize: 11, fontWeight: 600, fill: 'var(--muted)' }} axisLine={false} tickLine={false}
+            />
+            <Tooltip content={<RagTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {titles.map((t, i) => (
+              <Line
+                key={t} type="monotone" dataKey={t} name={t}
+                stroke={PALETTE[i % PALETTE.length]} strokeWidth={2.5} connectNulls
+                dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => <RagDot {...p} />}
+                activeDot={{ r: 6 }}
+                animationDuration={1400} animationEasing="ease-out" animationBegin={i * 160}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-1.5 text-[10.5px] text-muted-2">Green rides high, red sits low - a recovering project climbs. Gaps mean no report was filed that week. Hover any point for the exact week.</p>
+    </motion.div>
   )
 }

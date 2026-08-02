@@ -66,9 +66,14 @@ export function Delivery() {
                 <h3 className="text-[15px] font-semibold">Delivery, live</h3>
                 <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across every delivery today.</p>
 
-                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+                <div className="mt-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
                   <ExecSummary items={keySignals} onOpen={openSignal} />
-                  <SignalsDonut signals={signals} />
+                  {/* right rail: the donut on top, Kiera's to-do list filling the
+                      space beneath it so the column matches the brief's height */}
+                  <div className="flex min-h-0 flex-col gap-4">
+                    <SignalsDonut signals={signals} />
+                    <TodoPanel onOpenSignal={openSignal} />
+                  </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -77,9 +82,6 @@ export function Delivery() {
                   <Kpi label="Signals to action" value={`${toAction}`} sub="new this week" color="var(--people)" />
                   <Kpi label="Calls this week" value={`${callsThisWeek}`} sub="captured from Teams" color="var(--accent)" />
                 </div>
-
-                {/* Kiera's personal to-do list - "Add to list" on any suggested action lands here */}
-                <div className="mt-4"><TodoPanel onOpenSignal={openSignal} /></div>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                   <div><h3 className="text-[15px] font-semibold">Key signals</h3><p className="mt-0.5 text-[13px] text-muted">The highest-priority risks and opportunities across your deliveries. Click any to open the call and transcript.</p></div>
