@@ -8,6 +8,7 @@ import { CoPilot } from '../common/CoPilot'
 import { fetchMe } from '../../data/api'
 import type { Me } from '../../data/api'
 import { authEnabled, logout } from '../../data/auth'
+import { TodoPanel } from '../common/TodoPanel'
 
 // One /api/me per page load, shared by the greeting and the sidebar footer.
 let mePromise: Promise<Me> | null = null
@@ -23,6 +24,7 @@ export function DashboardShell({
   onSelect,
   children,
   onOpenAccount,
+  todos = false,
 }: {
   role: string
   persona: string
@@ -31,6 +33,7 @@ export function DashboardShell({
   onSelect: (id: string) => void
   children: ReactNode
   onOpenAccount?: (id: string) => void
+  todos?: boolean
 }) {
   const activeLabel = sections.find((s) => s.id === active)?.label ?? ''
   return (
@@ -70,6 +73,8 @@ export function DashboardShell({
             )
           })}
         </nav>
+        {/* Kiera's to-do list lives in the sidebar's spare bottom-left space */}
+        {todos && <TodoPanel variant="rail" onOpenAccount={onOpenAccount} />}
         <UserFooter />
       </aside>
 

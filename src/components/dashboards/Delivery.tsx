@@ -12,7 +12,6 @@ import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 import { WeeklyReports } from '../common/WeeklyReports'
-import { TodoPanel } from '../common/TodoPanel'
 import { weeklyReports } from '../../data/crm'
 
 // Delivery = "how is the work going" (execution). Account / commercial info
@@ -47,7 +46,7 @@ export function Delivery() {
 
   return (
     <DashboardShell
-      role="Delivery" persona="Every delivery and its signals" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      role="Delivery" persona="Every delivery and its signals" active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
@@ -66,14 +65,9 @@ export function Delivery() {
                 <h3 className="text-[15px] font-semibold">Delivery, live</h3>
                 <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across every delivery today.</p>
 
-                <div className="mt-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
                   <ExecSummary items={keySignals} onOpen={openSignal} />
-                  {/* right rail: the donut on top, Kiera's to-do list filling the
-                      space beneath it so the column matches the brief's height */}
-                  <div className="flex min-h-0 flex-col gap-4">
-                    <SignalsDonut signals={signals} />
-                    <TodoPanel onOpenSignal={openSignal} />
-                  </div>
+                  <SignalsDonut signals={signals} />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

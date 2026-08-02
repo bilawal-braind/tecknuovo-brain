@@ -674,10 +674,19 @@ router.post('/todos', async (req, res, next) => {
 router.post('/todos/:id', async (req, res, next) => {
   try {
     if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid id' });
-    const { done, remove } = (req.body ?? {}) as { done?: unknown; remove?: unknown };
+    const { done, remove, title } = (req.body ?? {}) as { done?: unknown; remove?: unknown; title?: unknown };
     if (remove === true) {
       await q('DELETE FROM user_todos WHERE id = $1 AND lower(user_email) = $2', [req.params.id, todoUser(req)]);
       return res.json({ id: req.params.id, removed: true });
+    }
+    // Rename in place (the list is the user's own - fully editable).
+    if (typeof title === 'string' && title.trim()) {
+      const r = await q(
+        'UPDATE user_todos SET title = $3 WHERE id = $1 AND lower(user_email) = $2 RETURNING id, title',
+        [req.params.id, todoUser(req), title.trim().slice(0, 300)]
+      );
+      if (!r.rows.length) return res.status(404).json({ error: 'not found' });
+      return res.json(r.rows[0]);
     }
     const r = await q(
       `UPDATE user_todos SET done = $3, done_at = CASE WHEN $3 THEN now() ELSE NULL END

@@ -231,7 +231,7 @@ export type ApiTodo = {
 export const fetchTodos = () => get<ApiTodo[]>('/api/todos').catch(() => [] as ApiTodo[])
 export const addTodo = (title: string, signalId?: string, accountId?: string) =>
   post<{ id: string }>('/api/todos', { title, signal_id: signalId, account_id: accountId })
-export const updateTodo = (id: string, patch: { done?: boolean; remove?: boolean }) =>
+export const updateTodo = (id: string, patch: { done?: boolean; remove?: boolean; title?: string }) =>
   post<{ id: string }>(`/api/todos/${id}`, patch)
 
 // Re-file a mis-attributed signal onto the right account (persisted + audited;
