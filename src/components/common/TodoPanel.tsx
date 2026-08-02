@@ -72,6 +72,14 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
     if (t.account_id && onOpenSignal) onOpenSignal({ id: t.signal_id ?? '', accountId: t.account_id })
   }
 
+  // One click sweeps everything ticked off - the list stays a working queue,
+  // not an archive, however long it's been in use.
+  const clearDone = () => {
+    const done = todos.filter((t) => t.done)
+    setTodos((p) => p.filter((t) => !t.done))
+    for (const t of done) if (isReal(t.id)) updateTodo(t.id, { remove: true }).catch(() => {})
+  }
+
   const doneCount = todos.filter((t) => t.done).length
   const openCount = todos.length - doneCount
   const sorted = [...todos].sort((a, b) => Number(a.done) - Number(b.done))
@@ -101,6 +109,9 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
             <div className="h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${Math.round((100 * doneCount) / todos.length)}%`, background: 'linear-gradient(90deg, color-mix(in srgb, var(--opp) 55%, transparent), var(--opp))' }} />
           </div>
           <span className="shrink-0 text-[9.5px] font-semibold text-muted-2">{doneCount}/{todos.length}</span>
+          {doneCount > 0 && (
+            <button onClick={clearDone} title="Remove everything ticked off" className="shrink-0 text-[9.5px] font-semibold text-muted-2 underline-offset-2 hover:text-[var(--risk)] hover:underline">clear done</button>
+          )}
         </div>
       )}
 
