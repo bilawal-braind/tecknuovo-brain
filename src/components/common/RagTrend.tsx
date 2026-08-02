@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { TrendingUp } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
@@ -51,6 +51,9 @@ function RagTooltip({ active, payload, label }: { active?: boolean; payload?: { 
 }
 
 export function RagTrend({ accountId }: { accountId: string }) {
+  // 'account' = one combined line (the account is only as green as its worst
+  // project that week); 'projects' = one line per project.
+  const [mode, setMode] = useState<'account' | 'projects'>('account')
   const { weeks, titles, data, moves } = useMemo(() => {
     const mine = weeklyReports.filter((w) => w.account_id === accountId)
     const weeks = [...new Set(mine.map((w) => w.week_ending))].sort().slice(-8)
@@ -60,7 +63,14 @@ export function RagTrend({ accountId }: { accountId: string }) {
     // one row per week, one numeric series per project (missing week = gap in the line)
     const data = weeks.map((wk) => {
       const row: Record<string, number | string | null> = { week: fmtWeek(wk) }
-      for (const t of titles) row[t] = RAG_LEVEL[byKey.get(`${t}|${wk}`) ?? ''] ?? null
+      const levels: number[] = []
+      for (const t of titles) {
+        const v = RAG_LEVEL[byKey.get(`${t}|${wk}`) ?? ''] ?? null
+        row[t] = v
+        if (v != null) levels.push(v)
+      }
+      // combined view: the worst reported project sets the account's colour
+      row['Account'] = levels.length ? Math.min(...levels) : null
       return row
     })
     // what moved in the latest reported week - the line Kiera scans for
@@ -89,6 +99,13 @@ export function RagTrend({ accountId }: { accountId: string }) {
         </span>
         <h3 className="text-[14px] font-bold tracking-tight">Delivery trend</h3>
         <span className="text-[11px] text-muted-2">RAG by week · from the weekly reports</span>
+        <div className="ml-1 inline-flex rounded-lg border border-line bg-surface p-0.5 text-[11px] font-semibold">
+          {([['account', 'Account'], ['projects', 'By project']] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setMode(id)}
+              className={`rounded-md px-2.5 py-1 transition-colors ${mode === id ? 'text-white' : 'text-muted hover:text-text'}`}
+              style={mode === id ? { background: 'var(--accent)' } : undefined}>{label}</button>
+          ))}
+        </div>
         {moves.length > 0 && (
           <div className="ml-auto flex flex-wrap gap-1.5">
             {moves.map((m) => (
@@ -121,10 +138,11 @@ export function RagTrend({ accountId }: { accountId: string }) {
             />
             <Tooltip content={<RagTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            {titles.map((t, i) => (
+            {(mode === 'account' ? ['Account'] : titles).map((t, i) => (
               <Line
-                key={t} type="monotone" dataKey={t} name={t}
-                stroke={PALETTE[i % PALETTE.length]} strokeWidth={2.5} connectNulls
+                key={`${mode}-${t}`} type="monotone" dataKey={t} name={t}
+                stroke={mode === 'account' ? 'var(--accent)' : PALETTE[i % PALETTE.length]}
+                strokeWidth={mode === 'account' ? 3.5 : 2.5} connectNulls
                 dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => <RagDot {...p} />}
                 activeDot={{ r: 6 }}
                 animationDuration={1400} animationEasing="ease-out" animationBegin={i * 160}
@@ -133,7 +151,7 @@ export function RagTrend({ accountId }: { accountId: string }) {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-1.5 text-[10.5px] text-muted-2">Green rides high, red sits low - a recovering project climbs. Gaps mean no report was filed that week. Hover any point for the exact week.</p>
+      <p className="mt-1.5 text-[10.5px] text-muted-2">{mode === 'account' ? 'One line for the account: it takes the colour of its worst-reported project each week - a recovering account climbs.' : 'Green rides high, red sits low - a recovering project climbs.'} Gaps mean no report was filed that week. From the weekly reports the team files - not inferred from calls.</p>
     </motion.div>
   )
 }
