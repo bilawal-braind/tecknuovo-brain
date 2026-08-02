@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare } from 'lucide-react'
+import { ChevronDown, ArrowRightCircle, Check, X, ArrowRight, RefreshCw, Send, Gauge, MessageSquare, ListPlus } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName, accounts } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback, pushToHubspot, addSignalNote, reassignSignal } from '../../data/api'
+import { submitFeedback, pushToHubspot, addSignalNote, reassignSignal, addTodo } from '../../data/api'
 import { signalNotes, notesForSignal } from '../../data/crm'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
@@ -13,6 +13,37 @@ import type { Verdict } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 import { calls } from '../../data/calls'
 import { TranscriptModal } from './CallsView'
+
+// Kiera's "Add to list" (25 Jul call): one click sends this suggested action to
+// the personal to-do panel on the dashboard home. Live signals persist via the
+// API; mock ones stay browser-local via the same event the panel listens to.
+function AddToList({ signal, color }: { signal: Signal; color: string }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'added'>('idle')
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)
+  const add = () => {
+    if (state !== 'idle') return
+    setState('busy')
+    const title = (signal.suggestedAction || signal.summary).slice(0, 300)
+    const finish = (todo?: { id: string }) => {
+      setState('added')
+      window.dispatchEvent(new CustomEvent('tn-todo-added', {
+        detail: { id: todo?.id ?? `local-${signal.id}`, signal_id: signal.id, title, account_id: signal.accountId, done: false },
+      }))
+    }
+    if (!isUuid(signal.id)) { finish(); return }
+    addTodo(title, signal.id, isUuid(signal.accountId) ? signal.accountId : undefined).then(finish).catch(() => setState('idle'))
+  }
+  const added = state === 'added'
+  return (
+    <button onClick={add} disabled={state !== 'idle'} title="Add this action to your to-do list"
+      className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border px-2 py-1 text-[10.5px] font-semibold transition-colors disabled:cursor-default"
+      style={added
+        ? { color: 'var(--opp)', borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 8%, transparent)' }
+        : { color, borderColor: `color-mix(in srgb, ${color} 35%, transparent)`, background: 'var(--surface)' }}>
+      {added ? <><Check size={11} /> On your list</> : <><ListPlus size={11} /> Add to list</>}
+    </button>
+  )
+}
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
 // the suggested action, and the full call transcript behind it.
@@ -116,12 +147,13 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
             }}
           >
             <ArrowRightCircle size={15} className="mt-0.5 shrink-0" style={{ color: m.color }} />
-            <div className="text-[13px] font-medium leading-relaxed text-text">
+            <div className="min-w-0 flex-1 text-[13px] font-medium leading-relaxed text-text">
               {signal.suggestedAction || 'No action suggested.'}
               {signal.suggestedOwner.person && signal.suggestedOwner.person !== '-' && (
                 <span className="mt-1 block text-[11px] font-normal text-muted">Owner: {signal.suggestedOwner.person}{signal.suggestedOwner.role ? ` · ${signal.suggestedOwner.role}` : ''}</span>
               )}
             </div>
+            <AddToList signal={signal} color={m.color} />
           </div>
 
           <FrameworkScore signal={signal} />

@@ -632,3 +632,59 @@ router.post('/feedback', async (req, res, next) => {
     res.status(201).json({ id: r.rows[0].id });
   } catch (e) { next(e); }
 });
+
+// ── Personal to-do list (Kiera's "add to list" on suggested actions) ─────────
+// Per-user by login email; token/dev mode has no email and shares the '' user.
+const todoUser = (req: Request) => ((req as Request & { user?: { email?: string } }).user?.email || '').toLowerCase();
+
+router.get('/todos', async (req, res, next) => {
+  try {
+    const r = await q(
+      `SELECT t.id, t.signal_id, t.title, t.account_id, a.name AS account_name, t.done, t.created_at
+       FROM user_todos t LEFT JOIN accounts a ON a.id = t.account_id
+       WHERE lower(t.user_email) = $1 ORDER BY t.done, t.created_at DESC LIMIT 200`,
+      [todoUser(req)]
+    );
+    res.json(r.rows);
+  } catch (e) { next(e); }
+});
+
+router.post('/todos', async (req, res, next) => {
+  try {
+    const { signal_id, title, account_id } = (req.body ?? {}) as { signal_id?: unknown; title?: unknown; account_id?: unknown };
+    const t = String(title ?? '').trim().slice(0, 300);
+    if (!t) return res.status(400).json({ error: 'title required' });
+    if (signal_id != null && !isUuid(signal_id)) return res.status(400).json({ error: 'invalid signal_id' });
+    if (account_id != null && !isUuid(account_id)) return res.status(400).json({ error: 'invalid account_id' });
+    // Same signal saved twice = the same to-do; hand back the existing row.
+    if (signal_id) {
+      const dup = await q('SELECT id, created_at FROM user_todos WHERE lower(user_email) = $1 AND signal_id = $2', [todoUser(req), signal_id]);
+      if (dup.rows.length) return res.json(dup.rows[0]);
+    }
+    const r = await q(
+      `INSERT INTO user_todos (user_email, signal_id, title, account_id)
+       VALUES ($1, $2::uuid, $3, $4::uuid) RETURNING id, created_at`,
+      [todoUser(req), (signal_id as string) ?? null, t, (account_id as string) ?? null]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+// Toggle done / remove. Only the owner's rows are reachable.
+router.post('/todos/:id', async (req, res, next) => {
+  try {
+    if (!isUuid(req.params.id)) return res.status(400).json({ error: 'invalid id' });
+    const { done, remove } = (req.body ?? {}) as { done?: unknown; remove?: unknown };
+    if (remove === true) {
+      await q('DELETE FROM user_todos WHERE id = $1 AND lower(user_email) = $2', [req.params.id, todoUser(req)]);
+      return res.json({ id: req.params.id, removed: true });
+    }
+    const r = await q(
+      `UPDATE user_todos SET done = $3, done_at = CASE WHEN $3 THEN now() ELSE NULL END
+       WHERE id = $1 AND lower(user_email) = $2 RETURNING id, done`,
+      [req.params.id, todoUser(req), done === true]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(r.rows[0]);
+  } catch (e) { next(e); }
+});

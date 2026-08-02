@@ -218,6 +218,22 @@ export const fetchSignalNotes = () => get<ApiSignalNote[]>('/api/signal-notes').
 export const addSignalNote = (signalId: string, note: string) =>
   post<ApiSignalNote>('/api/signal-notes', { signal_id: signalId, note })
 
+// ── Personal to-do list ("Add to list" on suggested actions) ──
+export type ApiTodo = {
+  id: string
+  signal_id: string | null
+  title: string
+  account_id: string | null
+  account_name?: string | null
+  done: boolean
+  created_at: string
+}
+export const fetchTodos = () => get<ApiTodo[]>('/api/todos').catch(() => [] as ApiTodo[])
+export const addTodo = (title: string, signalId?: string, accountId?: string) =>
+  post<{ id: string }>('/api/todos', { title, signal_id: signalId, account_id: accountId })
+export const updateTodo = (id: string, patch: { done?: boolean; remove?: boolean }) =>
+  post<{ id: string }>(`/api/todos/${id}`, patch)
+
 // Re-file a mis-attributed signal onto the right account (persisted + audited;
 // recorded as a relabel so the nightly lessons learn from the correction).
 export const reassignSignal = (signalId: string, accountId: string) =>

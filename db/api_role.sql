@@ -16,3 +16,6 @@ GRANT UPDATE (account_id, project_id, details, status) ON signals TO tn_api_read
 
 -- Human-flagged signals (the transcript 'flag as signal' backstop):
 GRANT INSERT ON signals TO tn_api_read;
+
+-- Personal to-do list (owner-scoped in the API; full CRUD on this one table):
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_todos TO tn_api_read;

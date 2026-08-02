@@ -12,6 +12,7 @@ import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
 import { ProjectView } from '../common/ProjectView'
 import { WeeklyReports } from '../common/WeeklyReports'
+import { TodoPanel } from '../common/TodoPanel'
 import { weeklyReports } from '../../data/crm'
 
 // Delivery = "how is the work going" (execution). Account / commercial info
@@ -76,6 +77,9 @@ export function Delivery() {
                   <Kpi label="Signals to action" value={`${toAction}`} sub="new this week" color="var(--people)" />
                   <Kpi label="Calls this week" value={`${callsThisWeek}`} sub="captured from Teams" color="var(--accent)" />
                 </div>
+
+                {/* Kiera's personal to-do list - "Add to list" on any suggested action lands here */}
+                <div className="mt-4"><TodoPanel onOpenSignal={openSignal} /></div>
 
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                   <div><h3 className="text-[15px] font-semibold">Key signals</h3><p className="mt-0.5 text-[13px] text-muted">The highest-priority risks and opportunities across your deliveries. Click any to open the call and transcript.</p></div>

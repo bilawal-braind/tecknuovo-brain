@@ -9,6 +9,7 @@ import { SHOW_SOW } from '../../data/source'
 import { RagDot, CoverageBadge } from './primitives'
 import { CallsView } from './CallsView'
 import { ReportCard } from './WeeklyReports'
+import { RagTrend } from './RagTrend'
 
 export function money(n: number) {
   return n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : `£${Math.round(n / 1000)}k`
@@ -112,6 +113,10 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
           {commercial && <CrmPanel accountId={account.id} />}
         </div>
       </div>
+
+      {/* week-over-week RAG history from the weekly reports - Kiera's "did the red
+          account improve" view, right where she checks the account. */}
+      <RagTrend accountId={account.id} />
 
       <LatestWeeklyReport accountId={account.id} />
     </div>
