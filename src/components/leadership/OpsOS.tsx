@@ -130,7 +130,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
       const isTN = (n: string) => people.some((p) => normName(p.name) === normName(n))
       const active = rows.filter((r) => r.calls > 0)
       const tn = active.filter((r) => isTN(r.name))
-      return (tn.length >= 3 ? tn : active).slice(0, 10)
+      return (tn.length >= 3 ? tn : active).slice(0, 24)
     }
     const byKey = new Map(rows.map((r) => [normName(r.name), r]))
     return FEATURED.map((f) => {
@@ -371,7 +371,7 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                   <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">x-axis: calls attended</span>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {roster.map((r, i) => (
+                  {roster.slice(0, 10).map((r, i) => (
                     <button key={r.name} onClick={() => setSelPerson(r.name)} className="group flex w-full items-center gap-3.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-bg-2">
                       <PersonPhoto name={r.name} size={42} color={PALETTE[i % PALETTE.length]} ring />
                       <div className="min-w-0 flex-1">
@@ -408,12 +408,51 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {roster.map((r, i) => (
-                <button key={r.name} onClick={() => setSelPerson(r.name)}
+            <PeopleGrid roster={roster} days={days} roleOf={roleOf} onSelect={setSelPerson} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// The people cards, grouped by delivery team in live mode: each person files under
+// the account they spend most of their calls on, so ten speakers don't land as one
+// undifferentiated wall. Mock mode keeps the flat curated grid.
+function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: Days; roleOf: (n: string) => string; onSelect: (n: string) => void }) {
+  const groups = useMemo(() => {
+    if (!isLive) return [{ team: '', rows: roster.map((r) => ({ r, idx: roster.indexOf(r) })) }]
+    const byTeam = new Map<string, { r: Row; idx: number }[]>()
+    roster.forEach((r, idx) => {
+      const cs = personCalls(r.name, r.demoAccounts, days)
+      const per = new Map<string, number>()
+      for (const c of cs) if (c.accountId) per.set(c.accountId, (per.get(c.accountId) || 0) + 1)
+      const top = [...per.entries()].sort((a, b) => b[1] - a[1])[0]
+      const team = top ? accountName(top[0]) : 'Across accounts'
+      byTeam.set(team, [...(byTeam.get(team) ?? []), { r, idx }])
+    })
+    return [...byTeam.entries()]
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .map(([team, rows]) => ({ team, rows }))
+  }, [roster, days])
+
+  return (
+    <div className="space-y-5">
+      {groups.map(({ team, rows }) => (
+        <div key={team || 'all'}>
+          {team && (
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-2">{team}</span>
+              <span className="rounded-full bg-bg-2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-2">{rows.length}</span>
+              <span className="h-px flex-1 bg-[var(--line)]" aria-hidden />
+            </div>
+          )}
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map(({ r, idx }) => (
+                <button key={r.name} onClick={() => onSelect(r.name)}
                   className="flex min-h-[224px] w-full flex-col items-center rounded-2xl border border-line bg-surface p-4 text-center transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]"
                   style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
-                  <PersonPhoto name={r.name} size={64} color={PALETTE[i % PALETTE.length]} ring />
+                  <PersonPhoto name={r.name} size={64} color={PALETTE[idx % PALETTE.length]} ring />
                   <div className="mt-2.5 w-full truncate text-[14px] font-bold">{displayName(r.name)}</div>
                   <div className="w-full truncate text-[11.5px] text-muted">{roleOf(r.name)}</div>
                   <div className="mt-2 flex min-h-[22px] flex-wrap justify-center gap-1">
@@ -430,12 +469,11 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
-    </div>
-  )
-}
+    )
+  }
 
 // ── The full-page profile ──
 function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAccount }: { row: Row; color: string; role: string; days: Days; onBack: () => void; onOpenProject?: (id: string) => void; onOpenAccount?: (id: string) => void }) {
@@ -615,7 +653,7 @@ function ProgressBoard({ onOpenProject }: { onOpenProject?: (id: string) => void
           <span className="flex items-center gap-1.5"><div className="eyebrow">Delivery progress</div><InfoHint text="Each project's position against its sprint plan. Amber and red bars that stop moving between weeks are the ones to ask about." /></span>
           <p className="mt-0.5 text-[11px] text-muted-2">Each project against its sprint plan, coloured by RAG. Click one to open the full project view.</p>
         </div>
-        <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">progress = sprint plan</span>
+        <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-2">{isLive ? 'progress = delivery phase' : 'progress = sprint plan'}</span>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
         {rows.map((p) => {
@@ -631,7 +669,7 @@ function ProgressBoard({ onOpenProject }: { onOpenProject?: (id: string) => void
                 <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, pc)}%`, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})` }} />
               </div>
               <div className="mt-1 flex items-center justify-between text-[10.5px] text-muted-2">
-                <span>{p.sprint}</span>
+                <span>{p.sprint || p.phase}</span>
                 <ArrowRight size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
             </button>
@@ -872,7 +910,7 @@ function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Ro
     const chips: Chip[] = []
     if (topType) chips.push({ tag: 'Rhythm', color: 'var(--accent)', node: <><B>{topType[0]}s</B> carried the cadence with {topType[1]} of {p.length} - the average call took <B>~{avgMins} minutes</B>.</> })
     chips.push({ tag: 'Mood', color: 'var(--people)', node: <><B>{posPc}%</B> of calls ran positive{negs.length ? <> - <B>{negs.length} ran negative</B>{negAccounts.length ? <>, the tension sitting on <B>{negAccounts.join(' and ')}</B></> : null}</> : <> - nothing ran negative</>}.</> })
-    if (busiest) chips.push({ tag: 'Attention', color: 'var(--update)', node: <><B>{accountName(busiest[0])}</B> took the most of it with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>; the portfolio sits at <B>{progress}%</B> of its sprint plans.</> })
+    if (busiest) chips.push({ tag: 'Attention', color: 'var(--update)', node: <><B>{accountName(busiest[0])}</B> took the most of it with <B>{busiest[1]} call{busiest[1] !== 1 ? 's' : ''}</B>; the portfolio sits at <B>{progress}%</B> {isLive ? 'through its delivery phases' : 'of its sprint plans'}.</> })
     if (top?.calls || quiet.length) chips.push({ tag: 'People', color: 'var(--opp)', node: <>{top?.calls ? <><B>{displayName(top.name).split(' ')[0]}</B> covered the most ground ({top.calls} calls)</> : null}{top?.calls && quiet.length ? '; ' : null}{quiet.length ? <><B>{quiet.join(' and ')}</B> {quiet.length > 1 ? 'have' : 'has'} gone quiet - worth a check-in</> : null}.</> })
     return { headline, chips, bench }
   }, [days, roster, variant])
