@@ -14,6 +14,18 @@ export function inferCallType(title: string | null): SourceCall['type'] {
   return 'Check-in'
 }
 
+// Prefer the classifier's whole-call type (newer calls); fall back to the title
+// heuristic for calls processed before the pipeline stored it.
+const LIVE_CALL_TYPES = ['Daily standup', 'Weekly report', 'Monthly governance', 'Client kickoff', 'Check-in']
+export function liveCallType(ct: string | null | undefined, title: string | null): SourceCall['type'] {
+  if (ct && LIVE_CALL_TYPES.includes(ct)) return ct as SourceCall['type']
+  return inferCallType(title)
+}
+
+export function liveTone(t: string | null | undefined): 'positive' | 'neutral' | 'negative' | undefined {
+  return t === 'positive' || t === 'neutral' || t === 'negative' ? t : undefined
+}
+
 const TODAY = new Date().toISOString().slice(0, 10)
 const toDate = (ts: string | null) => (ts || '').slice(0, 10) || TODAY
 const num = (v: number | string | null | undefined) => {

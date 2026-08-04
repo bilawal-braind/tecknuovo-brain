@@ -84,6 +84,9 @@ export type ApiCall = {
   speaker_stats?: Record<string, number> | null
   source: string | null
   visibility?: string | null
+  duration_seconds?: number | null
+  tone?: string | null
+  call_type?: string | null
 }
 
 export type ApiAssociate = {

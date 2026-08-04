@@ -11,7 +11,7 @@
 import { isLive } from './source'
 import { fetchAccounts, fetchProjects, fetchSignals, fetchCalls, fetchAssociates, fetchWeeklyReports, fetchStakeholders, fetchDeals, fetchSignalNotes, fetchRegisterRisks } from './api'
 import { weeklyReports, stakeholders, deals, signalNotes, registerRisks } from './crm'
-import { mapAccount, mapProject, mapSignal, inferCallType } from './map'
+import { mapAccount, mapProject, mapSignal, inferCallType, liveCallType, liveTone } from './map'
 import { accounts, projects, people, advisors } from './org'
 import { signals } from './signals'
 import { calls } from './calls'
@@ -162,7 +162,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
         id: cid,
         title: meta?.title || 'Call',
         date: (meta?.call_date || '').slice(0, 10) || liveSignals[i].createdAt,
-        type: inferCallType(meta?.title ?? null),
+        type: liveCallType(meta?.call_type, meta?.title ?? null),
         speaker: '',
         accountId: meta?.account_id || liveSignals[i].accountId,
         projectId: meta?.project_id || liveSignals[i].projectId || undefined,
@@ -170,6 +170,8 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
         transcript: meta?.transcript || undefined,
         hasTranscript: meta ? (meta.has_transcript ?? !!meta.transcript) : undefined,
         visibility: meta?.visibility || undefined,
+        durationSeconds: meta?.duration_seconds || undefined,
+        tone: liveTone(meta?.tone),
         speakers: meta?.speaker_stats || undefined,
       }
       byCall.set(cid, call)
@@ -184,7 +186,7 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
       id: c.id,
       title: c.title || 'Call',
       date: (c.call_date || '').slice(0, 10),
-      type: inferCallType(c.title),
+      type: liveCallType(c.call_type, c.title),
       speaker: '',
       accountId: c.account_id || '',
       projectId: c.project_id || undefined,
@@ -192,6 +194,8 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
       transcript: c.transcript || undefined,
       hasTranscript: c.has_transcript ?? !!c.transcript,
       visibility: c.visibility || undefined,
+      durationSeconds: c.duration_seconds || undefined,
+      tone: liveTone(c.tone),
       speakers: c.speaker_stats || undefined,
     })
   }

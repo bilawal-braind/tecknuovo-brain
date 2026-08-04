@@ -32,6 +32,8 @@ const TYPE_MINUTES: Record<Call['type'], number> = {
   'Check-in': 25,
 }
 export function callMinutes(c: Call): number {
+  // Measured duration (from the VTT cue timestamps, newer calls) always wins.
+  if (c.durationSeconds && c.durationSeconds > 60) return Math.max(1, Math.round(c.durationSeconds / 60))
   const lines = c.speakers ? Object.values(c.speakers).reduce((a, b) => a + b, 0) : 0
   if (lines >= 12) return Math.max(10, Math.min(90, Math.round(lines / 15) * 5))
   return TYPE_MINUTES[c.type] + (hash(c.id) % 3) * 5
@@ -43,6 +45,9 @@ export const hoursLabel = (mins: number) => (mins >= 60 ? `${Math.round((mins / 
 // flagged (opportunities lift, risks weigh); quiet calls sit near neutral with a
 // stable per-call lean, the way an uneventful check-in reads in the room.
 export function callSentiment(c: Call): number {
+  // The classifier's whole-call read (newer calls) always wins over derivation.
+  if (c.tone) return c.tone === 'positive' ? 0.6 : c.tone === 'negative' ? -0.6 : 0
+
   // Calibration: client calls are professional - the baseline is mildly positive,
   // opportunities and progress lift, risks weigh but one flag doesn't make a call
   // "negative"; only genuinely risk-dominated conversations read that way.

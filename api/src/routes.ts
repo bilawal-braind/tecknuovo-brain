@@ -178,6 +178,7 @@ router.get('/calls', async (req, res, next) => {
     const filter = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const r = await q(
       `SELECT id, account_id, project_id, title, call_date, source, speaker_stats, visibility,
+              duration_seconds, tone, call_type,
               (transcript IS NOT NULL AND transcript <> '') AS has_transcript
        FROM calls ${filter} ORDER BY call_date DESC NULLS LAST LIMIT 500`,
       params
