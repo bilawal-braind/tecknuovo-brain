@@ -605,9 +605,38 @@ router.get('/people-metrics', async (req, res, next) => {
               COALESCE(round(100.0 * p.lines / NULLIF(t.all_lines, 0)), 0)::int AS talk_share
        FROM per p CROSS JOIN tot t
        LEFT JOIN sigs sg ON sg.name = p.name
-       ORDER BY p.calls DESC, p.name LIMIT 50`,
+       ORDER BY p.calls DESC, p.name LIMIT 200`,
       params
     );
+
+    // When the transcription security group is synced (watchlist, workflow 6),
+    // THAT is the team Katie sees: every member, with their stats matched from
+    // the analysed calls - zeros included ("no analysed calls yet" is
+    // information, not noise). Names arrive in different shapes ("Battersby,
+    // Kiera (TN-...)" vs "Kiera Battersby"), so match on a normalised form.
+    const wl = await q('SELECT display_name FROM watchlist WHERE active AND display_name IS NOT NULL');
+    if (wl.rows.length) {
+      const norm = (n: unknown) => {
+        const noParen = String(n ?? '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        const flipped = noParen.includes(',') ? noParen.split(',').map((x) => x.trim()).reverse().join(' ') : noParen;
+        return flipped.toLowerCase().replace(/[^a-z0-9]/g, '');
+      };
+      const stats = new Map<string, { calls: number; accounts: number; signals: number; talk_share: number }>();
+      for (const row of r.rows) {
+        const k = norm(row.name);
+        const e = stats.get(k);
+        if (e) { e.calls += row.calls; e.accounts = Math.max(e.accounts, row.accounts); e.signals += row.signals; e.talk_share += row.talk_share; }
+        else stats.set(k, { calls: row.calls, accounts: row.accounts, signals: row.signals, talk_share: row.talk_share });
+      }
+      const team = wl.rows
+        .map((w) => {
+          const e = stats.get(norm(w.display_name));
+          return { name: w.display_name as string, calls: e?.calls ?? 0, accounts: e?.accounts ?? 0, signals: e?.signals ?? 0, talk_share: e?.talk_share ?? 0, in_team: true };
+        })
+        .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name));
+      return res.json(team);
+    }
+
     res.json(r.rows);
   } catch (e) { next(e); }
 });

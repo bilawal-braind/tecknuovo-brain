@@ -18,10 +18,10 @@ import { TranscriptModal } from './CallsView'
 // the personal to-do panel on the dashboard home. Live signals persist via the
 // API; mock ones stay browser-local via the same event the panel listens to.
 function AddToList({ signal, color }: { signal: Signal; color: string }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'added'>('idle')
+  const [state, setState] = useState<'idle' | 'busy' | 'added' | 'error'>('idle')
   const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)
   const add = () => {
-    if (state !== 'idle') return
+    if (state === 'busy' || state === 'added') return
     setState('busy')
     const title = (signal.suggestedAction || signal.summary).slice(0, 300)
     const finish = (todo?: { id: string }) => {
@@ -31,16 +31,20 @@ function AddToList({ signal, color }: { signal: Signal; color: string }) {
       }))
     }
     if (!isUuid(signal.id)) { finish(); return }
-    addTodo(title, signal.id, isUuid(signal.accountId) ? signal.accountId : undefined).then(finish).catch(() => setState('idle'))
+    // A failed save must be visible (API down / table missing), never a silent reset.
+    addTodo(title, signal.id, isUuid(signal.accountId) ? signal.accountId : undefined).then(finish).catch(() => setState('error'))
   }
   const added = state === 'added'
+  const failed = state === 'error'
   return (
-    <button onClick={add} disabled={state !== 'idle'} title="Add this action to your to-do list"
+    <button onClick={add} disabled={state === 'busy' || added} title={failed ? "Couldn't save - is the API up to date? Click to retry" : 'Add this action to your to-do list'}
       className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border px-2 py-1 text-[10.5px] font-semibold transition-colors disabled:cursor-default"
       style={added
         ? { color: 'var(--opp)', borderColor: 'color-mix(in srgb, var(--opp) 40%, transparent)', background: 'color-mix(in srgb, var(--opp) 8%, transparent)' }
-        : { color, borderColor: `color-mix(in srgb, ${color} 35%, transparent)`, background: 'var(--surface)' }}>
-      {added ? <><Check size={11} /> On your list</> : <><ListPlus size={11} /> Add to list</>}
+        : failed
+          ? { color: 'var(--risk)', borderColor: 'color-mix(in srgb, var(--risk) 40%, transparent)', background: 'color-mix(in srgb, var(--risk) 8%, transparent)' }
+          : { color, borderColor: `color-mix(in srgb, ${color} 35%, transparent)`, background: 'var(--surface)' }}>
+      {added ? <><Check size={11} /> On your list</> : failed ? <><X size={11} /> Couldn't save · retry</> : <><ListPlus size={11} /> Add to list</>}
     </button>
   )
 }

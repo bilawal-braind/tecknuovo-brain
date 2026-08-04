@@ -271,6 +271,9 @@ export type ApiPersonMetrics = {
   accounts: number
   signals: number
   talk_share: number
+  // true when the row comes from the synced transcription security group (the
+  // team list) rather than raw speaker extraction
+  in_team?: boolean
 }
 export const fetchBrief = (audience = 'leadership', days?: number) =>
   get<ApiBrief | null>(`/api/brief?audience=${audience}${days ? `&days=${days}` : ''}`).catch(() => null)

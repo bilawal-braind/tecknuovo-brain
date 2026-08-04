@@ -127,6 +127,10 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
   // MOCK: the curated FEATURED roster with its illustrative figures.
   const roster = useMemo<Row[]>(() => {
     if (isLive) {
+      // Team mode: the synced transcription security group IS the roster - every
+      // member, including people with no analysed calls yet (that's information).
+      if (rows.some((r) => r.in_team)) return rows.slice(0, 60)
+      // No group synced yet: fall back to whoever actually spoke, TN staff first.
       const isTN = (n: string) => people.some((p) => normName(p.name) === normName(n))
       const active = rows.filter((r) => r.calls > 0)
       const tn = active.filter((r) => isTN(r.name))
@@ -428,11 +432,11 @@ function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: D
       const per = new Map<string, number>()
       for (const c of cs) if (c.accountId) per.set(c.accountId, (per.get(c.accountId) || 0) + 1)
       const top = [...per.entries()].sort((a, b) => b[1] - a[1])[0]
-      const team = top ? accountName(top[0]) : 'Across accounts'
+      const team = top ? accountName(top[0]) : r.calls > 0 ? 'Across accounts' : 'No analysed calls yet'
       byTeam.set(team, [...(byTeam.get(team) ?? []), { r, idx }])
     })
     return [...byTeam.entries()]
-      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .sort((a, b) => Number(a[0] === 'No analysed calls yet') - Number(b[0] === 'No analysed calls yet') || b[1].length - a[1].length || a[0].localeCompare(b[0]))
       .map(([team, rows]) => ({ team, rows }))
   }, [roster, days])
 
