@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
-import { ListChecks, Check, X, ArrowRight, Pencil, Plus } from 'lucide-react'
+import { ListChecks, Check, X, ArrowRight, Pencil, Plus, Maximize2 } from 'lucide-react'
 import { fetchTodos, addTodo, updateTodo } from '../../data/api'
 import type { ApiTodo } from '../../data/api'
 import { signals } from '../../data/signals'
@@ -99,9 +99,14 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
           <ListChecks size={rail ? 12 : 14} />
         </span>
         <button onClick={() => setExpanded(true)} title="Open the full list" className={`font-bold tracking-tight transition-colors hover:text-[var(--accent-d)] ${rail ? 'text-[12.5px]' : 'text-[14px]'}`}>My list</button>
-        {openCount > 0 && (
-          <span className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: 'var(--accent)' }}>{openCount}</span>
-        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          {openCount > 0 && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: 'var(--accent)' }}>{openCount}</span>
+          )}
+          <button onClick={() => setExpanded(true)} title="Expand to full screen" aria-label="Expand list" className="rounded-md border border-line p-1 text-muted-2 transition-colors hover:text-[var(--accent-d)]">
+            <Maximize2 size={11} />
+          </button>
+        </span>
       </div>
 
       {todos.length > 0 && (
@@ -165,37 +170,74 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
         })}
       </div>
 
-      {/* the full-page view: same list, room to read - opened from the header */}
+      {/* the full-screen workspace: everything the rail can do, with room -
+          tick, EDIT in place, jump to the source, remove, add, clear done */}
       {expanded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setExpanded(false)}>
-          <div className="max-h-[80vh] w-full max-w-[640px] overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><ListChecks size={15} /></span>
-              <h3 className="text-[16px] font-bold tracking-tight">My list</h3>
-              <span className="text-[12px] text-muted-2">{openCount} to do · {doneCount} done</span>
-              <button onClick={() => setExpanded(false)} aria-label="Close" className="ml-auto rounded-md border border-line p-1.5 text-muted-2 hover:text-text"><X size={14} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]" onClick={() => setExpanded(false)}>
+          <div className="flex max-h-[86vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 border-b border-line px-6 py-4">
+              <span className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 50%, transparent)' }}><ListChecks size={17} /></span>
+              <div>
+                <h3 className="text-[17px] font-bold tracking-tight">My list</h3>
+                <div className="text-[11.5px] text-muted-2">{openCount} to do · {doneCount} done · only you see this list</div>
+              </div>
+              {doneCount > 0 && (
+                <button onClick={clearDone} className="ml-auto rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-[var(--risk)]">Clear done</button>
+              )}
+              <button onClick={() => setExpanded(false)} aria-label="Close" className={`${doneCount > 0 ? '' : 'ml-auto '}rounded-md border border-line p-1.5 text-muted-2 hover:text-text`}><X size={15} /></button>
             </div>
-            <div className="mt-4 space-y-2">
-              {sorted.length === 0 && <p className="rounded-xl border border-dashed border-line bg-bg-2 px-4 py-5 text-center text-[13px] text-muted">Nothing on the list yet.</p>}
+
+            {todos.length > 0 && (
+              <div className="flex items-center gap-2.5 px-6 pt-3">
+                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-2">
+                  <div className="h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${Math.round((100 * doneCount) / todos.length)}%`, background: 'linear-gradient(90deg, color-mix(in srgb, var(--opp) 55%, transparent), var(--opp))' }} />
+                </div>
+                <span className="shrink-0 text-[11px] font-semibold text-muted-2">{doneCount}/{todos.length}</span>
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-4">
+              {sorted.length === 0 && <p className="rounded-xl border border-dashed border-line bg-bg-2 px-4 py-6 text-center text-[13px] text-muted">Nothing on the list yet - save a suggested action with <b className="font-semibold" style={{ color: 'var(--accent-d)' }}>+ Add to list</b>, or type a task below.</p>}
               {sorted.map((t) => {
                 const acct = t.account_name ?? (t.account_id ? accountName(t.account_id) : null)
                 return (
-                  <div key={t.id} className={`group flex items-start gap-3 rounded-xl border border-line bg-bg-2 px-4 py-3 ${t.done ? 'opacity-50' : ''}`}>
-                    <button onClick={() => toggle(t)} className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border transition-all"
+                  <div key={t.id} className={`group flex items-start gap-3 rounded-xl border border-line bg-bg-2 px-4 py-3 transition-all ${t.done ? 'opacity-50' : 'hover:border-[var(--line-2)]'}`}>
+                    <button onClick={() => toggle(t)} aria-label={t.done ? 'Mark as not done' : 'Mark as done'} className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border transition-all"
                       style={t.done ? { background: 'var(--opp)', borderColor: 'var(--opp)' } : { borderColor: 'var(--line-2)', background: 'var(--surface)' }}>
                       {t.done && <Check size={12} className="text-white" />}
                     </button>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[13.5px] leading-relaxed ${t.done ? 'line-through' : ''}`}>{t.title}</div>
+                      {editing === t.id ? (
+                        <input autoFocus value={editText} onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => onEditKey(e, t)} onBlur={() => saveEdit(t)}
+                          className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] text-text outline-none focus:border-[var(--accent)]" />
+                      ) : (
+                        <div className={`text-[13.5px] leading-relaxed ${t.done ? 'line-through' : ''}`}>{t.title}</div>
+                      )}
                       {acct && <div className="mt-0.5 text-[11px] font-semibold text-muted-2">{acct}</div>}
                     </div>
-                    {(t.signal_id || t.account_id) && (onOpenSignal || onOpenAccount) && (
-                      <button onClick={() => { setExpanded(false); open(t) }} title="Open where this came from" className="shrink-0 rounded-md p-1 text-muted-2 hover:text-[var(--accent-d)]"><ArrowRight size={14} /></button>
-                    )}
-                    <button onClick={() => remove(t)} title="Remove" className="shrink-0 rounded-md p-1 text-muted-2 hover:text-[var(--risk)]"><X size={14} /></button>
+                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      {editing !== t.id && !t.done && (
+                        <button onClick={() => startEdit(t)} title="Edit" className="rounded-md p-1.5 text-muted-2 hover:text-text"><Pencil size={13} /></button>
+                      )}
+                      {(t.signal_id || t.account_id) && (onOpenSignal || onOpenAccount) && (
+                        <button onClick={() => { setExpanded(false); open(t) }} title="Open where this came from" className="rounded-md p-1.5 text-muted-2 hover:text-[var(--accent-d)]"><ArrowRight size={14} /></button>
+                      )}
+                      <button onClick={() => remove(t)} title="Remove" className="rounded-md p-1.5 text-muted-2 hover:text-[var(--risk)]"><X size={14} /></button>
+                    </div>
                   </div>
                 )
               })}
+            </div>
+
+            <div className="flex items-center gap-2 border-t border-line px-6 py-4">
+              <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addOwn() }}
+                placeholder="Add a task…"
+                className="min-w-0 flex-1 rounded-xl border border-line bg-bg-2 px-3.5 py-2.5 text-[13px] text-text outline-none placeholder:text-muted-2 focus:border-[var(--accent)]" />
+              <button onClick={addOwn} disabled={!draft.trim()} aria-label="Add task"
+                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl text-white transition-transform hover:scale-105 disabled:opacity-40" style={{ background: 'var(--accent)' }}>
+                <Plus size={16} />
+              </button>
             </div>
           </div>
         </div>
