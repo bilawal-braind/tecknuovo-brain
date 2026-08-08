@@ -4,7 +4,7 @@
 // Card face = generated headline. Expand = the in-depth tnAI story (wf15).
 // "View the conversations" = a popup where the week's moments flow in as an
 // animated chain of transcript snippets. No individual signal rows, ever.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, ShieldAlert } from 'lucide-react'
@@ -190,6 +190,16 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
         <Stat icon={AlertTriangle} label="Needs attention" value={`${d.attentionCount + regEsc.length}`} sub={regEsc.length ? `incl. ${regEsc.length} from the risk register` : 'past the escalation bar'} color={d.attentionCount + regEsc.length ? 'var(--risk)' : undefined} />
         <Stat icon={TrendingUp} label="Open opportunities" value={`${allSignals.filter((s) => s.type === 'opportunity' && s.status === 'new').length}`} sub={`${d.opps.length} surfaced this period`} color="var(--opp)" />
       </div>
+
+      {/* When ingestion has stalled, SAY so - "0 calls analysed" with no explanation
+          reads like a broken dashboard (Meesha, 1 Aug call). */}
+      {d.periodCalls.length === 0 && calls.length > 0 && (
+        <div className="mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-[12.5px] leading-relaxed"
+          style={{ borderColor: 'color-mix(in srgb, var(--people) 45%, var(--line))', background: 'color-mix(in srgb, var(--people) 8%, var(--surface))' }}>
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--people)' }} />
+          <span><b className="font-semibold">No calls analysed in this window.</b> The most recent ingested call is from <b className="font-semibold">{new Date(calls[0].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</b> - transcript ingestion has been paused since then, so signal counts reflect the last synced state, not this week.</span>
+        </div>
+      )}
 
       {/* Escalated from the Monday risk register - Level 2 after 1 day, Level 1 after 5 */}
       {regEsc.length > 0 && (
@@ -479,7 +489,7 @@ function BulletList({ items, color, onOpenAccount }: { items: string[]; color: s
 // Rich prose: account names become live links (as before), and the words
 // "risk(s)" / "opportunity(-ies)" become colour-coded terms - hover opens a mini
 // card with the actual signals behind the wording, click jumps to the account.
-function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAccount: (id: string) => void; accountId?: string }) {
+function RichText({ text, onOpenAccount, accountId, onOpenSignal }: { text: string; onOpenAccount: (id: string) => void; accountId?: string; onOpenSignal?: (s: Signal) => void }) {
   const parts = useMemo(() => {
     type Part = { text: string; accountId?: string; term?: 'risk' | 'opportunity'; termAccount?: string }
     const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
@@ -526,7 +536,7 @@ function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAcco
             <ArrowRight size={11} className="w-0 translate-y-[1px] opacity-0 transition-all group-hover:ml-0.5 group-hover:w-[11px] group-hover:opacity-100" />
           </button>
         ) : p.term ? (
-          <SignalTerm key={i} word={p.text} kind={p.term} accountId={p.termAccount ?? accountId} context={text} onOpenAccount={onOpenAccount} />
+          <SignalTerm key={i} word={p.text} kind={p.term} accountId={p.termAccount ?? accountId} context={text} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />
         ) : (
           <span key={i}>{p.text}</span>
         ),
@@ -537,8 +547,20 @@ function RichText({ text, onOpenAccount, accountId }: { text: string; onOpenAcco
 
 // A colour-coded "risk"/"opportunity" mention. Hover: the freshest matching
 // signals (scoped to the account when the prose sits inside an account block).
-function SignalTerm({ word, kind, accountId, context, onOpenAccount }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; context?: string; onOpenAccount: (id: string) => void }) {
+function SignalTerm({ word, kind, accountId, context, onOpenAccount, onOpenSignal }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; context?: string; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [open, setOpen] = useState(false)
+  // The popup renders in a PORTAL with fixed positioning - inside the card it was
+  // clipped by overflow-hidden (Meesha: "I can't actually read the whole thing").
+  const anchor = useRef<HTMLSpanElement>(null)
+  const closeT = useRef<number>(0)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const show = () => {
+    window.clearTimeout(closeT.current)
+    const r = anchor.current?.getBoundingClientRect()
+    if (r) setPos({ top: Math.min(r.bottom + 8, window.innerHeight - 280), left: Math.max(8, Math.min(r.left, window.innerWidth - 320)) })
+    setOpen(true)
+  }
+  const hide = () => { closeT.current = window.setTimeout(() => setOpen(false), 150) }
   const items = useMemo(() => {
     const pool = allSignals.filter((sg) => sg.type === kind && (!accountId || sg.accountId === accountId))
     // Rank by overlap with the sentence the word sits in, so two "risk" mentions
@@ -554,25 +576,29 @@ function SignalTerm({ word, kind, accountId, context, onOpenAccount }: { word: s
   const color = kind === 'risk' ? 'var(--risk)' : 'var(--opp)'
   if (!items.length) return <span className="font-semibold" style={{ color }}>{word}</span>
   return (
-    <span className="relative inline-block" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <span ref={anchor} className="relative inline-block" onMouseEnter={show} onMouseLeave={hide}>
       <button onClick={() => onOpenAccount(accountId ?? items[0].accountId)}
         className="font-semibold underline decoration-dotted underline-offset-2" style={{ color, textDecorationColor: color }}>
         {word}
       </button>
-      {open && (
-        <span className="glass absolute left-0 top-full z-30 mt-1.5 block w-[290px] rounded-2xl border p-3.5 text-left"
-          style={{ borderColor: `color-mix(in srgb, ${color} 35%, var(--line))`, boxShadow: `0 14px 44px -14px color-mix(in srgb, ${color} 50%, transparent), 0 2px 10px rgba(16,24,40,0.08)` }}>
+      {open && createPortal(
+        <span
+          onMouseEnter={() => window.clearTimeout(closeT.current)} onMouseLeave={hide}
+          className="glass fixed z-[80] block w-[310px] rounded-2xl border bg-surface p-3.5 text-left"
+          style={{ top: pos.top, left: pos.left, borderColor: `color-mix(in srgb, ${color} 35%, var(--line))`, boxShadow: `0 14px 44px -14px color-mix(in srgb, ${color} 50%, transparent), 0 2px 10px rgba(16,24,40,0.12)` }}>
           <span className="block text-[10px] font-bold uppercase tracking-wide" style={{ color }}>
             {kind === 'risk' ? 'The risk behind this' : 'The opportunity behind this'}{accountId ? ` · ${accountName(accountId)}` : ''}
           </span>
           {items.map((sg) => (
-            <span key={sg.id} className="mt-2 block text-[11.5px] font-normal leading-snug text-text">
+            <button key={sg.id} onClick={() => (onOpenSignal ? onOpenSignal(sg) : onOpenAccount(sg.accountId))}
+              className="mt-2 block w-full rounded-lg p-1.5 text-left text-[11.5px] font-normal leading-snug text-text transition-colors hover:bg-bg-2">
               {sg.summary}
               {sg.quote && <span className="mt-0.5 block italic text-muted">“{sg.quote.length > 130 ? sg.quote.slice(0, 130) + '…' : sg.quote}”</span>}
-            </span>
+            </button>
           ))}
-          <span className="mt-2 block text-[10px] font-medium text-muted-2">Click the word to open the account</span>
-        </span>
+          <span className="mt-2 block text-[10px] font-medium text-muted-2">{onOpenSignal ? 'Click an item to open that exact signal · the word opens the account' : 'Click the word to open the account'}</span>
+        </span>,
+        document.body,
       )}
     </span>
   )
@@ -629,7 +655,7 @@ function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardD
         <div className="border-t border-line bg-surface-2 p-4">
           <div className="space-y-2.5">
             {(story?.story ?? fallbackStory).split(/\n\n+/).map((p, i) => (
-              <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={p} accountId={card.accountId} onOpenAccount={onOpenAccount} /></p>
+              <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={p} accountId={card.accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
             ))}
           </div>
           {/* the signals behind this card - click one to land ON that signal, expanded, in its account/project (Meesha: 'takes you to the calls rather than the risks') */}

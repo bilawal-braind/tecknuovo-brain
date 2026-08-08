@@ -53,10 +53,16 @@ function AddToList({ signal, color }: { signal: Signal; color: string }) {
 // the suggested action, and the full call transcript behind it.
 export function TriageCard({ signal, onOpenAccount, showAccount = false, initiallyOpen = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean; initiallyOpen?: boolean }) {
   const [open, setOpen] = useState(initiallyOpen)
-  // Deep-linked from an overview line: start expanded and bring the card into view.
+  // Deep-linked from an overview line: start expanded, scroll into view AFTER the
+  // page's entrance animations settle (an immediate scroll lands short once the
+  // charts above finish laying out), and pulse a ring so the eye finds the card.
   const cardRef = useRef<HTMLDivElement>(null)
+  const [highlight, setHighlight] = useState(initiallyOpen)
   useEffect(() => {
-    if (initiallyOpen) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (!initiallyOpen) return
+    const t1 = window.setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 450)
+    const t2 = window.setTimeout(() => setHighlight(false), 3200)
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [verdict, setVerdict] = useState<Verdict | null>(null)
@@ -79,7 +85,8 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
   }
 
   return (
-    <div ref={cardRef} className={`overflow-hidden rounded-xl border border-line bg-surface transition-opacity ${done ? 'opacity-60' : ''}`} style={{ borderLeft: `3px solid ${m.color}` }}>
+    <div ref={cardRef} className={`overflow-hidden rounded-xl border border-line bg-surface transition-all duration-700 ${done ? 'opacity-60' : ''}`}
+      style={{ borderLeft: `3px solid ${m.color}`, boxShadow: highlight ? `0 0 0 3px color-mix(in srgb, ${m.color} 45%, transparent), 0 8px 30px -8px color-mix(in srgb, ${m.color} 40%, transparent)` : undefined }}>
       <div className="flex w-full items-start gap-3 p-3">
         <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
           <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>

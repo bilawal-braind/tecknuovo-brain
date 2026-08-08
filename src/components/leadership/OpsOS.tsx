@@ -467,16 +467,9 @@ function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: D
   }, [roster])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {groups.map(({ team, rows }) => (
-        <div key={team || 'all'}>
-          {team && (
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-2">{team}</span>
-              <span className="rounded-full bg-bg-2 px-1.5 py-0.5 text-[10px] font-semibold text-muted-2">{rows.length}</span>
-              <span className="h-px flex-1 bg-[var(--line)]" aria-hidden />
-            </div>
-          )}
+        <TeamSection key={team || 'all'} team={team} count={rows.length} members={rows.map(({ r }) => r.name)}>
           <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map(({ r, idx }) => (
                 <button key={r.name} onClick={() => onSelect(r.name)}
@@ -499,11 +492,36 @@ function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: D
                 </button>
               ))}
             </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
+        </TeamSection>
+      ))}
+    </div>
+  )
+}
+
+// One team's collapsible section: a summary row (avatar stack + count) that opens
+// into the card grid - so 20+ people across many accounts stay scannable.
+function TeamSection({ team, count, members, children }: { team: string; count: number; members: string[]; children: ReactNode }) {
+  // Real account teams start open; the two catch-all buckets start closed.
+  const special = team === 'Across accounts' || team === 'Not on the allocations board'
+  const [open, setOpen] = useState(!team || !special)
+  if (!team) return <>{children}</>
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full flex-wrap items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-bg-2">
+        <span className="flex -space-x-2">
+          {members.slice(0, 5).map((n, i) => (
+            <PersonPhoto key={n} name={n} size={26} color={PALETTE[i % PALETTE.length]} ring />
+          ))}
+        </span>
+        <span className="text-[13px] font-bold">{team}</span>
+        <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[10.5px] font-semibold text-muted">{count} {count === 1 ? 'person' : 'people'}</span>
+        {special && <span className="text-[10.5px] text-muted-2">{team === 'Across accounts' ? 'client partners & directors covering several accounts' : 'no allocation on the Monday boards yet'}</span>}
+        <ChevronLeft size={15} className={`ml-auto shrink-0 text-muted-2 transition-transform ${open ? '-rotate-90' : 'rotate-180'}`} />
+      </button>
+      {open && <div className="border-t border-line bg-surface-2 p-3">{children}</div>}
+    </div>
+  )
+}
 
 // ── The full-page profile ──
 function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAccount }: { row: Row; color: string; role: string; days: Days; onBack: () => void; onOpenProject?: (id: string) => void; onOpenAccount?: (id: string) => void }) {
