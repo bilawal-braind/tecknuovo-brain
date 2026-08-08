@@ -77,7 +77,7 @@ export const mapAccount = (a: ApiAccount): Account => ({
   sowValue: 0, // aggregated from projects in bootstrap
   budgetBurnPct: num(a.budget_burn_pct),
   headroom: num(a.headroom),
-  lastContact: TODAY,
+  lastContact: 'no calls yet',
   relationship: 'stable',
   valueAdds: 0,
 })

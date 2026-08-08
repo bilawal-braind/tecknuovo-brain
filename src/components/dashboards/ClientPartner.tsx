@@ -39,7 +39,7 @@ export function ClientPartner() {
 
   return (
     <DashboardShell
-      role="Client Partner" persona="Commercial view · your accounts" active={view} onSelect={goTab} onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      role="Client Partner" persona="Commercial view · your accounts" active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
@@ -111,7 +111,9 @@ export function ClientPartner() {
                     <tbody>
                       {accounts.filter((a) => a.name.toLowerCase().includes(acctQ.trim().toLowerCase())).map((a) => {
                         const ps = projectsForAccount(a.id)
-                        const consultants = new Set(ps.flatMap((p) => p.advisors)).size
+                        // Board truth first: the Assigned Associates count for the
+                        // account; token-matched project advisors only as fallback.
+                        const consultants = a.consultantCount ?? new Set(ps.flatMap((p) => p.advisors)).size
                         const extensions = ps.filter((p) => p.extension).length
                         return (
                         <tr key={a.id} onClick={() => setSel(a.id)} className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-bg-2">

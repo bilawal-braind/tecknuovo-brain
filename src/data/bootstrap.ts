@@ -126,6 +126,11 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
 
   // Consultants (associates) -> people + project.advisors (linked by team/programme match).
   const consultantPeople: Person[] = asRows.map((as) => ({ id: 'as-' + as.id, name: as.name, role: 'Associate' }))
+  // Consultants per account straight off the Assigned Associates board - the
+  // number the portfolio's Team & scope column shows (board truth, not inference).
+  const consPerAccount = new Map<string, number>()
+  asRows.forEach((as) => { if (as.account_id) consPerAccount.set(as.account_id, (consPerAccount.get(as.account_id) || 0) + 1) })
+  liveAccounts.forEach((a) => { const n = consPerAccount.get(a.id); if (n) a.consultantCount = n })
   asRows.forEach((as) => {
     const pop = (as.project_or_programme || '').toLowerCase()
     const proj = liveProjects.find((p) => {

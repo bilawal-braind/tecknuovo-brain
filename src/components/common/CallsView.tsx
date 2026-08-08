@@ -79,8 +79,24 @@ export function CallsView({ calls, title = 'Calls', subtitle, accountId, focusSi
       </div>
 
       <div className="mt-3 space-y-2.5">
-        {filtered.map((c) => <CallCard key={c.id} call={c} accountId={accountId} focusSignalId={focusSignalId} />)}
-        {filtered.length === 0 && <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No calls match your search.</p>}
+        {/* A type chip flips the list to SIGNAL-FIRST (Meesha, 1 Aug call): the
+            opportunity/risk tickets are the headers; the source call and its
+            transcript are one click inside each ticket. 'All' keeps the call list. */}
+        {filter === 'all' ? (
+          <>
+            {filtered.map((c) => <CallCard key={c.id} call={c} accountId={accountId} focusSignalId={focusSignalId} />)}
+            {filtered.length === 0 && <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No calls match your search.</p>}
+          </>
+        ) : (
+          <>
+            {filtered.flatMap((c) => sigsOf(c).filter((sg) => sg.type === filter)).map((sg) => (
+              <TriageCard key={sg.id} signal={sg} initiallyOpen={sg.id === focusSignalId} />
+            ))}
+            {filtered.flatMap((c) => sigsOf(c).filter((sg) => sg.type === filter)).length === 0 && (
+              <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No {filter} signals match your search.</p>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

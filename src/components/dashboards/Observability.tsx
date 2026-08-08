@@ -41,7 +41,7 @@ export function Observability() {
 
   return (
     <DashboardShell
-      role="Observability" persona="AI accuracy & the feedback loop" active={view} onSelect={(v) => setView(v as View)}
+      role="Observability" persona="AI accuracy & the feedback loop" active={view} todos onSelect={(v) => setView(v as View)}
       sections={[
         { id: 'checks', label: 'Quality checks', icon: Gauge, count: observabilityChecks.length },
         { id: 'review', label: 'Review & feedback', icon: ClipboardCheck, count: isLive ? liveReview.length : reviewItems.length - reviewed },

@@ -14,6 +14,8 @@ export type Account = {
   name: string
   pod: string
   coverage: Coverage
+  // Live mode: consultants on this account per the Assigned Associates board
+  consultantCount?: number
   health: Health
   trend: Trend
   clientDirector?: string // person id

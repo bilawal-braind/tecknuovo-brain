@@ -177,6 +177,7 @@ function UserFooter() {
       <div className="min-w-0 flex-1">
         <div className="truncate text-[12.5px] font-semibold leading-tight">{display}</div>
         <div className="truncate text-[10.5px] text-muted-2">{ROLE_LABEL[me.role] ?? me.role}{me.scope === 'all' && me.role !== 'admin' ? ' · all accounts' : ''}</div>
+        <div className="truncate text-[9px] text-muted-2" title="When this version of the dashboard was built">build {__BUILD_TS__}</div>
       </div>
       {authEnabled && (
         <button onClick={logout} title="Sign out" aria-label="Sign out" className="rounded-md border border-line p-1.5 text-muted-2 transition-colors hover:text-text">

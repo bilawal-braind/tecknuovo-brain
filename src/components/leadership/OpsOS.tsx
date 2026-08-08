@@ -62,10 +62,34 @@ function personCalls(name: string, demoAccounts: string[] | undefined, days: num
   return calls.filter((c) => wanted.has(accountName(c.accountId).toLowerCase())).slice(0, 6)
 }
 
-// Account chips for a person: their demo list in mock mode, the accounts of
-// their actual transcribed calls in live mode.
+// A person's accounts according to the MONDAY BOARDS - the org's own truth, not
+// what they happened to talk about this week: Client Partner / Client Director /
+// delivery lead on an account (Live Allocations board via the org sync), DM of a
+// project, or a consultant placed there (Assigned Associates board).
+function mondayAccountIds(name: string): string[] {
+  const me = normName(name)
+  const ids = new Set<string>()
+  const match = (personId: string | undefined | null) => {
+    if (!personId) return false
+    const p = people.find((x) => x.id === personId)
+    return !!p && normName(p.name) === me
+  }
+  for (const a of accounts) {
+    if (match(a.clientPartner) || match(a.clientDirector) || match(a.deliveryManager)) ids.add(a.id)
+  }
+  for (const pr of projects) {
+    if (match(pr.deliveryManager)) ids.add(pr.accountId)
+    if (pr.advisors?.some((advId) => match(advId))) ids.add(pr.accountId)
+  }
+  return [...ids]
+}
+
+// Account chips for a person: demo list in mock mode; in live mode the Monday
+// allocation first, their actual transcribed calls only as the fallback.
 function personAccountNames(r: Row, days: number): string[] {
   if (r.demoAccounts?.length) return r.demoAccounts
+  const monday = mondayAccountIds(r.name).map((id) => accountName(id)).filter(Boolean)
+  if (monday.length) return monday
   return [...new Set(personCalls(r.name, undefined, days).map((c) => accountName(c.accountId)).filter(Boolean))]
 }
 
@@ -424,21 +448,23 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 // the account they spend most of their calls on, so ten speakers don't land as one
 // undifferentiated wall. Mock mode keeps the flat curated grid.
 function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: Days; roleOf: (n: string) => string; onSelect: (n: string) => void }) {
+  // Teams come from the MONDAY BOARDS, never from what people talked about: one
+  // Monday account -> that team; several (client partners/directors) -> 'Across
+  // accounts'; none -> 'Not on the allocations board' (a data gap to fix in
+  // Monday, not something to paper over here).
   const groups = useMemo(() => {
     if (!isLive) return [{ team: '', rows: roster.map((r) => ({ r, idx: roster.indexOf(r) })) }]
+    const LAST = ['Across accounts', 'Not on the allocations board']
     const byTeam = new Map<string, { r: Row; idx: number }[]>()
     roster.forEach((r, idx) => {
-      const cs = personCalls(r.name, r.demoAccounts, days)
-      const per = new Map<string, number>()
-      for (const c of cs) if (c.accountId) per.set(c.accountId, (per.get(c.accountId) || 0) + 1)
-      const top = [...per.entries()].sort((a, b) => b[1] - a[1])[0]
-      const team = top ? accountName(top[0]) : r.calls > 0 ? 'Across accounts' : 'No analysed calls yet'
+      const monday = mondayAccountIds(r.name)
+      const team = monday.length === 1 ? accountName(monday[0]) : monday.length > 1 ? 'Across accounts' : 'Not on the allocations board'
       byTeam.set(team, [...(byTeam.get(team) ?? []), { r, idx }])
     })
     return [...byTeam.entries()]
-      .sort((a, b) => Number(a[0] === 'No analysed calls yet') - Number(b[0] === 'No analysed calls yet') || b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .sort((a, b) => Number(LAST.indexOf(a[0]) >= 0) - Number(LAST.indexOf(b[0]) >= 0) || LAST.indexOf(a[0]) - LAST.indexOf(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0]))
       .map(([team, rows]) => ({ team, rows }))
-  }, [roster, days])
+  }, [roster])
 
   return (
     <div className="space-y-5">
@@ -483,8 +509,15 @@ function PeopleGrid({ roster, days, roleOf, onSelect }: { roster: Row[]; days: D
 function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAccount }: { row: Row; color: string; role: string; days: Days; onBack: () => void; onOpenProject?: (id: string) => void; onOpenAccount?: (id: string) => void }) {
   const theirCalls = useMemo<Call[]>(() => personCalls(row.name, row.demoAccounts, days), [row, days])
   const theirAccountIds = useMemo(() => {
+    // Monday allocation is the truth for WHOSE accounts these are; calls only
+    // fill in when the boards say nothing about this person.
+    if (isLive) {
+      const monday = mondayAccountIds(row.name)
+      if (monday.length) return monday
+      return [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
+    }
     const fromCalls = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
-    if (fromCalls.length || isLive) return fromCalls
+    if (fromCalls.length) return fromCalls
     return (row.demoAccounts ?? []).map((n) => accounts.find((a) => a.name.toLowerCase() === n.toLowerCase())?.id).filter(Boolean) as string[]
   }, [theirCalls, row])
   const theirSignals = useMemo(() => theirCalls.flatMap((c) => c.signals).slice(0, 8), [theirCalls])

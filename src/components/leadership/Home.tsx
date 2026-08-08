@@ -76,7 +76,7 @@ type Moment = {
 
 type Story = { account: string; headline: string; story: string }
 
-export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) => void }) {
+export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [days, setDays] = useState<Days>(7)
   const [stories, setStories] = useState<Story[]>([])
   useEffect(() => {
@@ -185,10 +185,10 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
       <TnaiBrief days={days} onOpenAccount={onOpenAccount} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Building2} label="Accounts active" value={`${d.accountsActive}`} sub={`of ${accounts.length} in the brain`} />
+        <Stat icon={Building2} label="Accounts" value={`${accounts.length}`} sub={`${d.accountsActive} heard from in the last ${days} days`} />
         <Stat icon={Radio} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.period.length} signals extracted`} color="var(--accent)" />
         <Stat icon={AlertTriangle} label="Needs attention" value={`${d.attentionCount + regEsc.length}`} sub={regEsc.length ? `incl. ${regEsc.length} from the risk register` : 'past the escalation bar'} color={d.attentionCount + regEsc.length ? 'var(--risk)' : undefined} />
-        <Stat icon={TrendingUp} label="Opportunities" value={`${d.opps.length}`} sub={d.oppValue ? `${gbp(d.oppValue)} surfaced` : 'surfaced this period'} color="var(--opp)" />
+        <Stat icon={TrendingUp} label="Open opportunities" value={`${allSignals.filter((s) => s.type === 'opportunity' && s.status === 'new').length}`} sub={`${d.opps.length} surfaced this period`} color="var(--opp)" />
       </div>
 
       {/* Escalated from the Monday risk register - Level 2 after 1 day, Level 1 after 5 */}
@@ -258,7 +258,7 @@ export function LeadershipHome({ onOpenAccount }: { onOpenAccount: (id: string) 
           </div>
         ) : (
           <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-            {d.cards.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} />)}
+            {d.cards.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
           </div>
         )}
       </div>
@@ -587,7 +587,7 @@ type CardData = {
   worstRisk: Signal | null
 }
 
-function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: Story; onOpenAccount: (id: string) => void }) {
+function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardData; story?: Story; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [open, setOpen] = useState(false)
   const [convo, setConvo] = useState(false)
   const acc = accounts.find((a) => a.id === card.accountId)
@@ -622,7 +622,7 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
           {card.op.length > 0 && <Chip color="var(--opp)">{card.op.length} opp{card.op.length !== 1 ? 's' : ''}{card.value ? ` · ~${gbp(card.value)}` : ''}</Chip>}
           <ChevronDown size={15} className={`ml-auto shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-        <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-text">{headline}</p>
+        <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-text" title={headline}>{headline}</p>
       </button>
 
       {open && (
@@ -632,6 +632,19 @@ function AccountCard({ card, story, onOpenAccount }: { card: CardData; story?: S
               <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={p} accountId={card.accountId} onOpenAccount={onOpenAccount} /></p>
             ))}
           </div>
+          {/* the signals behind this card - click one to land ON that signal, expanded, in its account/project (Meesha: 'takes you to the calls rather than the risks') */}
+          {onOpenSignal && card.items.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              {card.items.slice(0, 6).map((s) => (
+                <button key={s.id} onClick={() => onOpenSignal(s)} title={s.summary} className="group flex w-full items-start gap-2 rounded-lg bg-surface px-3 py-2 text-left text-[12px] leading-snug transition-colors hover:bg-bg-2">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: s.type === 'opportunity' ? 'var(--opp)' : SEV_COLOR[s.severity] }} />
+                  <span className="min-w-0 flex-1 text-text">{s.summary}</span>
+                  <ArrowRight size={12} className="mt-0.5 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+              ))}
+              {card.items.length > 6 && <div className="pl-3 text-[10.5px] text-muted-2">+{card.items.length - 6} more inside the account</div>}
+            </div>
+          )}
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <button onClick={() => setConvo(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white transition-transform hover:scale-[1.02]" style={{ background: 'var(--accent)' }}>
               <MessagesSquare size={13} /> View the conversations

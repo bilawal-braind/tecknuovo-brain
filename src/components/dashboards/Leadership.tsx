@@ -79,7 +79,7 @@ export function Leadership() {
   return (
     <>
       <DashboardShell
-        role="Leadership" persona="The business at a glance" active={view} onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }}
+        role="Leadership" persona="The business at a glance" active={view} todos onSelect={(v) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }} onOpenAccount={(id) => { setSelProject(null); setFocusSignal(null); setSel(id) }}
         sections={[
           { id: 'home', label: 'Overview', icon: Sparkles },
           { id: 'opsos', label: 'Delivery Intel', icon: Users },
@@ -92,7 +92,7 @@ export function Leadership() {
             <AccountView accountId={sel} focusSignalId={focusSignal ?? undefined} onBack={() => { setSel(null); setFocusSignal(null) }} onOpenProject={(id) => setSelProject(id)} backLabel="Back to portfolio" />
           ) : (
           <>
-          {view === 'home' && <LeadershipHome onOpenAccount={(id) => setSel(id)} />}
+          {view === 'home' && <LeadershipHome onOpenAccount={(id) => setSel(id)} onOpenSignal={openSignal} />}
           {view === 'opsos' && <OpsOS onOpenProject={(id) => setSelProject(id)} onOpenAccount={(id) => setSel(id)} />}
           {view === 'overview' && (
             <>

@@ -84,6 +84,7 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
   const openCount = todos.length - doneCount
   const sorted = [...todos].sort((a, b) => Number(a.done) - Number(b.done))
   const rail = variant === 'rail'
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <div className={rail
@@ -97,7 +98,7 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
           style={{ background: 'var(--accent)', boxShadow: '0 0 14px color-mix(in srgb, var(--accent) 50%, transparent)' }}>
           <ListChecks size={rail ? 12 : 14} />
         </span>
-        <h3 className={`font-bold tracking-tight ${rail ? 'text-[12.5px]' : 'text-[14px]'}`}>My list</h3>
+        <button onClick={() => setExpanded(true)} title="Open the full list" className={`font-bold tracking-tight transition-colors hover:text-[var(--accent-d)] ${rail ? 'text-[12.5px]' : 'text-[14px]'}`}>My list</button>
         {openCount > 0 && (
           <span className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: 'var(--accent)' }}>{openCount}</span>
         )}
@@ -163,6 +164,42 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
           )
         })}
       </div>
+
+      {/* the full-page view: same list, room to read - opened from the header */}
+      {expanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setExpanded(false)}>
+          <div className="max-h-[80vh] w-full max-w-[640px] overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><ListChecks size={15} /></span>
+              <h3 className="text-[16px] font-bold tracking-tight">My list</h3>
+              <span className="text-[12px] text-muted-2">{openCount} to do · {doneCount} done</span>
+              <button onClick={() => setExpanded(false)} aria-label="Close" className="ml-auto rounded-md border border-line p-1.5 text-muted-2 hover:text-text"><X size={14} /></button>
+            </div>
+            <div className="mt-4 space-y-2">
+              {sorted.length === 0 && <p className="rounded-xl border border-dashed border-line bg-bg-2 px-4 py-5 text-center text-[13px] text-muted">Nothing on the list yet.</p>}
+              {sorted.map((t) => {
+                const acct = t.account_name ?? (t.account_id ? accountName(t.account_id) : null)
+                return (
+                  <div key={t.id} className={`group flex items-start gap-3 rounded-xl border border-line bg-bg-2 px-4 py-3 ${t.done ? 'opacity-50' : ''}`}>
+                    <button onClick={() => toggle(t)} className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md border transition-all"
+                      style={t.done ? { background: 'var(--opp)', borderColor: 'var(--opp)' } : { borderColor: 'var(--line-2)', background: 'var(--surface)' }}>
+                      {t.done && <Check size={12} className="text-white" />}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-[13.5px] leading-relaxed ${t.done ? 'line-through' : ''}`}>{t.title}</div>
+                      {acct && <div className="mt-0.5 text-[11px] font-semibold text-muted-2">{acct}</div>}
+                    </div>
+                    {(t.signal_id || t.account_id) && (onOpenSignal || onOpenAccount) && (
+                      <button onClick={() => { setExpanded(false); open(t) }} title="Open where this came from" className="shrink-0 rounded-md p-1 text-muted-2 hover:text-[var(--accent-d)]"><ArrowRight size={14} /></button>
+                    )}
+                    <button onClick={() => remove(t)} title="Remove" className="shrink-0 rounded-md p-1 text-muted-2 hover:text-[var(--risk)]"><X size={14} /></button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* customisable: type a task of your own - not everything comes from a signal */}
       <div className="mt-1.5 flex items-center gap-1.5">
