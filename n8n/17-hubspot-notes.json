@@ -1,0 +1,453 @@
+{
+  "name": "TN Brain · 17 · HubSpot notes ingestion (client-laptop calls)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "hs17_sched",
+      "name": "Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Look back 7 days - notes are often added a while after the meeting.\nreturn [{ json: { since: Date.now() - 7 * 24 * 3600 * 1000 } }];"
+      },
+      "id": "hs17_window",
+      "name": "Search window",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/meetings/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filterGroups: [{ filters: [{ propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String($json.since) }] }], properties: ['hs_meeting_title','hs_meeting_body','hs_timestamp'], sorts: [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }], limit: 100 }) }}",
+        "options": {}
+      },
+      "id": "hs17_search",
+      "name": "Recent meetings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One item per meeting. Meetings with neither a body nor (later) notes are\n// dropped further down - no content, nothing to classify.\nconst res = $input.first().json || {};\nconst rows = Array.isArray(res.results) ? res.results : [];\nreturn rows.map(m => ({ json: {\n  meeting_id: String(m.id),\n  title: (m.properties && m.properties.hs_meeting_title) || 'HubSpot meeting',\n  body: (m.properties && m.properties.hs_meeting_body) || '',\n  ts: (m.properties && m.properties.hs_timestamp) || null,\n} }));"
+      },
+      "id": "hs17_flat",
+      "name": "One item per meeting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v4/objects/meetings/{{ $json.meeting_id }}/associations/notes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs17_noteids",
+      "name": "Note ids for meeting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Carry the meeting fields forward + the list of associated note ids.\nconst meeting = $('One item per meeting').item.json;\nconst res = $json || {};\nconst ids = Array.isArray(res.results) ? res.results.map(r => String(r.toObjectId)) : [];\nreturn { json: { ...meeting, note_ids: ids } };"
+      },
+      "id": "hs17_carry1",
+      "name": "Attach note ids",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/notes/batch/read",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: ['hs_note_body'], inputs: ($json.note_ids || []).map(id => ({ id })) }) }}",
+        "options": {}
+      },
+      "id": "hs17_notes",
+      "name": "Read note bodies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const meeting = $('Attach note ids').item.json;\nconst res = $json || {};\nconst notes = Array.isArray(res.results) ? res.results.map(r => (r.properties && r.properties.hs_note_body) || '').filter(Boolean) : [];\nreturn { json: { ...meeting, notes } };"
+      },
+      "id": "hs17_carry2",
+      "name": "Attach notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v4/objects/meetings/{{ $json.meeting_id }}/associations/companies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs17_compid",
+      "name": "Company for meeting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const meeting = $('Attach notes').item.json;\nconst res = $json || {};\nconst first = Array.isArray(res.results) && res.results.length ? res.results[0] : null;\nreturn { json: { ...meeting, company_id: first ? String(first.toObjectId) : null } };"
+      },
+      "id": "hs17_carry3",
+      "name": "Attach company id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v3/objects/companies/{{ $json.company_id || '0' }}?properties=name",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "hs17_comp",
+      "name": "Company name",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HS_CRED",
+          "name": "HubSpot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Build ONE inbox insert per meeting that actually has content. Same payload\n// shape as the Teams watcher, so the Main Pipeline treats it identically;\n// source 'hubspot' + a single-shot dedup key mean a meeting can never be\n// ingested twice. HTML from HubSpot bodies is stripped to plain text.\nconst m = $('Attach company id').item.json;\nconst comp = ($json && $json.properties && $json.properties.name) || '';\nconst strip = h => String(h || '').replace(/<br\\s*\\/?\\s*>/gi, '\\n').replace(/<\\/p>/gi, '\\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();\nconst parts = [];\nif (m.body) parts.push(strip(m.body));\nfor (const n of (m.notes || [])) { const t = strip(n); if (t) parts.push(t); }\nconst text = parts.join('\\n\\n');\nif (!text) return { json: { sql: \"SELECT 'skipped - no content' AS note;\", skipped: true } };\nconst e = s => String(s == null ? '' : s).replace(/'/g, \"''\");\nconst title = m.title + ' (HubSpot notes)';\nconst transcript = 'Notes logged in HubSpot for this meeting (no transcript available):\\n\\n' + text;\nconst sql =\n  \"INSERT INTO inbox (source, dedup_key, payload, status) \" +\n  \"SELECT 'hubspot', 'hs:\" + e(m.meeting_id) + \"', jsonb_build_object(\" +\n    \"'account', COALESCE(\" +\n      \"(SELECT name FROM accounts WHERE lower(name) = lower('\" + e(comp) + \"') LIMIT 1),\" +\n      \"(SELECT name FROM client_directory WHERE '\" + e(comp) + \"' ILIKE '%'||name||'%' OR name ILIKE '%'||'\" + e(comp) + \"'||'%' ORDER BY length(name) DESC LIMIT 1),\" +\n      \"(SELECT name FROM client_directory WHERE '\" + e(m.title) + \"' ILIKE '%'||name||'%' ORDER BY length(name) DESC LIMIT 1),\" +\n      \"'UNKNOWN'),\" +\n    \"'title', '\" + e(title) + \"',\" +\n    \"'visibility', 'all',\" +\n    \"'external_domains', '[]'::jsonb,\" +\n    \"'dedup_key', 'hs:\" + e(m.meeting_id) + \"',\" +\n    \"'transcript', '\" + e(transcript) + \"'\" +\n  \"), 'pending' \" +\n  \"ON CONFLICT (dedup_key) DO NOTHING RETURNING id;\";\nreturn { json: { sql, skipped: false, title } };"
+      },
+      "id": "hs17_build",
+      "name": "Build inbox insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "hs17_apply",
+      "name": "Insert into inbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1960,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const n = $input.all().filter(i => i.json && i.json.id).length;\nreturn [{ json: { sql: \"INSERT INTO run_logs (workflow, status, detail) VALUES ('17-hubspot-notes', 'ok', '\" + n + \" meeting note(s) queued');\" } }];"
+      },
+      "id": "hs17_logsql",
+      "name": "Build run log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "hs17_log",
+      "name": "Run log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every 30 min": {
+      "main": [
+        [
+          {
+            "node": "Search window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search window": {
+      "main": [
+        [
+          {
+            "node": "Recent meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent meetings": {
+      "main": [
+        [
+          {
+            "node": "One item per meeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per meeting": {
+      "main": [
+        [
+          {
+            "node": "Note ids for meeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note ids for meeting": {
+      "main": [
+        [
+          {
+            "node": "Attach note ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach note ids": {
+      "main": [
+        [
+          {
+            "node": "Read note bodies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read note bodies": {
+      "main": [
+        [
+          {
+            "node": "Attach notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach notes": {
+      "main": [
+        [
+          {
+            "node": "Company for meeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company for meeting": {
+      "main": [
+        [
+          {
+            "node": "Attach company id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach company id": {
+      "main": [
+        [
+          {
+            "node": "Company name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company name": {
+      "main": [
+        [
+          {
+            "node": "Build inbox insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build inbox insert": {
+      "main": [
+        [
+          {
+            "node": "Insert into inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into inbox": {
+      "main": [
+        [
+          {
+            "node": "Build run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build run log": {
+      "main": [
+        [
+          {
+            "node": "Run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

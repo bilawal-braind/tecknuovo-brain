@@ -1,0 +1,82 @@
+{
+  "name": "TN Brain · 19 · Error alert (any workflow fails)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ea_trig",
+      "name": "On any workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e = $input.first().json || {};\nconst wfName = (e.workflow && e.workflow.name) || 'unknown workflow';\nconst node = (e.execution && e.execution.lastNodeExecuted) || '?';\nconst msg = (e.execution && e.execution.error && e.execution.error.message) || 'no message';\nreturn [{ json: { line: `\\ud83d\\udd34 TN Brain workflow FAILED \\u00b7 ${wfName} \\u00b7 node: ${node} \\u00b7 ${String(msg).slice(0, 300)}` } }];"
+      },
+      "id": "ea_build",
+      "name": "Build alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "pick the channel after adding the Slack credential"
+        },
+        "text": "={{ $json.line }}",
+        "otherOptions": {}
+      },
+      "id": "ea_slack",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "On any workflow error": {
+      "main": [
+        [
+          {
+            "node": "Build alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build alert": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

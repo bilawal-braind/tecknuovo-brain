@@ -1,0 +1,144 @@
+{
+  "name": "TN Brain · 18 · Heartbeat (daily health line)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "hb_sched",
+      "name": "Weekdays 08:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT max(call_date)::date FROM calls) AS latest_call,\n  (SELECT count(*) FROM calls WHERE call_date > now() - interval '24 hours') AS calls_24h,\n  (SELECT count(*) FROM signals WHERE created_at > now() - interval '24 hours') AS signals_24h,\n  (SELECT count(*) FROM run_logs WHERE created_at > now() - interval '24 hours') AS runs_24h,\n  (SELECT count(*) FROM inbox WHERE status = 'failed') AS failed,\n  (SELECT count(*) FROM inbox WHERE status = 'pending' AND received_at < now() - interval '2 hours') AS stuck;",
+        "options": {}
+      },
+      "id": "hb_q",
+      "name": "Health query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tv0yKxg1fyTfyh8x",
+          "name": "TN Azure DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Counts only - no client names, no content. Healthy = the schedules ran in\n// the last 24h and nothing is stuck mid-pipeline.\nconst r = $input.first().json;\nconst healthy = Number(r.runs_24h) > 0 && Number(r.stuck) === 0;\nconst line = healthy\n  ? `\\u2705 TN Brain healthy \\u00b7 ${r.calls_24h} call(s) ingested and ${r.signals_24h} signal(s) extracted in the last 24h \\u00b7 latest call ${r.latest_call}`\n  : `\\u26a0\\ufe0f TN Brain needs a look \\u00b7 runs in last 24h: ${r.runs_24h} \\u00b7 stuck items: ${r.stuck} \\u00b7 failed items: ${r.failed} \\u00b7 latest call ${r.latest_call}`;\n// Dead-man's switch: paste a healthchecks.io ping URL here. If this heartbeat\n// ever stops arriving, Bilawal gets an email - without any data leaving.\nconst PING_URL = '';\nreturn [{ json: { line, healthy, ping: PING_URL ? (healthy ? PING_URL : PING_URL + '/fail') : null } }];"
+      },
+      "id": "hb_build",
+      "name": "Build health line",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "pick the channel after adding the Slack credential"
+        },
+        "text": "={{ $json.line }}",
+        "otherOptions": {}
+      },
+      "id": "hb_slack",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        -80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.ping }}",
+        "options": {}
+      },
+      "id": "hb_ping",
+      "name": "Dead-man's-switch ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Weekdays 08:30": {
+      "main": [
+        [
+          {
+            "node": "Health query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health query": {
+      "main": [
+        [
+          {
+            "node": "Build health line",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build health line": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Dead-man's-switch ping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
