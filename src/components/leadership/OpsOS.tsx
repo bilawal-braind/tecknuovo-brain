@@ -572,7 +572,7 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
 
       <CallPerformance theirCalls={theirCalls} days={days} />
 
-      <PersonFootprint days={days} theirCalls={theirCalls} />
+      <PersonFootprint days={days} theirCalls={theirCalls} accountIds={theirAccountIds} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-line bg-surface p-5">
@@ -830,11 +830,12 @@ function PersonCharts({ theirCalls, days, color }: { theirCalls: Call[]; days: D
 }
 
 // One person's real footprint: what their conversations put into the brain.
-function PersonFootprint({ days, theirCalls }: { days: Days; theirCalls: Call[] }) {
+function PersonFootprint({ days, theirCalls, accountIds }: { days: Days; theirCalls: Call[]; accountIds?: string[] }) {
   const theirSignals = theirCalls.flatMap((c) => c.signals)
   const risks = theirSignals.filter((sg) => sg.type === 'risk').length
   const opps = theirSignals.filter((sg) => sg.type === 'opportunity').length
-  const accIds = [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
+  // Monday-first (passed from the profile); raw call accounts only as fallback.
+  const accIds = accountIds?.length ? accountIds : [...new Set(theirCalls.map((c) => c.accountId).filter(Boolean))]
   const openOnAccounts = signals.filter((sg) => accIds.includes(sg.accountId) && (sg.status === 'new' || sg.status === 'routed')).length
   const health = accIds.map((id) => accounts.find((a) => a.id === id)).filter(Boolean)
   return (
@@ -931,7 +932,9 @@ function CallBrief({ days, roster, variant = 'calls' }: { days: Days; roster: Ro
       const am = new Map<string, number>()
       for (const c of cs) { tm.set(c.type, (tm.get(c.type) || 0) + 1); if (c.accountId) am.set(c.accountId, (am.get(c.accountId) || 0) + 1) }
       const tt = [...tm.entries()].sort((x, y) => y[1] - x[1])[0]
-      const ta = [...am.entries()].sort((x, y) => y[1] - x[1])[0]
+      const monday = isLive ? mondayAccountIds(r.name) : []
+      const taAll = [...am.entries()].sort((x, y) => y[1] - x[1])
+      const ta = monday.length ? taAll.find((x) => monday.includes(x[0])) : taAll[0]
       const bs = cs.map((c) => sentimentBand(callSentiment(c)))
       const pp = bs.length ? Math.round((100 * bs.filter((x) => x === 'positive').length) / bs.length) : 0
       const idx = roster.findIndex((x) => x.name === r.name)
