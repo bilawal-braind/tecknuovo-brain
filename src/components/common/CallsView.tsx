@@ -90,7 +90,7 @@ export function CallsView({ calls, title = 'Calls', subtitle, accountId, focusSi
         ) : (
           <>
             {filtered.flatMap((c) => sigsOf(c).filter((sg) => sg.type === filter)).map((sg) => (
-              <TriageCard key={sg.id} signal={sg} initiallyOpen={sg.id === focusSignalId} />
+              <TriageCard key={sg.id} signal={sg} showCall initiallyOpen={sg.id === focusSignalId} />
             ))}
             {filtered.flatMap((c) => sigsOf(c).filter((sg) => sg.type === filter)).length === 0 && (
               <p className="rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No {filter} signals match your search.</p>

@@ -51,7 +51,7 @@ function AddToList({ signal, color }: { signal: Signal; color: string }) {
 
 // Compact, expandable triage row: scan the headline, click to open the quote,
 // the suggested action, and the full call transcript behind it.
-export function TriageCard({ signal, onOpenAccount, showAccount = false, initiallyOpen = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean; initiallyOpen?: boolean }) {
+export function TriageCard({ signal, onOpenAccount, showAccount = false, initiallyOpen = false, showCall = false }: { signal: Signal; onOpenAccount?: (accountId: string) => void; showAccount?: boolean; initiallyOpen?: boolean; showCall?: boolean }) {
   const [open, setOpen] = useState(initiallyOpen)
   // Deep-linked from an overview line: start expanded, scroll into view AFTER the
   // page's entrance animations settle (an immediate scroll lands short once the
@@ -92,7 +92,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
           <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium leading-snug text-text">{signal.summary}</div>
-            <div className="truncate text-[11px] text-muted-2">{showAccount && <span className="font-medium text-muted">{accountName(signal.accountId)} · </span>}{signal.projectId ? projectById(signal.projectId)?.name : 'Account-level'} · {fmt(signal.sourceCall.date)}</div>
+            <div className="truncate text-[11px] text-muted-2">{showAccount && <span className="font-medium text-muted">{accountName(signal.accountId)} · </span>}{signal.projectId ? projectById(signal.projectId)?.name : 'Account-level'}{showCall && <span> · from <span className="font-medium text-muted">{signal.sourceCall.title}</span></span>} · {fmt(signal.sourceCall.date)}</div>
           </div>
         </button>
         <div className="flex shrink-0 items-center gap-2">

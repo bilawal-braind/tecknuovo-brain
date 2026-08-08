@@ -122,8 +122,16 @@ export function ClientPartner() {
                             <RagDot health={a.health} withLabel />
                             {a.healthReason && <div className="mt-0.5 text-[11px] leading-tight text-muted-2">{a.healthReason}</div>}
                           </td>
-                          <td className="px-4 py-3 text-muted">
-                            {ps.length} project{ps.length !== 1 ? 's' : ''} · {consultants} consultant{consultants !== 1 ? 's' : ''}
+                          <td className="px-4 py-3 text-muted" title="Projects come from the SharePoint weekly reports; consultants from the Assigned Associates Monday board. Empty = nothing filed on those sources for this account yet.">
+                            {ps.length === 0 && consultants === 0 ? (
+                              <span className="text-[11.5px] italic text-muted-2">nothing on the boards yet</span>
+                            ) : (
+                              <>
+                                {ps.length > 0 ? `${ps.length} project${ps.length !== 1 ? 's' : ''}` : <span className="text-[11.5px] italic text-muted-2">no weekly reports</span>}
+                                {' · '}
+                                {consultants > 0 ? `${consultants} consultant${consultants !== 1 ? 's' : ''}` : <span className="text-[11.5px] italic text-muted-2">none on the associates board</span>}
+                              </>
+                            )}
                             {extensions > 0 && <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 12%, transparent)' }}>{extensions} ext</span>}
                           </td>
                           {SHOW_SOW && <>

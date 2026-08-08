@@ -182,7 +182,7 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
         </div>
       </div>
 
-      <TnaiBrief days={days} onOpenAccount={onOpenAccount} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
+      <TnaiBrief days={days} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={Building2} label="Accounts" value={`${accounts.length}`} sub={`${d.accountsActive} heard from in the last ${days} days`} />
@@ -279,7 +279,7 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
 }
 
 // ── tnAI brief ──
-function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccount: (id: string) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
+function TnaiBrief({ days, onOpenAccount, onOpenSignal, fallback }: { days: Days; onOpenAccount: (id: string) => void; onOpenSignal?: (sg: Signal) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [checked, setChecked] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -348,7 +348,7 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
           </div>
         ) : brief && !expanded ? (
           <div className="mt-3.5">
-            <p className="text-[13.5px] leading-relaxed text-text"><RichText text={teaser} onOpenAccount={onOpenAccount} /></p>
+            <p className="text-[13.5px] leading-relaxed text-text"><RichText text={teaser} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
             <div className="mt-3 flex justify-center">
               <button onClick={() => setExpanded(true)}
                 className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-5 py-2 text-[12px] font-semibold text-[var(--accent-d)] transition-all hover:scale-[1.03]"
@@ -363,11 +363,11 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
               {/* 1 · the headline: macro summary + the pattern behind it */}
               <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 28%, var(--line))', background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 70%)' }}>
                 <SectionTag icon={Activity} color="var(--accent)">The headline</SectionTag>
-                <RichBlocks text={brief.content.whats_happening} onOpenAccount={onOpenAccount} />
+                <RichBlocks text={brief.content.whats_happening} onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
                 {brief.content.why && (
                   <div className="mt-3 rounded-lg px-3.5 py-2.5" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
                     <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>The pattern behind it</span>
-                    <RichBlocks text={brief.content.why} onOpenAccount={onOpenAccount} />
+                    <RichBlocks text={brief.content.why} onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
                   </div>
                 )}
               </section>
@@ -389,17 +389,17 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
                           ) : (
                             <span className="text-[13.5px] font-bold">{a.name}</span>
                           )}
-                          <p className="mt-1 text-[13px] leading-relaxed text-text"><RichText text={a.update} accountId={accId} onOpenAccount={onOpenAccount} /></p>
+                          <p className="mt-1 text-[13px] leading-relaxed text-text"><RichText text={a.update} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
                           {a.why && (
                             <div className="mt-2 rounded-lg px-3 py-2 text-[12.5px] leading-relaxed" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
                               <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>Why</span>
-                              <RichText text={a.why} accountId={accId} onOpenAccount={onOpenAccount} />
+                              <RichText text={a.why} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />
                             </div>
                           )}
                           {(a.actions?.length ?? 0) > 0 && a.actions!.map((act, i) => (
                             <div key={i} className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed">
                               <ArrowRight size={13} className="mt-[3px] shrink-0" style={{ color: 'var(--accent)' }} />
-                              <span className="min-w-0 font-medium"><RichText text={act} accountId={accId} onOpenAccount={onOpenAccount} /></span>
+                              <span className="min-w-0 font-medium"><RichText text={act} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
                             </div>
                           ))}
                         </div>
@@ -413,12 +413,12 @@ function TnaiBrief({ days, onOpenAccount, fallback }: { days: Days; onOpenAccoun
               {hasWatch && (
                 <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--people) 30%, var(--line))', background: 'color-mix(in srgb, var(--people) 6%, var(--surface))' }}>
                   <SectionTag icon={Eye} color="var(--people)">Watch for</SectionTag>
-                  <BulletList items={brief.content.watch_for!} color="var(--people)" onOpenAccount={onOpenAccount} />
+                  <BulletList items={brief.content.watch_for!} color="var(--people)" onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
                 </section>
               )}
               <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--risk) 30%, var(--line))', background: 'color-mix(in srgb, var(--risk) 5%, var(--surface))' }}>
                 <SectionTag icon={AlertTriangle} color="var(--risk)">What needs you</SectionTag>
-                <BulletList items={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this period.']} color="var(--risk)" onOpenAccount={onOpenAccount} />
+                <BulletList items={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this period.']} color="var(--risk)" onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
               </section>
             </div>
             <div className="mt-4 flex justify-center">
@@ -453,7 +453,7 @@ function SectionTag({ icon: Icon, color, children }: { icon: typeof Activity; co
 }
 
 // Prose from the model: paragraphs and "- " lines, each rendered rich.
-function RichBlocks({ text, onOpenAccount, accountId }: { text: string; onOpenAccount: (id: string) => void; accountId?: string }) {
+function RichBlocks({ text, onOpenAccount, accountId, onOpenSignal }: { text: string; onOpenAccount: (id: string) => void; accountId?: string; onOpenSignal?: (sg: Signal) => void }) {
   const blocks = text.split(/\n+/).map((l) => l.trim()).filter(Boolean)
   return (
     <div className="mt-2 space-y-2">
@@ -463,23 +463,23 @@ function RichBlocks({ text, onOpenAccount, accountId }: { text: string; onOpenAc
         return isBullet ? (
           <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
             <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
-            <span className="min-w-0"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} /></span>
+            <span className="min-w-0"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
           </div>
         ) : (
-          <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} /></p>
+          <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
         )
       })}
     </div>
   )
 }
 
-function BulletList({ items, color, onOpenAccount }: { items: string[]; color: string; onOpenAccount: (id: string) => void }) {
+function BulletList({ items, color, onOpenAccount, onOpenSignal }: { items: string[]; color: string; onOpenAccount: (id: string) => void; onOpenSignal?: (sg: Signal) => void }) {
   return (
     <div className="mt-2 space-y-1.5">
       {items.map((t, i) => (
         <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
           <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
-          <span className="min-w-0"><RichText text={t} onOpenAccount={onOpenAccount} /></span>
+          <span className="min-w-0"><RichText text={t} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
         </div>
       ))}
     </div>
@@ -577,7 +577,8 @@ function SignalTerm({ word, kind, accountId, context, onOpenAccount, onOpenSigna
   if (!items.length) return <span className="font-semibold" style={{ color }}>{word}</span>
   return (
     <span ref={anchor} className="relative inline-block" onMouseEnter={show} onMouseLeave={hide}>
-      <button onClick={() => onOpenAccount(accountId ?? items[0].accountId)}
+      <button onClick={() => (onOpenSignal ? onOpenSignal(items[0]) : onOpenAccount(accountId ?? items[0].accountId))}
+        title={onOpenSignal ? 'Open this signal where it was flagged' : 'Open the account'}
         className="font-semibold underline decoration-dotted underline-offset-2" style={{ color, textDecorationColor: color }}>
         {word}
       </button>
