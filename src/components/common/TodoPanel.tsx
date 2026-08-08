@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { ListChecks, Check, X, ArrowRight, Pencil, Plus, Maximize2 } from 'lucide-react'
 import { fetchTodos, addTodo, updateTodo } from '../../data/api'
 import type { ApiTodo } from '../../data/api'
@@ -172,8 +173,10 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
 
       {/* the full-screen workspace: everything the rail can do, with room -
           tick, EDIT in place, jump to the source, remove, add, clear done */}
-      {expanded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]" onClick={() => setExpanded(false)}>
+      {/* PORTAL: rendered on document.body so no sidebar ancestor (transform/
+          backdrop-filter) can trap the overlay inside the 256px rail. */}
+      {expanded && createPortal(
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]" onClick={() => setExpanded(false)}>
           <div className="flex max-h-[86vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2.5 border-b border-line px-6 py-4">
               <span className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 50%, transparent)' }}><ListChecks size={17} /></span>
@@ -240,7 +243,8 @@ export function TodoPanel({ onOpenSignal, onOpenAccount, variant = 'panel' }: {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* customisable: type a task of your own - not everything comes from a signal */}
