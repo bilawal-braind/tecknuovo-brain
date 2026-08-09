@@ -28,7 +28,7 @@ const BOARDS = {
 }
 
 type Step = { color: string; icon: string; title: string; sub?: string; sub2?: string }
-const SCREEN_STEP: Step = { color: C.screen, icon: '📊', title: 'Displayed on your dashboard', sub: 'refreshes itself every 5 minutes' }
+const SCREEN_STEP: Step = { color: C.screen, icon: '📊', title: 'Displayed on your dashboard' }
 
 function stepsForSignal(s: Signal): Step[] {
   const call = s.callId ? calls.find((c) => c.id === s.callId) : undefined
@@ -79,7 +79,7 @@ function stepsForAccount(accountId: string): Step[] {
     { color: C.sharepoint, icon: '📄', title: 'Projects, phases & RAG trend', sub: BOARDS.sp, sub2: 'no weekly report filed = no project shown' },
     { color: C.monday, icon: '🛡️', title: 'Risk register items', sub: BOARDS.risk },
     { color: C.hubspot, icon: '🧡', title: 'Stakeholders & open pipeline', sub: BOARDS.hs },
-    { color: C.teams, icon: '🎥', title: 'Calls & signals', sub: 'transcribed Teams calls (+ HubSpot notes) · every 30 minutes' },
+    { color: C.teams, icon: '🎥', title: 'Calls & signals', sub: 'from transcribed Teams calls (and HubSpot notes)' },
     { color: C.brain, icon: '❤️', title: `Health: ${acc.health.toUpperCase()}`, sub: 'computed from open signals + high-impact register items', sub2: acc.healthReason || undefined },
     SCREEN_STEP,
   ]
@@ -110,7 +110,7 @@ const PRESETS: Record<string, { label: string; steps: Step[] }> = {
     label: 'Weekly report',
     steps: [
       { color: C.sharepoint, icon: '📄', title: 'Filed by your delivery team', sub: BOARDS.sp },
-      { color: C.brain, icon: '🧠', title: 'Read every Monday morning', sub: 'projects, phases, RAG, highlights and risks are lifted from the document' },
+      { color: C.brain, icon: '🧠', title: 'Read automatically by the brain', sub: 'projects, phases, RAG, highlights and risks are lifted from the document' },
       SCREEN_STEP,
     ],
   },
