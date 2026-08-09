@@ -16,6 +16,7 @@ import { CALL_TYPE_COLOR, callMinutes, callSentiment, sentimentBand, hoursLabel,
 import type { Call } from '../../data/calls'
 import { people, accountName, accounts, projects } from '../../data/org'
 import { isLive } from '../../data/source'
+import { ProvenanceButton } from '../common/Provenance'
 import { HEALTH_COLOR } from '../../data/types'
 import { fmt } from '../common/SignalLayer'
 import { InfoHint } from '../common/InfoHint'
@@ -570,7 +571,7 @@ function PersonProfile({ row, color, role, days, onBack, onOpenProject, onOpenAc
           <PersonPhoto name={row.name} size={88} color={color} ring />
           <div className="min-w-0 flex-1">
             <h2 className="text-2xl font-bold tracking-tight">{displayName(row.name)}</h2>
-            <div className="mt-0.5 text-[13px] text-muted">{role}</div>
+            <div className="mt-0.5 flex items-center gap-2 text-[13px] text-muted">{role} <ProvenanceButton preset="person" refLabel={displayName(row.name)} /></div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {theirAccountIds.map((id) => (
                 <button key={id} onClick={() => onOpenAccount?.(id)} className="rounded-full bg-bg-2 px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:bg-[var(--line)] hover:text-text">{accountName(id)}</button>
