@@ -19,6 +19,8 @@ export type Call = {
   hasTranscript?: boolean
   // 'leadership' = only leadership/admin ever receive this call (server-filtered)
   visibility?: string
+  // 'teams' (transcribed call) or 'hubspot' (meeting notes) - provenance display
+  source?: string
   // Measured call metrics from the pipeline (newer calls only; older ones fall
   // back to estimates): real length from the VTT, classifier's whole-call tone.
   durationSeconds?: number

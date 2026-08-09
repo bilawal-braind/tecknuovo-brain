@@ -11,6 +11,7 @@ import { accountName, projectById } from '../../data/org'
 import { SignalBadge, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
+import { ProvenanceButton } from './Provenance'
 import { fmt } from './SignalLayer'
 
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -138,9 +139,12 @@ function CallCard({ call, accountId, focusSignalId }: { call: Call; accountId?: 
         <div className="border-t border-line bg-surface-2 p-3.5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">Signals from this call ({sigs.length})</span>
-            <button onClick={() => setShowTranscript(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
-              <FileText size={13} /> View transcript
-            </button>
+            <span className="flex items-center gap-1.5">
+              <ProvenanceButton call={call} />
+              <button onClick={() => setShowTranscript(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
+                <FileText size={13} /> View transcript
+              </button>
+            </span>
           </div>
 
           <div className="space-y-2">

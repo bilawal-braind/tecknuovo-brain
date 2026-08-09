@@ -6,6 +6,7 @@ import { CallsView } from './CallsView'
 import { money } from './AccountView'
 import { fmt } from './SignalLayer'
 import { SHOW_SOW } from '../../data/source'
+import { ProvenanceButton } from './Provenance'
 
 const PHASES = ['Discovery', 'Design', 'Build', 'Test', 'Go-live', 'Run'] as const
 
@@ -35,6 +36,7 @@ export function ProjectView({ projectId, onBack, onOpenAccount, backLabel = 'Bac
               <button onClick={() => onOpenAccount?.(account.id)} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-2 px-2.5 py-0.5 text-[11px] font-medium text-muted transition-colors hover:text-text">
                 <Building2 size={11} /> {account.name}
               </button>
+              <ProvenanceButton projectId={project.id} />
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{project.name}</h2>
             <div className="mt-1 text-[13px] text-muted">{podName(account.pod)} pod · {project.sprint} · last activity {project.lastActivity}</div>

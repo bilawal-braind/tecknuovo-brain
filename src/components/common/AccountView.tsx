@@ -10,6 +10,7 @@ import { RagDot, CoverageBadge } from './primitives'
 import { CallsView } from './CallsView'
 import { ReportCard } from './WeeklyReports'
 import { RagTrend } from './RagTrend'
+import { ProvenanceButton } from './Provenance'
 
 export function money(n: number) {
   return n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : `£${Math.round(n / 1000)}k`
@@ -51,6 +52,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
             <div className="flex items-center gap-2.5">
               <RagDot health={account.health} withLabel />
               <CoverageBadge coverage={account.coverage} />
+              <ProvenanceButton accountId={account.id} />
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight">{account.name}</h2>
             <div className="mt-1 text-[13px] text-muted">{account.pod ? `${podName(account.pod)} pod · ` : ''}{projects.length} project{projects.length !== 1 ? 's' : ''} · last contact {account.lastContact}</div>

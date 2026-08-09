@@ -13,6 +13,7 @@ import type { Verdict } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
 import { calls } from '../../data/calls'
 import { TranscriptModal } from './CallsView'
+import { ProvenanceButton } from './Provenance'
 
 // Kiera's "Add to list" (25 Jul call): one click sends this suggested action to
 // the personal to-do panel on the dashboard home. Live signals persist via the
@@ -143,6 +144,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
             {sourceCall && (
               <button onClick={() => setShowTranscript(true)} className="font-semibold hover:underline" style={{ color: 'var(--accent-d)' }}>View transcript</button>
             )}
+            <ProvenanceButton signal={signal} />
           </div>
           {showTranscript && sourceCall && <TranscriptModal call={sourceCall} onClose={() => setShowTranscript(false)} />}
 

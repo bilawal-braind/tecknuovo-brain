@@ -663,6 +663,34 @@ router.post('/feedback', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── Provenance feedback ("this looks wrong" from the source-trace sidebar) ───
+// Stored in Postgres (system of record). If BRAIND_SLACK_WEBHOOK is set, a
+// content-light copy is forwarded to BraindAI's internal Slack: the item KIND,
+// its short label and the user's own words - never transcripts or signal bodies.
+router.post('/source-feedback', async (req, res, next) => {
+  try {
+    const { kind, ref_id, ref_label, note } = (req.body ?? {}) as Record<string, unknown>;
+    const k = String(kind ?? '').toLowerCase();
+    if (!['signal', 'call', 'account', 'project'].includes(k)) return res.status(400).json({ error: 'invalid kind' });
+    const n = String(note ?? '').trim().slice(0, 1000);
+    if (!n) return res.status(400).json({ error: 'note required' });
+    const label = String(ref_label ?? '').slice(0, 160);
+    const user = (req as Request & { user?: { email?: string } }).user;
+    const r = await q(
+      'INSERT INTO source_feedback (kind, ref_id, ref_label, note, author) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [k, String(ref_id ?? '').slice(0, 80), label, n, (user?.email ?? '').toLowerCase()]
+    );
+    const hook = process.env.BRAIND_SLACK_WEBHOOK;
+    if (hook) {
+      fetch(hook, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `:triangular_flag_on_post: TN dashboard feedback · ${k}${label ? ` · ${label}` : ''}\n> ${n}` }),
+      }).catch(() => {});
+    }
+    res.status(201).json({ id: r.rows[0].id });
+  } catch (e) { next(e); }
+});
+
 // ── Personal to-do list (Kiera's "add to list" on suggested actions) ─────────
 // Per-user by login email; token/dev mode has no email and shares the '' user.
 const todoUser = (req: Request) => ((req as Request & { user?: { email?: string } }).user?.email || '').toLowerCase();
