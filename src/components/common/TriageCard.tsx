@@ -87,7 +87,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
 
   return (
     <div ref={cardRef} className={`overflow-hidden rounded-xl border border-line bg-surface transition-all duration-700 ${done ? 'opacity-60' : ''}`}
-      style={{ borderLeft: `3px solid ${m.color}`, boxShadow: highlight ? `0 0 0 3px color-mix(in srgb, ${m.color} 45%, transparent), 0 8px 30px -8px color-mix(in srgb, ${m.color} 40%, transparent)` : undefined }}>
+      style={{ borderLeft: `3px solid color-mix(in srgb, ${m.color} 60%, transparent)`, boxShadow: highlight ? `0 0 0 3px color-mix(in srgb, ${m.color} 45%, transparent), 0 8px 30px -8px color-mix(in srgb, ${m.color} 40%, transparent)` : undefined }}>
       <div className="flex w-full items-start gap-3 p-3">
         <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
           <span className="mt-0.5"><SignalBadge type={signal.type} size="sm" /></span>

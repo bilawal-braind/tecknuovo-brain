@@ -146,8 +146,11 @@ function WeeklyComingSoon() {
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className="eyebrow">{label}</div>
-      <div className="mt-2 text-3xl font-bold" style={color ? { color } : undefined}>{value}</div>
+      <div className="flex items-center gap-1.5">
+        {color && <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />}
+        <span className="eyebrow">{label}</span>
+      </div>
+      <div className="mt-2 text-3xl font-bold">{value}</div>
       <div className="mt-0.5 text-[12px] text-muted">{sub}</div>
     </div>
   )

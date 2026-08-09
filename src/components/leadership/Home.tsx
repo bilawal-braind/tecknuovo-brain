@@ -655,7 +655,7 @@ function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardD
   }))
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: `3px solid ${accent}` }}>
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: `3px solid color-mix(in srgb, ${accent} 55%, transparent)` }}>
       <button onClick={() => setOpen((o) => !o)} className="min-h-[124px] flex-1 p-4 text-left transition-colors hover:bg-bg-2">
         <div className="flex flex-wrap items-center gap-2">
           {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
