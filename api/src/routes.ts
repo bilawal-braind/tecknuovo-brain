@@ -675,7 +675,8 @@ router.post('/source-feedback', async (req, res, next) => {
     const n = String(note ?? '').trim().slice(0, 1000);
     if (!n) return res.status(400).json({ error: 'note required' });
     const label = String(ref_label ?? '').slice(0, 160);
-    const user = (req as Request & { user?: { email?: string } }).user;
+    const user = (req as Request & { user?: { email?: string; name?: string } }).user;
+    const who = user?.name || user?.email || 'dashboard user (dev mode)';
     const r = await q(
       'INSERT INTO source_feedback (kind, ref_id, ref_label, note, author) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [k, String(ref_id ?? '').slice(0, 80), label, n, (user?.email ?? '').toLowerCase()]
@@ -684,7 +685,7 @@ router.post('/source-feedback', async (req, res, next) => {
     if (hook) {
       fetch(hook, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `:triangular_flag_on_post: TN dashboard feedback · ${k}${label ? ` · ${label}` : ''}\n> ${n}` }),
+        body: JSON.stringify({ text: `:triangular_flag_on_post: TN dashboard feedback · ${k}${label ? ` · ${label}` : ''}\n:bust_in_silhouette: raised by ${who}\n> ${n}` }),
       }).catch(() => {});
     }
     res.status(201).json({ id: r.rows[0].id });
