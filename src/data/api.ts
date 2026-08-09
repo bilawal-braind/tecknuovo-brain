@@ -221,6 +221,12 @@ export const fetchSignalNotes = () => get<ApiSignalNote[]>('/api/signal-notes').
 export const addSignalNote = (signalId: string, note: string) =>
   post<ApiSignalNote>('/api/signal-notes', { signal_id: signalId, note })
 
+// ── tnAI · Ask the brain (V1 beta) ──
+export type AskChart = { kind: string; title: string; data: { label: string; value: number }[] }
+export type AskItem = { id: string; type: string; summary: string; account: string | null; account_id: string | null; project_id: string | null }
+export type AskResponse = { answer: string; llm: boolean; chart: AskChart | null; items: AskItem[]; window_days: number }
+export const askBrain = (question: string) => post<AskResponse>('/api/ask', { question })
+
 // ── Provenance feedback ("this looks wrong" in the source-trace sidebar) ──
 export const sendSourceFeedback = (kind: string, refId: string, refLabel: string, note: string) =>
   post<{ id: string }>('/api/source-feedback', { kind, ref_id: refId, ref_label: refLabel, note })

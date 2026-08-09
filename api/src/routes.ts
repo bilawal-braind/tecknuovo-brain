@@ -663,6 +663,124 @@ router.post('/feedback', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── tnAI · Ask the brain (V1 beta) ───────────────────────────────────────────
+// A deterministic retrieval engine over the SCOPED data (same account + leadership
+// filters as every endpoint) with an optional LLM phrasing pass: when
+// AZURE_OPENAI_ENDPOINT/KEY are set, gpt-4o-mini turns the retrieved facts into a
+// conversational answer; without them the endpoint still answers from templates -
+// the chat never depends on the model being reachable. Charts are returned as
+// simple {kind,title,data} payloads the dashboard renders itself.
+async function llmPhrase(question: string, facts: unknown): Promise<string | null> {
+  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
+  const key = process.env.AZURE_OPENAI_KEY;
+  const dep = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o-mini';
+  if (!endpoint || !key) return null;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 20000);
+    const r = await fetch(`${endpoint}/openai/deployments/${dep}/chat/completions?api-version=2024-06-01`, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', 'api-key': key },
+      body: JSON.stringify({
+        temperature: 0.2, max_tokens: 350,
+        messages: [
+          { role: 'system', content: 'You are tnAI, the assistant inside the Tecknuovo Second Brain dashboard. Answer the question using ONLY the facts JSON provided - never invent names, numbers or events. Be brief (2-5 sentences), plain UK English, no markdown headings, no bullet spam. If the facts are empty, say so plainly and suggest what to ask instead.' },
+          { role: 'user', content: `QUESTION: ${question}\n\nFACTS:\n${JSON.stringify(facts).slice(0, 9000)}` },
+        ],
+      }),
+    });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+    return j.choices?.[0]?.message?.content?.trim() || null;
+  } catch { return null; }
+}
+
+router.post('/ask', async (req, res, next) => {
+  try {
+    const question = String((req.body as Record<string, unknown>)?.question ?? '').trim().slice(0, 400);
+    if (!question) return res.status(400).json({ error: 'question required' });
+    const qs = question.toLowerCase();
+    const allowed = await allowedAccounts(req);
+    const leader = await leadershipVisible(req);
+
+    // window: "today" 1d · "week" 7d · "month" 30d · default 14d
+    const days = /today|24 hours/.test(qs) ? 1 : /month|30 day/.test(qs) ? 30 : /week/.test(qs) ? 7 : 14;
+
+    // accounts mentioned by name
+    const accParams: unknown[] = [];
+    let accScope = '';
+    if (allowed !== null) { accParams.push(allowed); accScope = ` WHERE id = ANY($${accParams.length}::uuid[])`; }
+    const accRows = (await q(`SELECT id, name, pod FROM accounts${accScope}`, accParams)).rows as { id: string; name: string; pod: string | null }[];
+    const mentioned = accRows.filter((a) => a.name.length >= 3 && qs.includes(a.name.toLowerCase()));
+    const accIds = mentioned.length ? mentioned.map((a) => a.id) : allowed;
+
+    const wantsRisk = /risk|issue|problem|concern|escalat|worried|wrong/.test(qs);
+    const wantsOpp = /opportun|upsell|grow|pipeline|deal|revenue|expand/.test(qs);
+    const wantsPeople = /people|team|resourc|morale|leav|attrition|consultant|associate/.test(qs);
+    const wantsCalls = /call|meeting|transcri|conversation|activity/.test(qs);
+    const wantsRegister = /register|raid|log/.test(qs);
+    const wantsHealth = /health|rag|status|at risk|how is|how are|overview|summar|going/.test(qs);
+    const typeFilter = wantsRisk && !wantsOpp ? "AND s.type = 'risk'" : wantsOpp && !wantsRisk ? "AND s.type = 'opportunity'" : wantsPeople ? "AND s.type = 'people'" : '';
+
+    const p: unknown[] = [String(days)];
+    let scope = '';
+    if (accIds !== null) { p.push(accIds); scope = ` AND s.account_id = ANY($${p.length}::uuid[])`; }
+    const vis = leader ? '' : " AND COALESCE(s.visibility,'all') <> 'leadership'";
+
+    const sigRows = (await q(
+      `SELECT s.id, s.type, s.summary, s.status, s.details->>'band' AS band, a.name AS account, s.account_id, s.project_id, s.created_at::date AS d
+       FROM signals s LEFT JOIN accounts a ON a.id = s.account_id
+       WHERE s.created_at > now() - ($1 || ' days')::interval ${typeFilter}${scope}${vis}
+       ORDER BY (s.details->>'band') = 'Critical' DESC, s.created_at DESC LIMIT 40`, p)).rows;
+
+    const callRows = (await q(
+      `SELECT c.id, c.title, c.call_date::date AS d, a.name AS account
+       FROM calls c LEFT JOIN accounts a ON a.id = c.account_id
+       WHERE c.call_date > now() - ($1 || ' days')::interval${accIds !== null ? ` AND c.account_id = ANY($2::uuid[])` : ''}${leader ? '' : " AND COALESCE(c.visibility,'all') <> 'leadership'"}
+       ORDER BY c.call_date DESC LIMIT 30`, accIds !== null ? [String(days), accIds] : [String(days)])).rows;
+
+    const regRows = wantsRegister || wantsRisk
+      ? (await q(`SELECT r.name, r.impact_level, r.escalation, r.status, a.name AS account FROM risks r LEFT JOIN accounts a ON a.id = r.account_id
+                  WHERE COALESCE(r.status,'') NOT ILIKE '%closed%'${accIds !== null ? ' AND r.account_id = ANY($1::uuid[])' : ''} LIMIT 20`,
+                 accIds !== null ? [accIds] : [])).rows
+      : [];
+
+    // chart: per-account signal counts, or calls per day when the question is about calls
+    let chart: { kind: string; title: string; data: { label: string; value: number }[] } | null = null;
+    if (wantsCalls) {
+      const byDay = new Map<string, number>();
+      for (const c of callRows as { d: string }[]) { const k = String(c.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
+      if (byDay.size > 1) chart = { kind: 'bar', title: `Calls per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
+    } else if (sigRows.length) {
+      const byAcc = new Map<string, number>();
+      for (const s of sigRows as { account: string | null }[]) if (s.account) byAcc.set(s.account, (byAcc.get(s.account) || 0) + 1);
+      if (byAcc.size > 1) chart = { kind: 'bar', title: `${typeFilter ? (wantsRisk ? 'Risks' : wantsOpp ? 'Opportunities' : 'People signals') : 'Signals'} by account · last ${days} days`, data: [...byAcc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value]) => ({ label, value })) };
+    }
+
+    const facts = {
+      window_days: days,
+      accounts_in_scope: mentioned.length ? mentioned.map((a) => a.name) : 'all visible accounts',
+      signals: (sigRows as Record<string, unknown>[]).slice(0, 15).map((s) => ({ type: s.type, band: s.band, account: s.account, summary: s.summary, status: s.status })),
+      signal_count: sigRows.length,
+      calls: (callRows as Record<string, unknown>[]).slice(0, 8).map((c) => ({ title: c.title, account: c.account, date: c.d })),
+      call_count: callRows.length,
+      register_open_items: regRows,
+      health: wantsHealth ? accRows.slice(0, 25).map((a) => a.name) : undefined,
+    };
+
+    // deterministic fallback answer (also the no-LLM answer)
+    const top = (sigRows as { type: string; summary: string; account: string | null }[]).slice(0, 3);
+    let fallback = `In the last ${days} days I can see ${sigRows.length} signal${sigRows.length !== 1 ? 's' : ''} and ${callRows.length} call${callRows.length !== 1 ? 's' : ''}${mentioned.length ? ` on ${mentioned.map((a) => a.name).join(', ')}` : ' across your accounts'}.`;
+    if (top.length) fallback += ` Top items: ${top.map((s) => `${s.account ? s.account + ' - ' : ''}${s.summary}`).join(' · ')}`;
+    if (!sigRows.length && !callRows.length) fallback = `Nothing analysed in the last ${days} days${mentioned.length ? ` for ${mentioned.map((a) => a.name).join(', ')}` : ''} - try a longer window like "this month".`;
+
+    const llmAnswer = await llmPhrase(question, facts);
+    const items = (sigRows as Record<string, unknown>[]).slice(0, 6).map((s) => ({ id: s.id, type: s.type, summary: s.summary, account: s.account, account_id: s.account_id, project_id: s.project_id }));
+    res.json({ answer: llmAnswer || fallback, llm: !!llmAnswer, chart, items, window_days: days });
+  } catch (e) { next(e); }
+});
+
 // ── Provenance feedback ("this looks wrong" from the source-trace sidebar) ───
 // Stored in Postgres (system of record). If BRAIND_SLACK_WEBHOOK is set, a
 // content-light copy is forwarded to BraindAI's internal Slack: the item KIND,

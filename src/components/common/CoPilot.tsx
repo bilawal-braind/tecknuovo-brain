@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { Sparkles, X, ArrowUp, ArrowRight } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
 import { accountById, accountName } from '../../data/org'
+import { askBrain } from '../../data/api'
+import type { AskChart, AskItem } from '../../data/api'
+import { isLive } from '../../data/source'
 
-type Msg = { role: 'user' | 'ai'; text: string; accounts?: string[] }
+type Msg = { role: 'user' | 'ai'; text: string; accounts?: string[]; chart?: AskChart | null; items?: AskItem[]; thinking?: boolean }
 
 const SUGGESTIONS = [
   'What needs my attention today?',
@@ -36,9 +40,18 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
   const send = (text: string) => {
     const t = text.trim()
     if (!t) return
-    const a = answer(t)
-    setMsgs((m) => [...m, { role: 'user', text: t }, { role: 'ai', text: a.text, accounts: a.accounts }])
     setInput('')
+    if (!isLive) {
+      const a = answer(t)
+      setMsgs((m) => [...m, { role: 'user', text: t }, { role: 'ai', text: a.text, accounts: a.accounts }])
+      return
+    }
+    // LIVE: the real engine - scoped retrieval over Postgres, optional LLM phrasing,
+    // charts rendered right here in the thread.
+    setMsgs((m) => [...m, { role: 'user', text: t }, { role: 'ai', text: 'Reading the brain…', thinking: true }])
+    askBrain(t)
+      .then((r) => setMsgs((m) => [...m.slice(0, -1), { role: 'ai', text: r.answer, chart: r.chart, items: r.items }]))
+      .catch(() => setMsgs((m) => [...m.slice(0, -1), { role: 'ai', text: "I couldn't reach the brain just now - check the connection and try again." }]))
   }
 
   const openAccount = (id: string) => { onOpenAccount?.(id); setOpen(false) }
@@ -51,7 +64,7 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
             <div className="flex items-center gap-2">
               <span className="grid h-7 w-7 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><Sparkles size={15} /></span>
               <div className="leading-tight">
-                <div className="text-[13px] font-semibold">Second Brain co-pilot</div>
+                <div className="flex items-center gap-1.5 text-[13px] font-semibold">tnAI{isLive && <span className="rounded-full px-1.5 py-px text-[8.5px] font-bold uppercase tracking-wide text-white" style={{ background: 'var(--people)' }}>beta</span>}</div>
                 <div className="text-[10px] text-muted-2">Ask across your accounts</div>
               </div>
             </div>
@@ -62,7 +75,33 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
             {msgs.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className="max-w-[88%]">
-                  <div className={`rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed ${m.role === 'user' ? 'text-white' : 'bg-bg-2 text-text'}`} style={m.role === 'user' ? { background: 'var(--accent)' } : undefined}>{m.text}</div>
+                  <div className={`rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed ${m.role === 'user' ? 'text-white' : 'bg-bg-2 text-text'} ${m.thinking ? 'animate-pulse text-muted' : ''}`} style={m.role === 'user' ? { background: 'var(--accent)' } : undefined}>{m.text}</div>
+                  {m.chart && m.chart.data.length > 0 && (
+                    <div className="mt-1.5 rounded-xl border border-line bg-surface p-2.5">
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-2">{m.chart.title}</div>
+                      <div className="h-[130px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={m.chart.data} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                            <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} interval={0} angle={-20} height={30} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                            <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11 }} />
+                            <Bar dataKey="value" fill="var(--accent)" radius={[3, 3, 0, 0]} animationDuration={700} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                  {m.items && m.items.length > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      {m.items.slice(0, 4).map((it) => (
+                        <button key={it.id} onClick={() => it.account_id && openAccount(it.account_id)}
+                          className="flex w-full items-start gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-left text-[11px] leading-snug text-muted transition-colors hover:text-text">
+                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: it.type === 'opportunity' ? 'var(--opp)' : it.type === 'risk' ? 'var(--risk)' : it.type === 'people' ? 'var(--people)' : 'var(--update)' }} />
+                          <span className="min-w-0 flex-1">{it.account ? <b className="font-semibold text-text">{it.account} · </b> : null}{it.summary}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {m.accounts && m.accounts.filter((id) => accountById(id)).length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {m.accounts.filter((id) => accountById(id)).map((id) => (
@@ -92,7 +131,7 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
               />
               <button onClick={() => send(input)} className="grid h-7 w-7 place-items-center rounded-lg text-white" style={{ background: 'var(--accent)' }}><ArrowUp size={15} /></button>
             </div>
-            <p className="mt-1.5 text-center text-[9.5px] text-muted-2">Mock co-pilot · illustrative for the demo</p>
+            <p className="mt-1.5 text-center text-[9.5px] text-muted-2">{isLive ? 'tnAI beta · answers from your visible accounts only' : 'Mock co-pilot · illustrative for the demo'}</p>
           </div>
         </div>
       )}

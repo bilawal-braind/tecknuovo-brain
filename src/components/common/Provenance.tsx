@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Route, X, Send, Check, ArrowDown } from 'lucide-react'
+import { Route, X, Send, Check, ArrowDown, Video, StickyNote, Brain, Tag, Siren, ClipboardList, Users, FileText, ShieldAlert, Handshake, HeartPulse, MonitorCheck, Compass, UserCog, Gauge } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { Signal } from '../../data/types'
 import type { Call } from '../../data/calls'
 import { calls } from '../../data/calls'
@@ -27,8 +28,8 @@ const BOARDS = {
   hs: 'from HubSpot',
 }
 
-type Step = { color: string; icon: string; title: string; sub?: string; sub2?: string }
-const SCREEN_STEP: Step = { color: C.screen, icon: '📊', title: 'Displayed on your dashboard' }
+type Step = { color: string; icon: LucideIcon; title: string; sub?: string; sub2?: string }
+const SCREEN_STEP: Step = { color: C.screen, icon: MonitorCheck, title: 'Displayed on your dashboard' }
 
 function stepsForSignal(s: Signal): Step[] {
   const call = s.callId ? calls.find((c) => c.id === s.callId) : undefined
@@ -36,19 +37,19 @@ function stepsForSignal(s: Signal): Step[] {
   const acc = accountById(s.accountId)
   const steps: Step[] = [
     fromHubspot
-      ? { color: C.hubspot, icon: '🧡', title: 'Meeting notes logged in HubSpot', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, }
-      : { color: C.teams, icon: '🎥', title: 'Said on a transcribed Teams call', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, },
-    { color: C.brain, icon: '🧠', title: `Classified as ${s.type.toUpperCase()} · ${s.confidence}% confidence`, sub: s.riskCategory ? `category: ${s.riskCategory} (5×5 framework)` : s.type === 'opportunity' ? 'scored with the NETWORKS framework' : undefined, sub2: 'AI reads the words; fixed rules compute severity and routing' },
-    { color: C.brain, icon: '🏷️', title: `Filed to ${accountName(s.accountId) || 'no account yet'}`, sub: 'matched from the meeting title, attendees and content', sub2: s.mentions && s.mentions > 1 ? `raised in ${s.mentions} calls - tracked as ONE signal, not ${s.mentions}` : undefined },
+      ? { color: C.hubspot, icon: StickyNote, title: 'Meeting notes logged in HubSpot', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, }
+      : { color: C.teams, icon: Video, title: 'Said on a transcribed Teams call', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, },
+    { color: C.brain, icon: Brain, title: `Classified as ${s.type.toUpperCase()} · ${s.confidence}% confidence`, sub: s.riskCategory ? `category: ${s.riskCategory} (5×5 framework)` : s.type === 'opportunity' ? 'scored with the NETWORKS framework' : undefined, sub2: 'AI reads the words; fixed rules compute severity and routing' },
+    { color: C.brain, icon: Tag, title: `Filed to ${accountName(s.accountId) || 'no account yet'}`, sub: 'matched from the meeting title, attendees and content', sub2: s.mentions && s.mentions > 1 ? `raised in ${s.mentions} calls - tracked as ONE signal, not ${s.mentions}` : undefined },
   ]
-  if (s.escalate) steps.push({ color: C.brain, icon: '🚨', title: 'Escalated to leadership', sub: s.raisedBy ? `raised by ${s.raisedBy} - matched as a senior client voice in HubSpot` : 'passed the leadership escalation bar' })
+  if (s.escalate) steps.push({ color: C.brain, icon: Siren, title: 'Escalated to leadership', sub: s.raisedBy ? `raised by ${s.raisedBy} - matched as a senior client voice in HubSpot` : 'passed the leadership escalation bar' })
   if (acc) {
     const owners = [personName(acc.clientPartner), personName(acc.clientDirector)].filter(Boolean).join(' · ')
-    if (owners) steps.push({ color: C.monday, icon: '📋', title: `Account owners: ${owners}`, sub: BOARDS.alloc })
+    if (owners) steps.push({ color: C.monday, icon: ClipboardList, title: `Account owners: ${owners}`, sub: BOARDS.alloc })
   }
   if (s.projectId) {
     const p = projectById(s.projectId)
-    if (p) steps.push({ color: C.sharepoint, icon: '📄', title: `Project: ${p.name}`, sub: BOARDS.sp })
+    if (p) steps.push({ color: C.sharepoint, icon: FileText, title: `Project: ${p.name}`, sub: BOARDS.sp })
   }
   steps.push(SCREEN_STEP)
   return steps
@@ -58,12 +59,12 @@ function stepsForCall(c: Call): Step[] {
   const fromHubspot = c.source === 'hubspot'
   const steps: Step[] = [
     fromHubspot
-      ? { color: C.hubspot, icon: '🧡', title: 'Meeting logged in HubSpot', sub: 'notes added by the team - no transcript existed', }
-      : { color: C.teams, icon: '🎥', title: 'Transcribed Teams call', sub: `${fmt(c.date)}${c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min (measured)` : ''}`, sub2: 'transcription was switched on for this meeting' },
-    { color: C.brain, icon: '🧠', title: `Read by the Second Brain`, sub: `${c.signals.length} signal${c.signals.length !== 1 ? 's' : ''} extracted from what was said`, sub2: c.tone ? `whole-call tone: ${c.tone}` : undefined },
+      ? { color: C.hubspot, icon: StickyNote, title: 'Meeting logged in HubSpot', sub: 'notes added by the team - no transcript existed', }
+      : { color: C.teams, icon: Video, title: 'Transcribed Teams call', sub: `${fmt(c.date)}${c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min (measured)` : ''}`, sub2: 'transcription was switched on for this meeting' },
+    { color: C.brain, icon: Brain, title: `Read by the Second Brain`, sub: `${c.signals.length} signal${c.signals.length !== 1 ? 's' : ''} extracted from what was said`, sub2: c.tone ? `whole-call tone: ${c.tone}` : undefined },
     c.accountId
-      ? { color: C.brain, icon: '🏷️', title: `Linked to ${accountName(c.accountId)}`, sub: 'matched from the meeting title and attendees' }
-      : { color: C.brain, icon: '🧭', title: 'Team-level call (covers several clients)', sub: 'each signal inside it is filed to its own account' },
+      ? { color: C.brain, icon: Tag, title: `Linked to ${accountName(c.accountId)}`, sub: 'matched from the meeting title and attendees' }
+      : { color: C.brain, icon: Compass, title: 'Team-level call (covers several clients)', sub: 'each signal inside it is filed to its own account' },
     SCREEN_STEP,
   ]
   return steps
@@ -74,13 +75,13 @@ function stepsForAccount(accountId: string): Step[] {
   if (!acc) return []
   const owners = [personName(acc.clientPartner), personName(acc.clientDirector)].filter(Boolean).join(' · ')
   return [
-    { color: C.monday, icon: '📋', title: owners ? `Owners: ${owners}` : 'Owners not on the board yet', sub: BOARDS.alloc, sub2: 'this board also decides who sees this account at login' },
-    { color: C.monday, icon: '👥', title: `${acc.consultantCount ?? 0} consultant${(acc.consultantCount ?? 0) !== 1 ? 's' : ''} on site`, sub: BOARDS.assoc },
-    { color: C.sharepoint, icon: '📄', title: 'Projects, phases & RAG trend', sub: BOARDS.sp, sub2: 'no weekly report filed = no project shown' },
-    { color: C.monday, icon: '🛡️', title: 'Risk register items', sub: BOARDS.risk },
-    { color: C.hubspot, icon: '🧡', title: 'Stakeholders & open pipeline', sub: BOARDS.hs },
-    { color: C.teams, icon: '🎥', title: 'Calls & signals', sub: 'from transcribed Teams calls (and HubSpot notes)' },
-    { color: C.brain, icon: '❤️', title: `Health: ${acc.health.toUpperCase()}`, sub: 'computed from open signals + high-impact register items', sub2: acc.healthReason || undefined },
+    { color: C.monday, icon: ClipboardList, title: owners ? `Owners: ${owners}` : 'Owners not on the board yet', sub: BOARDS.alloc, sub2: 'this board also decides who sees this account at login' },
+    { color: C.monday, icon: Users, title: `${acc.consultantCount ?? 0} consultant${(acc.consultantCount ?? 0) !== 1 ? 's' : ''} on site`, sub: BOARDS.assoc },
+    { color: C.sharepoint, icon: FileText, title: 'Projects, phases & RAG trend', sub: BOARDS.sp, sub2: 'no weekly report filed = no project shown' },
+    { color: C.monday, icon: ShieldAlert, title: 'Risk register items', sub: BOARDS.risk },
+    { color: C.hubspot, icon: Handshake, title: 'Stakeholders & open pipeline', sub: BOARDS.hs },
+    { color: C.teams, icon: Video, title: 'Calls & signals', sub: 'from transcribed Teams calls (and HubSpot notes)' },
+    { color: C.brain, icon: HeartPulse, title: `Health: ${acc.health.toUpperCase()}`, sub: 'computed from open signals + high-impact register items', sub2: acc.healthReason || undefined },
     SCREEN_STEP,
   ]
 }
@@ -89,10 +90,10 @@ function stepsForProject(projectId: string): Step[] {
   const p = projectById(projectId)
   if (!p) return []
   return [
-    { color: C.sharepoint, icon: '📄', title: `Named in the weekly reports`, sub: BOARDS.sp, sub2: 'a project exists on the dashboard because a weekly report names it' },
-    { color: C.sharepoint, icon: '🧑‍💼', title: p.deliveryManager ? `Delivery Manager: ${personName(p.deliveryManager)}` : 'No DM named yet', sub: 'named inside that weekly report' },
-    { color: C.sharepoint, icon: '🚦', title: `Current RAG: ${(p.rag || 'unknown').toUpperCase()} · phase: ${p.phase || '-'}`, sub: 'from the latest weekly report · the trend graph shows the history' },
-    { color: C.teams, icon: '🎥', title: 'Signals on this project', sub: 'from transcribed calls matched to it' },
+    { color: C.sharepoint, icon: FileText, title: `Named in the weekly reports`, sub: BOARDS.sp, sub2: 'a project exists on the dashboard because a weekly report names it' },
+    { color: C.sharepoint, icon: UserCog, title: p.deliveryManager ? `Delivery Manager: ${personName(p.deliveryManager)}` : 'No DM named yet', sub: 'named inside that weekly report' },
+    { color: C.sharepoint, icon: Gauge, title: `Current RAG: ${(p.rag || 'unknown').toUpperCase()} · phase: ${p.phase || '-'}`, sub: 'from the latest weekly report · the trend graph shows the history' },
+    { color: C.teams, icon: Video, title: 'Signals on this project', sub: 'from transcribed calls matched to it' },
     SCREEN_STEP,
   ]
 }
@@ -101,32 +102,32 @@ const PRESETS: Record<string, { label: string; steps: Step[] }> = {
   register: {
     label: 'Risk register',
     steps: [
-      { color: C.monday, icon: '🛡️', title: 'Maintained by your team in Monday', sub: BOARDS.risk },
-      { color: C.brain, icon: '🚨', title: 'Escalation timing applied', sub: 'Level 2 items reach Katie after 1 day · Level 1 after 5 days', sub2: 'the item age comes from the board itself' },
+      { color: C.monday, icon: ShieldAlert, title: 'Maintained by your team in Monday', sub: BOARDS.risk },
+      { color: C.brain, icon: Siren, title: 'Escalation timing applied', sub: 'Level 2 items reach Katie after 1 day · Level 1 after 5 days', sub2: 'the item age comes from the board itself' },
       SCREEN_STEP,
     ],
   },
   report: {
     label: 'Weekly report',
     steps: [
-      { color: C.sharepoint, icon: '📄', title: 'Filed by your delivery team', sub: BOARDS.sp },
-      { color: C.brain, icon: '🧠', title: 'Read automatically by the brain', sub: 'projects, phases, RAG, highlights and risks are lifted from the document' },
+      { color: C.sharepoint, icon: FileText, title: 'Filed by your delivery team', sub: BOARDS.sp },
+      { color: C.brain, icon: Brain, title: 'Read automatically by the brain', sub: 'projects, phases, RAG, highlights and risks are lifted from the document' },
       SCREEN_STEP,
     ],
   },
   crm: {
     label: 'CRM data',
     steps: [
-      { color: C.hubspot, icon: '🧡', title: 'Maintained by your team in HubSpot', sub: BOARDS.hs, sub2: 'stakeholders (with buying roles) and the deal pipeline' },
-      { color: C.brain, icon: '🧠', title: 'Used for context, never edited', sub: 'buying power feeds opportunity scoring and leadership escalations', sub2: 'the ONLY write ever: a deal is created after a human approves an opportunity' },
+      { color: C.hubspot, icon: Handshake, title: 'Maintained by your team in HubSpot', sub: BOARDS.hs, sub2: 'stakeholders (with buying roles) and the deal pipeline' },
+      { color: C.brain, icon: Brain, title: 'Used for context, never edited', sub: 'buying power feeds opportunity scoring and leadership escalations', sub2: 'the ONLY write ever: a deal is created after a human approves an opportunity' },
       SCREEN_STEP,
     ],
   },
   person: {
     label: 'Person',
     steps: [
-      { color: C.teams, icon: '🎥', title: 'Activity from transcribed calls', sub: 'calls attended, time and talk-share come from the transcripts themselves' },
-      { color: C.monday, icon: '📋', title: 'Team from the Monday boards', sub: `${BOARDS.alloc}`, sub2: `consultants: ${BOARDS.assoc}` },
+      { color: C.teams, icon: Video, title: 'Activity from transcribed calls', sub: 'calls attended, time and talk-share come from the transcripts themselves' },
+      { color: C.monday, icon: ClipboardList, title: 'Team from the Monday boards', sub: `${BOARDS.alloc}`, sub2: `consultants: ${BOARDS.assoc}` },
       SCREEN_STEP,
     ],
   },
@@ -166,9 +167,9 @@ export function ProvenanceButton(props: { signal?: Signal; call?: Call; accountI
                 {steps.map((st, i) => (
                   <div key={i}>
                     <div className="flex gap-3 rounded-xl border px-3 py-2.5" style={{ borderColor: `color-mix(in srgb, ${st.color} 30%, var(--line))`, background: `color-mix(in srgb, ${st.color} 5%, var(--surface))` }}>
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[14px]"
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
                         style={{ background: `color-mix(in srgb, ${st.color} 12%, var(--surface))`, boxShadow: `inset 0 0 0 1.5px ${st.color}` }}>
-                        {st.icon}
+                        <st.icon size={15} style={{ color: st.color }} />
                       </span>
                       <div className="min-w-0 pt-0.5">
                         <div className="text-[12.5px] font-semibold leading-snug">{st.title}</div>
