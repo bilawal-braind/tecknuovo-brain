@@ -20,11 +20,11 @@ const C = {
   teams: '#1F62C4', monday: '#E68A00', sharepoint: '#1F7A3A', hubspot: '#D64545', brain: '#0e9f93', screen: '#7C5CFF',
 }
 const BOARDS = {
-  alloc: 'Live Projects & Allocations · board 1599188575 · synced weekdays 07:10',
-  assoc: 'Assigned Associates 2.2 Live · board 1118885420 · synced weekdays 07:00',
-  risk: 'Risks, Issues & Incidents · board 1583443098 · synced weekdays 07:00',
-  sp: '"Generated Reports" library in SharePoint · synced Mondays 08:00',
-  hs: 'HubSpot (read-only) · synced weekdays 07:30',
+  alloc: 'from the Live Projects & Allocations board in Monday',
+  assoc: 'from the Assigned Associates board in Monday',
+  risk: 'from the Risks, Issues & Incidents board in Monday',
+  sp: 'from the weekly reports in SharePoint',
+  hs: 'from HubSpot',
 }
 
 type Step = { color: string; icon: string; title: string; sub?: string; sub2?: string }
@@ -36,8 +36,8 @@ function stepsForSignal(s: Signal): Step[] {
   const acc = accountById(s.accountId)
   const steps: Step[] = [
     fromHubspot
-      ? { color: C.hubspot, icon: '🧡', title: 'Meeting notes logged in HubSpot', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, sub2: 'picked up within 30 minutes of the notes being added' }
-      : { color: C.teams, icon: '🎥', title: 'Said on a transcribed Teams call', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, sub2: 'the watcher collects new transcripts every 30 minutes' },
+      ? { color: C.hubspot, icon: '🧡', title: 'Meeting notes logged in HubSpot', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, }
+      : { color: C.teams, icon: '🎥', title: 'Said on a transcribed Teams call', sub: `${s.sourceCall.title} · ${fmt(s.sourceCall.date)}`, },
     { color: C.brain, icon: '🧠', title: `Classified as ${s.type.toUpperCase()} · ${s.confidence}% confidence`, sub: s.riskCategory ? `category: ${s.riskCategory} (5×5 framework)` : s.type === 'opportunity' ? 'scored with the NETWORKS framework' : undefined, sub2: 'AI reads the words; fixed rules compute severity and routing' },
     { color: C.brain, icon: '🏷️', title: `Filed to ${accountName(s.accountId) || 'no account yet'}`, sub: 'matched from the meeting title, attendees and content', sub2: s.mentions && s.mentions > 1 ? `raised in ${s.mentions} calls - tracked as ONE signal, not ${s.mentions}` : undefined },
   ]
@@ -58,8 +58,8 @@ function stepsForCall(c: Call): Step[] {
   const fromHubspot = c.source === 'hubspot'
   const steps: Step[] = [
     fromHubspot
-      ? { color: C.hubspot, icon: '🧡', title: 'Meeting logged in HubSpot', sub: 'notes added by the team - no transcript existed', sub2: 'picked up within 30 minutes of the notes being added' }
-      : { color: C.teams, icon: '🎥', title: 'Transcribed Teams call', sub: `${fmt(c.date)}${c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min (measured)` : ''}`, sub2: 'transcription was ON - the watcher collects new transcripts every 30 minutes' },
+      ? { color: C.hubspot, icon: '🧡', title: 'Meeting logged in HubSpot', sub: 'notes added by the team - no transcript existed', }
+      : { color: C.teams, icon: '🎥', title: 'Transcribed Teams call', sub: `${fmt(c.date)}${c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min (measured)` : ''}`, sub2: 'transcription was switched on for this meeting' },
     { color: C.brain, icon: '🧠', title: `Read by the Second Brain`, sub: `${c.signals.length} signal${c.signals.length !== 1 ? 's' : ''} extracted from what was said`, sub2: c.tone ? `whole-call tone: ${c.tone}` : undefined },
     c.accountId
       ? { color: C.brain, icon: '🏷️', title: `Linked to ${accountName(c.accountId)}`, sub: 'matched from the meeting title and attendees' }
