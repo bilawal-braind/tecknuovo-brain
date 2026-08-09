@@ -751,7 +751,11 @@ router.post('/ask', async (req, res, next) => {
     if (wantsCalls) {
       const byDay = new Map<string, number>();
       for (const c of callRows as { d: string }[]) { const k = String(c.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
-      if (byDay.size > 1) chart = { kind: 'bar', title: `Calls per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
+      if (byDay.size > 1) chart = { kind: 'line', title: `Calls per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
+    } else if (/trend|over time|per day|daily|momentum/.test(qs) && sigRows.length) {
+      const byDay = new Map<string, number>();
+      for (const s2 of sigRows as { d: string }[]) { const k = String(s2.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
+      if (byDay.size > 1) chart = { kind: 'line', title: `Signals per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
     } else if (sigRows.length) {
       const byAcc = new Map<string, number>();
       for (const s of sigRows as { account: string | null }[]) if (s.account) byAcc.set(s.account, (byAcc.get(s.account) || 0) + 1);

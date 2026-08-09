@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, ShieldAlert } from 'lucide-react'
+import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, ShieldAlert, BarChart3 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals } from '../../data/signals'
 import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
@@ -78,6 +78,10 @@ type Story = { account: string; headline: string; story: string }
 
 export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [days, setDays] = useState<Days>(7)
+  // Katie's rule (colleague, 8 Aug): 3-5 big things on screen, everything else
+  // one click away - never a wall of cards and charts.
+  const [showAllCards, setShowAllCards] = useState(false)
+  const [showAnalytics, setShowAnalytics] = useState(false)
   const [stories, setStories] = useState<Story[]>([])
   useEffect(() => {
     let on = true
@@ -231,7 +235,12 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <button onClick={() => setShowAnalytics((v) => !v)} className="mt-4 flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+        <BarChart3 size={14} /> {showAnalytics ? 'Hide the analytics' : 'Show the analytics'} <span className="font-normal text-muted-2">signal activity · risk mix · portfolio health</span>
+        <ChevronDown size={14} className={`ml-auto transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
+      </button>
+      {showAnalytics && (
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="glass rounded-2xl p-5">
           <span className="flex items-center gap-1.5"><div className="eyebrow">Signal activity · recent weeks</div><InfoHint text="What the brain pulled out of the calls each week, split by signal type. The mix matters more than the height: red growing faster than green is the trend to watch." /></span>
           <div className="mt-3 h-[150px]">
@@ -255,6 +264,7 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
           data={(['red', 'amber', 'green'] as const).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
           palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
       </div>
+      )}
 
       {/* ── The week, account by account ── */}
       <div className="mt-6">
@@ -267,9 +277,16 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
             <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing accumulated in this period.
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-            {d.cards.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
-          </div>
+          <>
+            <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+              {(showAllCards ? d.cards : d.cards.slice(0, 4)).map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
+            </div>
+            {d.cards.length > 4 && (
+              <button onClick={() => setShowAllCards((v) => !v)} className="mt-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+                {showAllCards ? 'Show fewer accounts' : `Show ${d.cards.length - 4} more account${d.cards.length - 4 !== 1 ? 's' : ''}`}
+              </button>
+            )}
+          </>
         )}
       </div>
 

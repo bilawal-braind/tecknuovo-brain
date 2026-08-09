@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, X, ArrowUp, ArrowRight } from 'lucide-react'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, AreaChart, Area } from 'recharts'
 import { accountById, accountName } from '../../data/org'
 import { askBrain } from '../../data/api'
 import type { AskChart, AskItem } from '../../data/api'
@@ -79,14 +79,29 @@ export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => voi
                   {m.chart && m.chart.data.length > 0 && (
                     <div className="mt-1.5 rounded-xl border border-line bg-surface p-2.5">
                       <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-2">{m.chart.title}</div>
-                      <div className="h-[130px]">
+                      <div className="h-[140px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={m.chart.data} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                            <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} interval={0} angle={-20} height={30} />
-                            <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11 }} />
-                            <Bar dataKey="value" fill="var(--accent)" radius={[3, 3, 0, 0]} animationDuration={700} />
-                          </BarChart>
+                          {m.chart.kind === 'line' ? (
+                            <AreaChart data={m.chart.data} margin={{ top: 6, right: 6, left: -28, bottom: 0 }}>
+                              <defs>
+                                <linearGradient id="tnai-fill" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+                                </linearGradient>
+                              </defs>
+                              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11 }} />
+                              <Area type="monotone" dataKey="value" stroke="var(--accent)" strokeWidth={2.5} fill="url(#tnai-fill)" dot={{ r: 3, fill: 'var(--accent)' }} animationDuration={900} animationEasing="ease-out" />
+                            </AreaChart>
+                          ) : (
+                            <BarChart data={m.chart.data} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} interval={0} angle={-20} height={30} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: 'var(--bg-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11 }} />
+                              <Bar dataKey="value" fill="var(--accent)" radius={[4, 4, 0, 0]} animationDuration={700} />
+                            </BarChart>
+                          )}
                         </ResponsiveContainer>
                       </div>
                     </div>
