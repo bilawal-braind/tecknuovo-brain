@@ -20,10 +20,10 @@ const C = {
   teams: '#1F62C4', monday: '#E68A00', sharepoint: '#1F7A3A', hubspot: '#D64545', brain: '#0e9f93', screen: '#7C5CFF',
 }
 const BOARDS = {
-  alloc: 'from the Live Projects & Allocations board in Monday',
-  assoc: 'from the Assigned Associates board in Monday',
-  risk: 'from the Risks, Issues & Incidents board in Monday',
-  sp: 'from the weekly reports in SharePoint',
+  alloc: 'from the Live Projects & Allocations board in Monday · board 1599188575',
+  assoc: 'from the Assigned Associates board in Monday · board 1118885420',
+  risk: 'from the Risks, Issues & Incidents board in Monday · board 1583443098',
+  sp: 'from the weekly reports in SharePoint ("Generated Reports")',
   hs: 'from HubSpot',
 }
 
