@@ -34,14 +34,15 @@ function parsePounds(v?: string): number {
 }
 const gbp = (n: number) => (n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : n >= 1000 ? `£${Math.round(n / 1000)}k` : `£${n}`)
 
-// The MD escalation gate (agreed with the client, 21 Jul): Critical band always;
-// a risk voiced by a senior client stakeholder (the pipeline's deterministic
-// escalate flag, from HubSpot seniority); or a High left unresolved for 20+ days.
-// Plain fresh Highs and everything below stay on the Delivery/Partner dashboards.
+// The MD escalation gate, tightened (10 Aug, colleague + Katie's own feedback:
+// "I don't open it because it gives me a heart attack"): NEEDS YOU is reserved
+// for a Critical or a risk voiced by a senior client stakeholder. A High that
+// has sat unresolved 20+ days is real but quieter - it goes to "worth a look",
+// never a red alarm on every card.
 const needsHer = (s: Signal) =>
   s.type === 'risk' &&
   s.status !== 'actioned' && s.status !== 'dismissed' &&
-  (s.severity === 'critical' || s.escalate === true || (s.severity === 'high' && ageDays(s.createdAt) >= 20))
+  (s.severity === 'critical' || s.escalate === true)
 
 // Register escalations to the MD (Chloe, 22 Jul): a Level 2 item reaches Katie after
 // 1 open day, a Level 1 after 5. Interim rule until the new RAID methodology lands -
@@ -276,18 +277,64 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
           <div className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-[13px] text-muted">
             <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing accumulated in this period.
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-              {(showAllCards ? d.cards : d.cards.slice(0, 4)).map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
-            </div>
-            {d.cards.length > 4 && (
-              <button onClick={() => setShowAllCards((v) => !v)} className="mt-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-                {showAllCards ? 'Show fewer accounts' : `Show ${d.cards.length - 4} more account${d.cards.length - 4 !== 1 ? 's' : ''}`}
-              </button>
-            )}
-          </>
-        )}
+        ) : (() => {
+          // Katie's order (colleague, 8 Aug): what's going WELL first, then the
+          // few things that genuinely need her, everything else one click away.
+          const attention = d.cards.filter((c) => c.gated)
+          const calm = d.cards.filter((c) => !c.gated)
+          const goingWell = calm.filter((c) => c.op.length > 0 && c.critical === 0 && c.op.length >= c.rk.length)
+          const watch = calm.filter((c) => !goingWell.includes(c))
+          return (
+            <>
+              {goingWell.length > 0 && (
+                <div className="mb-4 rounded-2xl border border-line bg-surface p-4">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={15} style={{ color: 'var(--opp)' }} />
+                    <span className="text-[13px] font-semibold">Going well</span>
+                    <span className="text-[11px] text-muted-2">{goingWell.length} account{goingWell.length !== 1 ? 's' : ''} with momentum</span>
+                  </div>
+                  <div className="mt-2.5 space-y-1.5">
+                    {goingWell.slice(0, 5).map((c) => {
+                      const line = storyFor(c.accountId)?.headline || `${c.op.length} opportunit${c.op.length !== 1 ? 'ies' : 'y'} surfaced${c.value ? ` (~${gbp(c.value)})` : ''} this period.`
+                      return (
+                        <button key={c.accountId} onClick={() => onOpenAccount(c.accountId)} className="group flex w-full items-start gap-2.5 rounded-xl bg-bg-2 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--line)]">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--opp)' }} />
+                          <span className="min-w-0 flex-1 text-[12.5px] leading-snug"><b className="font-semibold">{accountName(c.accountId)}</b> <span className="text-muted">· {line}</span></span>
+                          <ArrowRight size={13} className="mt-1 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {attention.length > 0 && (
+                <>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[13px] font-semibold">Needs your attention</span>
+                    <span className="text-[11px] text-muted-2">{attention.length} account{attention.length !== 1 ? 's' : ''} · critical or raised by a senior client voice</span>
+                  </div>
+                  <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+                    {attention.slice(0, 4).map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
+                  </div>
+                </>
+              )}
+
+              {watch.length > 0 && (
+                <>
+                  <button onClick={() => setShowAllCards((v) => !v)} className="mt-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+                    {showAllCards ? 'Hide the watching list' : `Worth a look when you have time · ${watch.length} account${watch.length !== 1 ? 's' : ''}`}
+                  </button>
+                  {showAllCards && (
+                    <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+                      {watch.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       <RadarSection computed={d.warnings} onOpenAccount={onOpenAccount} />
