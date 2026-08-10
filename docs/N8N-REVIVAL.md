@@ -35,9 +35,11 @@ In any Postgres node (or Bilawal runs it from the VM):
 (Older migrations are already applied.)
 
 ## 3. Import the updated workflows — IN PLACE
-Open each existing workflow → ⋯ menu → **Import from File** → Save. Import-in-
-place keeps the workflow IDs (delete-and-reimport breaks the Watcher→Pipeline
-trigger link).
+**Safety net first:** before importing over a workflow, hit ⋯ → **Duplicate** on
+it — that snapshot is your instant rollback if anything looks wrong.
+Then: open the existing workflow → ⋯ menu → **Import from File** → Save.
+Import-in-place keeps the workflow IDs (delete-and-reimport breaks the
+Watcher→Pipeline trigger link).
 1. `n8n/1-main-pipeline.json` — whole-call tone + call type; **fixes leadership
    visibility being dropped**; stores real duration; **NEW: multi-client call
    hierarchy** — internal stand-ups/wash-ups carry NO account themselves, every
