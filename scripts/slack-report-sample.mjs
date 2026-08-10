@@ -7,7 +7,11 @@
 //
 // DAYS widens the window (default 7; use 30 while ingestion is still paused).
 // Posts to BRAIND_SLACK_WEBHOOK. No n8n needed - same SQL, same builder.
-import pg from 'pg'
+// pg is resolved from the api package (run this from the api/ directory)
+import { createRequire } from 'module'
+import path from 'path'
+const require = createRequire(path.join(process.cwd(), 'package.json'))
+const pg = require('pg')
 
 const DAYS = Math.min(Math.max(Number(process.env.DAYS) || 7, 1), 90)
 const HOOK = process.env.BRAIND_SLACK_WEBHOOK

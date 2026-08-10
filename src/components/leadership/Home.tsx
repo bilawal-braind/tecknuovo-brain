@@ -634,8 +634,6 @@ type CardData = {
 function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardData; story?: Story; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [open, setOpen] = useState(false)
   const [convo, setConvo] = useState(false)
-  const acc = accounts.find((a) => a.id === card.accountId)
-  const accent = card.gated ? 'var(--risk)' : card.rk.length ? SEV_COLOR[card.worstRisk!.severity] : 'var(--opp)'
 
   const headline = story?.headline
     || `${card.rk.length ? `${card.rk.length} risk${card.rk.length !== 1 ? 's' : ''}` : ''}${card.rk.length && card.op.length ? ' and ' : ''}${card.op.length ? `${card.op.length} opportunit${card.op.length !== 1 ? 'ies' : 'y'}` : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period${card.cats.length ? `, centred on ${card.cats.join(' and ').toLowerCase()}` : ''}.`
@@ -655,10 +653,9 @@ function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardD
   }))
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: `3px solid color-mix(in srgb, ${accent} 55%, transparent)` }}>
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface">
       <button onClick={() => setOpen((o) => !o)} className="min-h-[124px] flex-1 p-4 text-left transition-colors hover:bg-bg-2">
         <div className="flex flex-wrap items-center gap-2">
-          {acc && <span className="h-2 w-2 rounded-full" style={{ background: HEALTH_COLOR[acc.health] }} />}
           <span className="text-[15px] font-bold">{accountName(card.accountId)}</span>
           {card.gated && <Chip color="var(--risk)">needs you</Chip>}
           {card.critical > 0 && <Chip color="var(--risk)">{card.critical} critical</Chip>}
@@ -852,7 +849,7 @@ function RadarSection({ computed, onOpenAccount }: { computed: { text: string; a
 function WatchCard({ text, moments, accountId, onOpenAccount }: { text: ReactNode; moments: Moment[]; accountId?: string; onOpenAccount: (id: string) => void }) {
   const [convo, setConvo] = useState(false)
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ borderTop: '3px solid var(--people)' }}>
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface">
       <div className="flex-1 p-4">
         <p className="text-[13px] leading-relaxed text-text">{text}</p>
       </div>
