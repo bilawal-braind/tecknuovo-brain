@@ -7,13 +7,13 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 2
+              "minutesInterval": 5
             }
           ]
         }
       },
       "id": "sched1",
-      "name": "Every 2 min (sweep)",
+      "name": "Every 5 min (sweep)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -162,7 +162,10 @@
           "id": "W7KKkeJLvjngHgZA",
           "name": "Azure Open AI account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -193,7 +196,10 @@
       "position": [
         7680,
         2704
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -274,7 +280,7 @@
     }
   ],
   "connections": {
-    "Every 2 min (sweep)": {
+    "Every 5 min (sweep)": {
       "main": [
         [
           {
