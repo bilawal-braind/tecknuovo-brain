@@ -138,13 +138,14 @@ const insertSQL =
 
 const inv = []
 let inserted = 0, dup = 0, empty = 0, errored = 0
+let blocked403 = 0
 for (const p of people) {
   let found = 0
   for (const [cs, ce] of chunks(START, END)) {
     let url = `https://graph.microsoft.com/beta/users/${p.guid}/onlineMeetings/getAllTranscripts(meetingOrganizerUserId='${p.guid}',startDateTime=${cs},endDateTime=${ce})`
     while (url) {
       let page
-      try { page = await graph(url) } catch (e) { if (e.status === 403 || e.status === 404) { url = ''; break } throw e }
+      try { page = await graph(url) } catch (e) { if (e.status === 403) { blocked403++; url = ''; break } if (e.status === 404) { url = ''; break } throw e }
       const vals = Array.isArray(page.value) ? page.value : []
       for (const t of vals) {
         found++
@@ -199,5 +200,7 @@ console.log(`  ${DRY ? 'WOULD INGEST (new)' : 'INSERTED (new)'}   : ${inserted}`
 console.log(`  already in DB     : ${dup}`)
 console.log(`  empty transcript  : ${empty}`)
 console.log(`  content errors    : ${errored}`)
+console.log(`  people blocked 403: ${blocked403} of ${people.length}`)
+if (blocked403 === people.length) console.log('\n*** EVERY person is still blocked by the tenant policy (GraphAccessToTranscriptsDisabled). ***\n*** The toggle has not propagated yet - re-run later. 0 found means BLOCKED, not empty. ***')
 console.log(DRY ? '\nDRY RUN — nothing written. Re-run with DRY_RUN=0 to ingest.\n' : '\nDONE — rows are in inbox (status=pending). Workflow 1 will process them.\n')
 await db.end()
