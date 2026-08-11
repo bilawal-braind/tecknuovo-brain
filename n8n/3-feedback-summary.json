@@ -1,5 +1,5 @@
 {
-  "name": "TN Brain \u00b7 3 \u00b7 Feedback Summary (learning loop)",
+  "name": "TN Brain · 3 · Feedback Summary (learning loop)",
   "nodes": [
     {
       "parameters": {
@@ -95,8 +95,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const e=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst summary=($json.text||$json.response||$json.output||'').trim();\nconst accId=$('Build prompt').item.json.account_id;\nif(!summary||!accId){return [];}\nconst sql=\"UPDATE accounts SET feedback_summary='\"+e(summary)+\"' WHERE id='\"+e(accId)+\"';\";\nreturn [{json:{sql,account_id:accId,chars:summary.length}}];",
-        "mode": "runOnceForEachItem"
+        "jsCode": "// All-items mode: one UPDATE per usable summary; skipping items is legal here.\nconst e=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst prompts=$('Build prompt').all();\nconst out=[];\nfor (let i=0;i<items.length;i++){\n  const j=items[i].json||{};\n  const raw=j.text??j.response??j.output??'';\n  const summary=(typeof raw==='string'?raw:JSON.stringify(raw)).trim();\n  const accId=prompts[i]?.json?.account_id;\n  if(!summary||!accId) continue;\n  out.push({json:{sql:\"UPDATE accounts SET feedback_summary='\"+e(summary)+\"' WHERE id='\"+e(accId)+\"';\",account_id:accId,chars:summary.length}});\n}\nreturn out;",
+        "mode": "runOnceForAllItems"
       },
       "id": "fb_build",
       "name": "Build save SQL",
@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "content": "## Feedback Summary \u2014 the learning loop\n06:30 weekdays: gather all human corrections per account \u2192 ask the AI to distil 3-5 lessons \u2192 save to `accounts.feedback_summary`.\n\nThe **Main Pipeline reads this** and adds it to the classifier prompt, so the brain stops repeating corrected mistakes. Not model retraining \u2014 in-context learning.",
+        "content": "## Feedback Summary — the learning loop\n06:30 weekdays: gather all human corrections per account → ask the AI to distil 3-5 lessons → save to `accounts.feedback_summary`.\n\nThe **Main Pipeline reads this** and adds it to the classifier prompt, so the brain stops repeating corrected mistakes. Not model retraining — in-context learning.",
         "height": 220,
         "width": 420
       },
