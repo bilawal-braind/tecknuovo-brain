@@ -166,10 +166,10 @@ export function ProvenanceButton(props: { signal?: Signal; call?: Call; accountI
               <div className="relative">
                 {steps.map((st, i) => (
                   <div key={i}>
-                    <div className="flex gap-3 rounded-xl border px-3 py-2.5" style={{ borderColor: `color-mix(in srgb, ${st.color} 30%, var(--line))`, background: `color-mix(in srgb, ${st.color} 5%, var(--surface))` }}>
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
-                        style={{ background: `color-mix(in srgb, ${st.color} 12%, var(--surface))`, boxShadow: `inset 0 0 0 1.5px ${st.color}` }}>
-                        <st.icon size={15} style={{ color: st.color }} />
+                    {/* neutral pills - no colour coding (Cormac's screenshot, 11 Aug) */}
+                    <div className="flex gap-3 rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ background: 'var(--bg-2)' }}>
+                        <st.icon size={15} className="text-muted" />
                       </span>
                       <div className="min-w-0 pt-0.5">
                         <div className="text-[12.5px] font-semibold leading-snug">{st.title}</div>

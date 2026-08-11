@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sparkles, X, ArrowUp, ArrowRight } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, AreaChart, Area } from 'recharts'
 import { accountById, accountName } from '../../data/org'
@@ -32,6 +32,12 @@ function answer(q: string): { text: string; accounts: string[] } {
 
 export function CoPilot({ onOpenAccount }: { onOpenAccount?: (id: string) => void }) {
   const [open, setOpen] = useState(false)
+  // Header "Ask tnAI" buttons anywhere in the app open the copilot via this event.
+  useEffect(() => {
+    const h = () => setOpen(true)
+    window.addEventListener('tn-open-copilot', h)
+    return () => window.removeEventListener('tn-open-copilot', h)
+  }, [])
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([
     { role: 'ai', text: "Hi - I'm your Second Brain. Ask me anything about your accounts, signals or calls." },

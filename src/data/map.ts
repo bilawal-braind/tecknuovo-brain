@@ -74,6 +74,10 @@ export const mapAccount = (a: ApiAccount): Account => ({
   coverage: 'full',
   health: asHealth(a.health),
   trend: 'steady',
+  // Live rows carry NAMES (from the Monday boards), not person ids - views that
+  // display owners resolve via personName() first and fall back to the raw string.
+  clientPartner: a.client_partner_name ?? undefined,
+  clientDirector: a.client_director_name ?? undefined,
   sowValue: 0, // aggregated from projects in bootstrap
   budgetBurnPct: num(a.budget_burn_pct),
   headroom: num(a.headroom),

@@ -86,6 +86,25 @@ body {
   color: var(--muted-2);
 }
 
+/* Revenue-OS type scale: hierarchy from spacing + type, not colour.
+   Same font (Inter) as the rest of the app - the calm comes from the scale. */
+.display-title {
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.metric-num {
+  font-size: 40px;
+  line-height: 42px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
 /* AI summary "live" sheen - a teal light sweeping across the top edge */
 @keyframes ai-sheen {
   from { background-position: 200% 0; }

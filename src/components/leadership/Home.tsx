@@ -1,30 +1,46 @@
-// Katie's home: the week zoomed out, for a MANAGING DIRECTOR.
-// tnAI brief (detailed prose, parallel columns, live account links) -> numbers ->
-// charts -> "The week, account by account": one macro card per active account.
-// Card face = generated headline. Expand = the in-depth tnAI story (wf15).
-// "View the conversations" = a popup where the week's moments flow in as an
-// animated chain of transcript snippets. No individual signal rows, ever.
+// Katie's brief — the managing director's one page.
+//
+// Built to the 11 Aug call (source of truth) with the Revenue OS as the visual
+// benchmark. Everything binds to REAL pipeline fields (see data/map.ts): account
+// health, escalations, opportunities, calls, confidence, provenance. The one
+// number Katie opens with — "at risk" — uses HER escalation lens, not delivery's:
+// per the client's risk matrix (Chloe's methodology, ext channel 21 Jul) and
+// Meesha's feedback, only a Critical or a senior-client-voice risk crosses her
+// line. Register items reach her separately via the Level 1/2 day rules (wf2).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, AlertTriangle, TrendingUp, Radio, Building2, ChevronDown, Eye, CheckCircle2, ArrowRight, Video, MessagesSquare, X, Activity, ShieldAlert, BarChart3 } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
+import {
+  Search, Sparkles, Building2, Target, TrendingUp, TrendingDown, Minus, Radio,
+  ArrowRight, ChevronDown, CheckCircle2, Eye, X, StickyNote,
+} from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals } from '../../data/signals'
-import { calls, snippetAround, transcriptWithMoments } from '../../data/calls'
-import type { Call, TranscriptLine } from '../../data/calls'
-import { accounts, accountName } from '../../data/org'
-import { registerRisks } from '../../data/crm'
+import { calls, callForSignal } from '../../data/calls'
+import { accounts, accountName, pods, personName, podName } from '../../data/org'
 import { weeklyTrend } from '../../data/trends'
-import { fetchBrief, generateBrief, fetchTranscript } from '../../data/api'
+import { fetchBrief, generateBrief, fetchMe } from '../../data/api'
 import type { ApiBrief } from '../../data/api'
-import type { Signal, Severity } from '../../data/types'
+import type { Signal, Severity, Trend, Account, Health } from '../../data/types'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
-import { fmt } from '../common/SignalLayer'
-import { InfoHint } from '../common/InfoHint'
+import { BarChart3 } from 'lucide-react'
 
 type Days = 7 | 14 | 30
+type SortBy = 'impact' | 'newest'
+type Lens = 'needs-you' | 'watch' | 'on-track'
 const DAY = 86_400_000
+const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
+const LENS_RANK: Record<Lens, number> = { 'needs-you': 3, watch: 2, 'on-track': 1 }
+const LENS_DOT: Record<Lens, string> = { 'needs-you': 'var(--rag-red)', watch: 'var(--rag-amber)', 'on-track': 'var(--rag-green)' }
+const LENS_WORD: Record<Lens, string> = { 'needs-you': 'Needs you', watch: 'Watch', 'on-track': 'On track' }
 const ageDays = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / DAY)
+
+// The MD escalation gate, per the client's own framework (ext Slack, 21 Jul:
+// Meesha's "risks I wouldn't expect to be there" + the risk matrix): only a
+// CRITICAL risk, or one voiced by a SENIOR CLIENT stakeholder, reaches Katie.
+const needsHer = (s: Signal) =>
+  s.type === 'risk' && s.status !== 'actioned' && s.status !== 'dismissed' &&
+  (s.severity === 'critical' || s.escalate === true)
 
 function parsePounds(v?: string): number {
   const m = (v || '').match(/£\s*([\d.]+)\s*(k|m)?/i)
@@ -32,66 +48,57 @@ function parsePounds(v?: string): number {
   const n = Number(m[1])
   return !isFinite(n) ? 0 : m[2]?.toLowerCase() === 'm' ? n * 1_000_000 : m[2]?.toLowerCase() === 'k' ? n * 1000 : n
 }
-const gbp = (n: number) => (n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : n >= 1000 ? `£${Math.round(n / 1000)}k` : `£${n}`)
 
-// The MD escalation gate, tightened (10 Aug, colleague + Katie's own feedback:
-// "I don't open it because it gives me a heart attack"): NEEDS YOU is reserved
-// for a Critical or a risk voiced by a senior client stakeholder. A High that
-// has sat unresolved 20+ days is real but quieter - it goes to "worth a look",
-// never a red alarm on every card.
-const needsHer = (s: Signal) =>
-  s.type === 'risk' &&
-  s.status !== 'actioned' && s.status !== 'dismissed' &&
-  (s.severity === 'critical' || s.escalate === true)
-
-// Register escalations to the MD (Chloe, 22 Jul): a Level 2 item reaches Katie after
-// 1 open day, a Level 1 after 5. Interim rule until the new RAID methodology lands -
-// tweak the thresholds here when it does. Age = the board's own Ticket Age where
-// synced, else days since the brain first saw the item.
-const REGISTER_ESCALATION_DAYS: Record<string, number> = { 'Level 2': 1, 'Level 1': 5 }
-const registerEscalations = () =>
-  registerRisks.filter((r) => {
-    const need = REGISTER_ESCALATION_DAYS[(r.escalation || '').trim()]
-    if (need === undefined) return false
-    const synced = r.age_days != null ? Number(r.age_days) : NaN
-    const age = Number.isFinite(synced) ? synced : r.created_at ? ageDays(r.created_at) : 0
-    return age >= need
-  })
-
-const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
-const SEV_COLOR: Record<Severity, string> = { critical: 'var(--risk)', high: 'var(--people)', medium: 'var(--muted)', low: 'var(--muted-2)' }
-
-type Moment = {
-  key: string
-  quote: string
-  color: string
-  caption?: string
-  step?: string
-  callId?: string
-  callTitle?: string
-  date?: string
-  accountId?: string
-  strict?: boolean   // verbatim match or nothing (radar evidence)
-  context?: number   // conversation turns either side of the hit
+// Live rows carry owner NAMES; demo rows carry person ids. Resolve either.
+const ownerName = (v?: string) => {
+  if (!v) return ''
+  const n = personName(v)
+  return n !== '-' ? n : v
 }
 
-type Story = { account: string; headline: string; story: string }
+// Where a signal was actually heard: prefer the linked call (real type/date/source),
+// fall back to the classifier's sourceCall stamp.
+function sourceOf(s: Signal): { label: string; date: string; hubspot: boolean } {
+  const c = callForSignal(s) ?? (s.callId ? calls.find((x) => x.id === s.callId) : undefined)
+  if (c) return { label: c.type, date: c.date, hubspot: c.source === 'hubspot' }
+  return { label: s.sourceCall.type, date: s.sourceCall.date, hubspot: false }
+}
+
+// Account names inside interpreted prose become quiet links.
+function Linked({ text, onOpenAccount }: { text: string; onOpenAccount: (id: string) => void }): ReactNode {
+  const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
+  if (!names.length) return <>{text}</>
+  const rx = new RegExp(`\\b(${names.map((a) => a.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi')
+  const out: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(rx)) {
+    if (m.index! > last) out.push(text.slice(last, m.index))
+    const hit = names.find((a) => a.name.toLowerCase() === m[0].toLowerCase())
+    out.push(
+      <button key={`${m.index}`} onClick={() => hit && onOpenAccount(hit.id)} className="font-semibold text-[var(--accent-d)] hover:underline">
+        {m[0]}
+      </button>,
+    )
+    last = m.index! + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return <>{out}</>
+}
 
 export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [days, setDays] = useState<Days>(7)
-  // Katie's rule (colleague, 8 Aug): 3-5 big things on screen, everything else
-  // one click away - never a wall of cards and charts.
-  const [showAllCards, setShowAllCards] = useState(false)
+  const [sortBy, setSortBy] = useState<SortBy>('impact')
+  const [showAll, setShowAll] = useState(false)
+  const [podFilter, setPodFilter] = useState<string | null>(null)
+  const [briefOpen, setBriefOpen] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
-  const [stories, setStories] = useState<Story[]>([])
+  // Greet whoever is actually signed in (Misha covers in Katie's absence).
+  const [who, setWho] = useState('Katie')
   useEffect(() => {
-    let on = true
-    fetchBrief('stories').then((b) => {
-      if (!on || !b) return
-      const items = (b.content as unknown as { items?: Story[] }).items
-      if (Array.isArray(items)) setStories(items)
-    })
-    return () => { on = false }
+    fetchMe().then((me) => {
+      const raw = (me.name || me.email || '').split(/[\s.@_-]+/).filter(Boolean)[0]
+      if (raw) setWho(raw[0].toUpperCase() + raw.slice(1))
+    }).catch(() => {})
   }, [])
 
   const d = useMemo(() => {
@@ -101,856 +108,258 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
     const inPrev = (iso: string) => { const t = Date.parse(iso); return t >= prevCutoff && t < cutoff }
 
     const period = allSignals.filter((s) => inP(s.createdAt))
-    const risks = period.filter((s) => s.type === 'risk')
     const opps = period.filter((s) => s.type === 'opportunity')
     const periodCalls = calls.filter((c) => inP(c.date))
     const prevCalls = calls.filter((c) => inPrev(c.date))
+    const needsYou = allSignals.filter(needsHer)
 
-    // One card per account active this period (signals or gated older risks).
-    const perAccount = new Map<string, Signal[]>()
-    for (const s of [...risks, ...opps]) { if (!perAccount.has(s.accountId)) perAccount.set(s.accountId, []); perAccount.get(s.accountId)!.push(s) }
-    for (const s of allSignals.filter(needsHer)) {
-      if (!perAccount.has(s.accountId)) perAccount.set(s.accountId, [])
-      if (!perAccount.get(s.accountId)!.some((x) => x.id === s.id)) perAccount.get(s.accountId)!.push(s)
-    }
-    const cards = [...perAccount.entries()]
-      .filter(([accountId]) => accountId && accounts.some((a) => a.id === accountId))
-      .map(([accountId, items]) => {
-      const sorted = [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      const rk = items.filter((s) => s.type === 'risk')
-      const op = items.filter((s) => s.type === 'opportunity')
-      const cats = [...new Set(rk.map((s) => s.riskCategory || s.subtype).filter(Boolean))] as string[]
-      const worstRisk = rk.length ? [...rk].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])[0] : null
-      return {
-        accountId, items: sorted, rk, op, cats,
-        gated: items.some(needsHer),
-        critical: rk.filter((s) => s.severity === 'critical').length,
-        oldest: rk.length ? Math.max(...rk.map((s) => ageDays(s.createdAt))) : 0,
-        value: op.reduce((t, s) => t + parsePounds(s.value), 0),
-        callCount: new Set(items.map((s) => s.callId ?? s.sourceCall.title)).size,
-        worstRisk,
-      }
-    }).sort((a, b) => Number(b.gated) - Number(a.gated) || (SEV_W[b.worstRisk?.severity ?? 'low'] - SEV_W[a.worstRisk?.severity ?? 'low']) || b.items.length - a.items.length)
+    // ── Katie's lens on every account ──
+    // needs-you: an open signal crossed HER gate. watch: delivery marks it
+    // amber/red but nothing crossed her line (their problem, not hers yet).
+    const needsYouAccounts = new Set(needsYou.map((s) => s.accountId))
+    const lensOf = (a: Account): Lens =>
+      needsYouAccounts.has(a.id) ? 'needs-you' : a.health !== 'green' ? 'watch' : 'on-track'
+    const lens = new Map(accounts.map((a) => [a.id, lensOf(a)]))
+    const onTrack = accounts.filter((a) => lens.get(a.id) === 'on-track').length
+    const watching = accounts.filter((a) => lens.get(a.id) === 'watch').length
+    const atRisk = accounts.filter((a) => lens.get(a.id) === 'needs-you').length
 
-    // Trajectories (computed); recurring themes carry evidence for the chains.
-    const warnings: { text: string; accountId?: string; evidence?: Signal[] }[] = []
-    const perAcctTheme = new Map<string, Signal[]>()
-    for (const s of risks) {
-      const k = `${s.accountId}|${s.riskCategory || s.subtype || 'risk'}`
-      if (!perAcctTheme.has(k)) perAcctTheme.set(k, [])
-      perAcctTheme.get(k)!.push(s)
+    const speakers = new Set<string>()
+    for (const c of periodCalls) {
+      if (c.speakers) Object.keys(c.speakers).forEach((n) => speakers.add(n.toLowerCase()))
+      else if (c.speaker) speakers.add(c.speaker.toLowerCase())
     }
-    for (const [k, sigs] of perAcctTheme) {
-      if (sigs.length >= 2) {
-        const [acc, theme] = k.split('|')
-        warnings.push({ text: `"${theme}" has come up ${sigs.length} times on ${accountName(acc)} in ${days} days - a pattern forming, not a one-off.`, accountId: acc, evidence: sigs })
-      }
-    }
-    const activeNow = new Set(periodCalls.map((c) => c.accountId))
-    for (const c of prevCalls) {
-      if (c.accountId && !activeNow.has(c.accountId) && !warnings.some((w) => w.accountId === c.accountId)) {
-        warnings.push({ text: `${accountName(c.accountId)} has gone quiet - active in the previous period, no calls in the last ${days} days.`, accountId: c.accountId })
-      }
-    }
-    const oppPrev = allSignals.filter((s) => s.type === 'opportunity' && inPrev(s.createdAt)).length
-    if (opps.length >= 2 && opps.length > oppPrev) {
-      const hot = [...new Set(opps.map((s) => s.accountId))].map((id) => accountName(id)).slice(0, 2).join(' and ')
-      warnings.push({ text: `Opportunity chatter is accelerating (${oppPrev} → ${opps.length} period on period), gathering around ${hot}.`, evidence: opps })
-    }
+    const activeSet = new Set(periodCalls.map((c) => c.accountId))
+    const quiet = ([...new Set(prevCalls.map((c) => c.accountId))]
+      .filter((id) => id && !activeSet.has(id)) as string[])
+      .filter((id) => accounts.some((a) => a.id === id))
 
-    return {
-      period, opps, periodCalls, cards, warnings: warnings.slice(0, 4),
-      riskCount: risks.length,
-      attentionCount: allSignals.filter(needsHer).length,
-      oppValue: opps.reduce((t, s) => t + parsePounds(s.value), 0),
-      accountsActive: new Set(periodCalls.map((c) => c.accountId).filter(Boolean)).size,
-    }
+    // Highest impact: worst gated risk per account, then biggest opportunities.
+    const worst = new Map<string, Signal>()
+    for (const s of needsYou) { const c = worst.get(s.accountId); if (!c || SEV_W[s.severity] > SEV_W[c.severity]) worst.set(s.accountId, s) }
+    const riskItems = [...worst.values()].sort((a, b) => SEV_W[b.severity] - SEV_W[a.severity])
+    const oppItems = [...opps].sort((a, b) => parsePounds(b.value) - parsePounds(a.value)).slice(0, Math.max(0, 5 - riskItems.length))
+    const impact = [...riskItems, ...oppItems].slice(0, 5)
+
+    // ── Pods, live-safe: grouped from the accounts themselves (live pod = the
+    // Monday board's name string; demo pod = a static id). Owner = the pod lead
+    // where known, else the most common client director on the pod's accounts. ──
+    const groups = new Map<string, Account[]>()
+    for (const a of accounts) { const k = a.pod || 'other'; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(a) }
+    const podCards = [...groups.entries()].map(([key, accs]) => {
+      const staticPod = pods.find((p) => p.id === key)
+      let owner = staticPod ? personName(staticPod.owner) : ''
+      if (!owner || owner === '-') {
+        const counts = new Map<string, number>()
+        for (const a of accs) { const o = ownerName(a.clientDirector); if (o) counts.set(o, (counts.get(o) || 0) + 1) }
+        owner = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? ''
+      }
+      const name = key === 'other' ? 'Unallocated' : podName(key)
+      const sigs = period.filter((s) => accs.some((a) => a.id === s.accountId)).length
+      const counts: Record<Lens, number> = { 'needs-you': 0, watch: 0, 'on-track': 0 }
+      for (const a of accs) counts[lens.get(a.id)!]++
+      const trend: Trend = counts['needs-you'] ? 'declining' : accs.some((a) => a.trend === 'declining') ? 'steady' : counts.watch === 0 ? 'improving' : 'steady'
+      return { key, name, owner, accs, signals: sigs, counts, trend }
+    }).sort((a, b) => b.accs.length - a.accs.length).slice(0, 8)
+
+    const roster = accounts
+      .map((a) => {
+        const sigs = allSignals.filter((s) => s.accountId === a.id && s.status !== 'actioned' && s.status !== 'dismissed')
+        return { a, lens: lens.get(a.id)!, risks: sigs.filter((s) => s.type === 'risk').length, opps: sigs.filter((s) => s.type === 'opportunity').length }
+      })
+      .sort((x, y) => LENS_RANK[y.lens] - LENS_RANK[x.lens] || y.risks - x.risks)
+
+    return { opps, periodCalls, needsYou, onTrack, watching, atRisk, people: speakers.size, quiet, impact, podCards, roster, signalCount: period.length }
   }, [days])
 
-  const storyFor = (accountId: string) => stories.find((s) => s.account.toLowerCase() === accountName(accountId).toLowerCase())
+  const sortedImpact = useMemo(() => {
+    const arr = [...d.impact]
+    if (sortBy === 'newest') arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return arr
+  }, [d.impact, sortBy])
 
-  const regEsc = registerEscalations()
+  const hour = new Date().getHours()
+  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-[16px] font-bold tracking-tight">The portfolio, zoomed out</h3>
-          <p className="mt-0.5 text-[13px] text-muted">Everything the Second Brain heard, accumulated for a managing director. Nothing day-to-day.</p>
+    <div className="mx-auto max-w-[1120px]">
+      {/* ── Header: greeting + live context, search / brief / Ask tnAI ── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="display-title">{greet}, {who}</h1>
+          <p className="mt-1.5 text-[14px] text-muted">
+            {today} · {accounts.length} accounts · <b className="font-semibold text-text">{d.atRisk ? `${d.atRisk} need${d.atRisk === 1 ? 's' : ''} you` : 'nothing needs you'}</b> · {d.periodCalls.length} calls analysed
+          </p>
         </div>
-        <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
-          {([7, 14, 30] as Days[]).map((v) => (
-            <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>
-              {v === 7 ? 'This week' : `${v} days`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <TnaiBrief days={days} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} fallback={{ calls: d.periodCalls.length, accounts: d.accountsActive, attention: d.attentionCount, opps: d.opps.length, days }} />
-
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Building2} label="Accounts" value={`${accounts.length}`} sub={`${d.accountsActive} heard from in the last ${days} days`} />
-        <Stat icon={Radio} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.period.length} signals extracted`} color="var(--accent)" />
-        <Stat icon={AlertTriangle} label="Needs attention" value={`${d.attentionCount + regEsc.length}`} sub={regEsc.length ? `incl. ${regEsc.length} from the risk register` : 'past the escalation bar'} color={d.attentionCount + regEsc.length ? 'var(--risk)' : undefined} />
-        <Stat icon={TrendingUp} label="Open opportunities" value={`${allSignals.filter((s) => s.type === 'opportunity' && s.status === 'new').length}`} sub={`${d.opps.length} surfaced this period`} color="var(--opp)" />
-      </div>
-
-      {/* When ingestion has stalled, SAY so - "0 calls analysed" with no explanation
-          reads like a broken dashboard (Meesha, 1 Aug call). */}
-      {d.periodCalls.length === 0 && calls.length > 0 && (
-        <div className="mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-[12.5px] leading-relaxed"
-          style={{ borderColor: 'color-mix(in srgb, var(--people) 45%, var(--line))', background: 'color-mix(in srgb, var(--people) 8%, var(--surface))' }}>
-          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--people)' }} />
-          <span><b className="font-semibold">No calls analysed in this window.</b> The most recent ingested call is from <b className="font-semibold">{new Date(calls[0].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</b> - transcript ingestion has been paused since then, so signal counts reflect the last synced state, not this week.</span>
-        </div>
-      )}
-
-      {/* Escalated from the Monday risk register - Level 2 after 1 day, Level 1 after 5 */}
-      {regEsc.length > 0 && (
-        <div className="glass mt-4 rounded-2xl p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <ShieldAlert size={15} className="text-muted-2" />
-            <h3 className="text-[14px] font-semibold">Escalated from the risk register</h3>
-            <span className="text-[11px] text-muted-2">Level 2 after 1 day · Level 1 after 5 days · from Monday</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {regEsc.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-bg-2 px-3 py-2.5">
-                <span className="text-[12.5px] font-semibold">{r.name}</span>
-                {r.impact_level && (
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                    style={{ color: r.impact_level === 'High' ? 'var(--risk)' : r.impact_level === 'Medium' ? 'var(--people)' : 'var(--muted)', background: `color-mix(in srgb, ${r.impact_level === 'High' ? 'var(--risk)' : r.impact_level === 'Medium' ? 'var(--people)' : 'var(--muted)'} 12%, transparent)` }}>
-                    {r.impact_level}
-                  </span>
-                )}
-                <span className="text-[11px] text-muted">{[r.account_name, r.escalation, r.status, r.responsible].filter(Boolean).join(' · ')}</span>
-                {r.account_id && (
-                  <button onClick={() => onOpenAccount(r.account_id as string)} className="ml-auto text-[11px] font-semibold text-[var(--accent-d)] hover:underline">
-                    Open account
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <button onClick={() => setShowAnalytics((v) => !v)} className="mt-4 flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-        <BarChart3 size={14} /> {showAnalytics ? 'Hide the analytics' : 'Show the analytics'} <span className="font-normal text-muted-2">signal activity · risk mix · portfolio health</span>
-        <ChevronDown size={14} className={`ml-auto transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
-      </button>
-      {showAnalytics && (
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="glass rounded-2xl p-5">
-          <span className="flex items-center gap-1.5"><div className="eyebrow">Signal activity · recent weeks</div><InfoHint text="What the brain pulled out of the calls each week, split by signal type. The mix matters more than the height: red growing faster than green is the trend to watch." /></span>
-          <div className="mt-3 h-[150px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyTrend()} margin={{ top: 4, right: 4, left: -26, bottom: 0 }}>
-                <CartesianGrid stroke="var(--line)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 10.5, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 10.5, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: 'var(--bg-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
-                {(['opportunity', 'risk', 'update', 'people'] as const).map((k, i) => (
-                  <Bar key={k} dataKey={k} stackId="s" fill={SIGNAL_META[k].color} animationDuration={850} animationEasing="ease-out" radius={i === 3 ? [3, 3, 0, 0] : undefined} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <DonutCard hint="What kind of risk the period produced. A cluster in one category (say, People & Key Person) is a pattern, not a coincidence." title="Risk mix" sub="by framework category, this period"
-          data={(() => { const m = new Map<string, number>(); for (const s of d.cards.flatMap((c) => c.rk)) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
-          palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
-        <DonutCard hint="Every account by its current RAG state. The number to hold: how many are green this week versus last." title="Portfolio health" sub="current RAG across accounts"
-          data={(['red', 'amber', 'green'] as const).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
-          palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
-      </div>
-      )}
-
-      {/* ── The week, account by account ── */}
-      <div className="mt-6">
-        <div className="mb-2.5 flex items-center gap-2">
-          <h3 className="text-[15px] font-semibold">The week, account by account</h3>
-          <span className="text-[11.5px] text-muted-2">tnAI's macro read per account · accounts needing you come first</span>
-        </div>
-        {d.cards.length === 0 ? (
-          <div className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-[13px] text-muted">
-            <CheckCircle2 size={16} style={{ color: 'var(--opp)' }} /> Nothing accumulated in this period.
-          </div>
-        ) : (() => {
-          // Katie's order (colleague, 8 Aug): what's going WELL first, then the
-          // few things that genuinely need her, everything else one click away.
-          const attention = d.cards.filter((c) => c.gated)
-          const calm = d.cards.filter((c) => !c.gated)
-          const goingWell = calm.filter((c) => c.op.length > 0 && c.critical === 0 && c.op.length >= c.rk.length)
-          const watch = calm.filter((c) => !goingWell.includes(c))
-          return (
-            <>
-              {goingWell.length > 0 && (
-                <div className="mb-4 rounded-2xl border border-line bg-surface p-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={15} style={{ color: 'var(--opp)' }} />
-                    <span className="text-[13px] font-semibold">Going well</span>
-                    <span className="text-[11px] text-muted-2">{goingWell.length} account{goingWell.length !== 1 ? 's' : ''} with momentum</span>
-                  </div>
-                  <div className="mt-2.5 space-y-1.5">
-                    {goingWell.slice(0, 5).map((c) => {
-                      const line = storyFor(c.accountId)?.headline || `${c.op.length} opportunit${c.op.length !== 1 ? 'ies' : 'y'} surfaced${c.value ? ` (~${gbp(c.value)})` : ''} this period.`
-                      return (
-                        <button key={c.accountId} onClick={() => onOpenAccount(c.accountId)} className="group flex w-full items-start gap-2.5 rounded-xl bg-bg-2 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--line)]">
-                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--opp)' }} />
-                          <span className="min-w-0 flex-1 text-[12.5px] leading-snug"><b className="font-semibold">{accountName(c.accountId)}</b> <span className="text-muted">· {line}</span></span>
-                          <ArrowRight size={13} className="mt-1 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {attention.length > 0 && (
-                <>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-[13px] font-semibold">Needs your attention</span>
-                    <span className="text-[11px] text-muted-2">{attention.length} account{attention.length !== 1 ? 's' : ''} · critical or raised by a senior client voice</span>
-                  </div>
-                  <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-                    {attention.slice(0, 4).map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
-                  </div>
-                </>
-              )}
-
-              {watch.length > 0 && (
-                <>
-                  <button onClick={() => setShowAllCards((v) => !v)} className="mt-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-                    {showAllCards ? 'Hide the watching list' : `Worth a look when you have time · ${watch.length} account${watch.length !== 1 ? 's' : ''}`}
-                  </button>
-                  {showAllCards && (
-                    <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-                      {watch.map((c) => <AccountCard key={c.accountId} card={c} story={storyFor(c.accountId)} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )
-        })()}
-      </div>
-
-      <RadarSection computed={d.warnings} onOpenAccount={onOpenAccount} />
-    </div>
-  )
-}
-
-// ── tnAI brief ──
-function TnaiBrief({ days, onOpenAccount, onOpenSignal, fallback }: { days: Days; onOpenAccount: (id: string) => void; onOpenSignal?: (sg: Signal) => void; fallback: { calls: number; accounts: number; attention: number; opps: number; days: number } }) {
-  const [brief, setBrief] = useState<ApiBrief | null>(null)
-  const [checked, setChecked] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const [msgIdx, setMsgIdx] = useState(0)
-
-  // The toggle re-evaluates the brief: a fresh one for this window shows instantly;
-  // otherwise workflow 13 regenerates it over exactly these days while we animate.
-  useEffect(() => {
-    let on = true
-    setChecked(false)
-    fetchBrief('leadership', days).then(async (b) => {
-      if (!on) return
-      const fresh = b && Date.now() - Date.parse(b.created_at) < 24 * 3600_000
-      if (fresh) { setBrief(b); setChecked(true); return }
-      if (b) setBrief(b) // show the stale one behind the scenes if generation fails
-      setGenerating(true)
-      // Debounce: someone flicking 7 -> 14 -> 30 must not stack three model calls
-      // onto a tiny Azure OpenAI quota - only the window they settle on generates.
-      await new Promise((r) => setTimeout(r, 700))
-      if (!on) return
-      const g = await generateBrief(days).catch(() => null)
-      if (!on) return
-      if (g) setBrief(g)
-      setGenerating(false)
-      setChecked(true)
-    })
-    return () => { on = false }
-  }, [days])
-
-  useEffect(() => {
-    if (!generating) return
-    const t = window.setInterval(() => setMsgIdx((i) => i + 1), 2600)
-    return () => window.clearInterval(t)
-  }, [generating])
-
-  const GEN_MSGS = [
-    `Re-reading the last ${days} days of calls…`,
-    'Cross-checking the weekly reports…',
-    'Weighing the open pipeline…',
-    'Writing the brief…',
-  ]
-
-  const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
-  const hasWatch = (brief?.content.watch_for?.length ?? 0) > 0
-  const chain = brief?.content.accounts ?? []
-  const teaser = brief ? brief.content.whats_happening.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ') : ''
-  return (
-    <div className="mt-4 rounded-2xl border border-line" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 55%)' }}>
-      <div className="p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={16} /></span>
-          <span className="text-[16px] font-bold tracking-tight"><span className="lowercase">tn</span><span style={{ color: 'var(--accent-d)' }}>AI</span></span>
-          <span className="text-[12px] text-muted">· {days === 7 ? 'weekly brief' : `last ${days} days`}{when && !generating ? ` · generated ${when}` : ''}</span>
-          <span className="ml-auto rounded-full border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-muted-2">reads every call, weekly report + HubSpot</span>
-        </div>
-
-        {generating ? (
-          <div className="mt-2 flex flex-col items-center gap-3 py-8">
-            <span className="relative grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: 'var(--accent)' }}>
-              <Sparkles size={22} className="animate-pulse" />
-              <span className="absolute inset-0 animate-ping rounded-2xl" style={{ background: 'color-mix(in srgb, var(--accent) 25%, transparent)' }} aria-hidden />
-            </span>
-            <p className="text-[13.5px] font-semibold text-text">{GEN_MSGS[msgIdx % GEN_MSGS.length]}</p>
-            <p className="text-[11px] text-muted-2">tnAI is re-evaluating the {days === 7 ? 'week' : `last ${days} days`} - usually under half a minute</p>
-          </div>
-        ) : brief && !expanded ? (
-          <div className="mt-3.5">
-            <p className="text-[13.5px] leading-relaxed text-text"><RichText text={teaser} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
-            <div className="mt-3 flex justify-center">
-              <button onClick={() => setExpanded(true)}
-                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-5 py-2 text-[12px] font-semibold text-[var(--accent-d)] transition-all hover:scale-[1.03]"
-                style={{ boxShadow: '0 4px 16px color-mix(in srgb, var(--accent) 20%, transparent)' }}>
-                <Sparkles size={13} /> Read the full {days === 7 ? 'weekly brief' : `${days}-day brief`} <ChevronDown size={13} />
-              </button>
-            </div>
-          </div>
-        ) : brief ? (
-          <>
-            <div className="mt-4 max-w-[860px] space-y-3">
-              {/* 1 · the headline: macro summary + the pattern behind it */}
-              <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 28%, var(--line))', background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 70%)' }}>
-                <SectionTag icon={Activity} color="var(--accent)">The headline</SectionTag>
-                <RichBlocks text={brief.content.whats_happening} onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
-                {brief.content.why && (
-                  <div className="mt-3 rounded-lg px-3.5 py-2.5" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>The pattern behind it</span>
-                    <RichBlocks text={brief.content.why} onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
-                  </div>
-                )}
-              </section>
-
-              {/* 2 · one chain: each account's update, its own why beneath it, then the move */}
-              {chain.length > 0 && (
-                <section>
-                  <SectionTag icon={Building2} color="var(--accent-d)">Account by account</SectionTag>
-                  <div className="ml-1 mt-2.5 space-y-2.5 border-l-2 pl-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 30%, var(--line))' }}>
-                    {chain.map((a) => {
-                      const accId = accounts.find((x) => x.name.toLowerCase() === a.name.toLowerCase())?.id
-                      return (
-                        <div key={a.name} className="relative rounded-xl border border-line bg-surface p-4">
-                          <span className="absolute -left-[23px] top-5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]" style={{ background: 'var(--accent)' }} aria-hidden />
-                          {accId ? (
-                            <button onClick={() => onOpenAccount(accId)} className="group inline-flex items-center gap-1 text-[13.5px] font-bold text-[var(--accent-d)] hover:underline">
-                              {a.name}<ArrowRight size={12} className="opacity-0 transition-opacity group-hover:opacity-100" />
-                            </button>
-                          ) : (
-                            <span className="text-[13.5px] font-bold">{a.name}</span>
-                          )}
-                          <p className="mt-1 text-[13px] leading-relaxed text-text"><RichText text={a.update} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
-                          {a.why && (
-                            <div className="mt-2 rounded-lg px-3 py-2 text-[12.5px] leading-relaxed" style={{ background: 'color-mix(in srgb, var(--update) 8%, var(--surface))', boxShadow: 'inset 2px 0 0 var(--update)' }}>
-                              <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--update)' }}>Why</span>
-                              <RichText text={a.why} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />
-                            </div>
-                          )}
-                          {(a.actions?.length ?? 0) > 0 && a.actions!.map((act, i) => (
-                            <div key={i} className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed">
-                              <ArrowRight size={13} className="mt-[3px] shrink-0" style={{ color: 'var(--accent)' }} />
-                              <span className="min-w-0 font-medium"><RichText text={act} accountId={accId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* 3 · watch for (when present) and what needs her */}
-              {hasWatch && (
-                <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--people) 30%, var(--line))', background: 'color-mix(in srgb, var(--people) 6%, var(--surface))' }}>
-                  <SectionTag icon={Eye} color="var(--people)">Watch for</SectionTag>
-                  <BulletList items={brief.content.watch_for!} color="var(--people)" onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
-                </section>
-              )}
-              <section className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--risk) 30%, var(--line))', background: 'color-mix(in srgb, var(--risk) 5%, var(--surface))' }}>
-                <SectionTag icon={AlertTriangle} color="var(--risk)">What needs you</SectionTag>
-                <BulletList items={brief.content.needs_you.length ? brief.content.needs_you : ['Nothing needs your intervention this period.']} color="var(--risk)" onOpenAccount={onOpenAccount}  onOpenSignal={onOpenSignal} />
-              </section>
-            </div>
-            <div className="mt-4 flex justify-center">
-              <button onClick={() => setExpanded(false)} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
-                Collapse <ChevronDown size={12} className="rotate-180" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="mt-4">
-            <p className="text-[13.5px] leading-relaxed text-text">
-              Over the last {fallback.days} days the Second Brain analysed <b>{fallback.calls} call{fallback.calls !== 1 ? 's' : ''}</b> across <b>{fallback.accounts} account{fallback.accounts !== 1 ? 's' : ''}</b>,
-              surfacing <b>{fallback.opps} opportunit{fallback.opps !== 1 ? 'ies' : 'y'}</b>{fallback.attention ? <> and <b style={{ color: 'var(--risk)' }}>{fallback.attention} escalation{fallback.attention !== 1 ? 's' : ''}</b> (below)</> : <> and nothing that needs your intervention</>}.
-            </p>
-            {checked && <p className="mt-2 text-[11.5px] text-muted-2">tnAI couldn't write the full brief just now - it will try again when you reopen this page or switch the period.</p>}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SectionTag({ icon: Icon, color, children }: { icon: typeof Activity; color: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon size={13} style={{ color }} />
-      </span>
-      <span className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color }}>{children}</span>
-    </div>
-  )
-}
-
-// Prose from the model: paragraphs and "- " lines, each rendered rich.
-function RichBlocks({ text, onOpenAccount, accountId, onOpenSignal }: { text: string; onOpenAccount: (id: string) => void; accountId?: string; onOpenSignal?: (sg: Signal) => void }) {
-  const blocks = text.split(/\n+/).map((l) => l.trim()).filter(Boolean)
-  return (
-    <div className="mt-2 space-y-2">
-      {blocks.map((raw, i) => {
-        const isBullet = /^[-•]\s+/.test(raw)
-        const t = raw.replace(/^[-•]\s+/, '')
-        return isBullet ? (
-          <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
-            <span className="min-w-0"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
-          </div>
-        ) : (
-          <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={t} accountId={accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
-        )
-      })}
-    </div>
-  )
-}
-
-function BulletList({ items, color, onOpenAccount, onOpenSignal }: { items: string[]; color: string; onOpenAccount: (id: string) => void; onOpenSignal?: (sg: Signal) => void }) {
-  return (
-    <div className="mt-2 space-y-1.5">
-      {items.map((t, i) => (
-        <div key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-text">
-          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
-          <span className="min-w-0"><RichText text={t} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Rich prose: account names become live links (as before), and the words
-// "risk(s)" / "opportunity(-ies)" become colour-coded terms - hover opens a mini
-// card with the actual signals behind the wording, click jumps to the account.
-function RichText({ text, onOpenAccount, accountId, onOpenSignal }: { text: string; onOpenAccount: (id: string) => void; accountId?: string; onOpenSignal?: (s: Signal) => void }) {
-  const parts = useMemo(() => {
-    type Part = { text: string; accountId?: string; term?: 'risk' | 'opportunity'; termAccount?: string }
-    const names = accounts.filter((a) => a.name.length >= 3).sort((a, b) => b.name.length - a.name.length)
-    const segs: Part[] = []
-    const rx = names.length ? new RegExp(`\\b(${names.map((a) => a.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi') : null
-    let last = 0
-    if (rx) {
-      for (const m of text.matchAll(rx)) {
-        if (m.index! > last) segs.push({ text: text.slice(last, m.index) })
-        const hit = names.find((a) => a.name.toLowerCase() === m[0].toLowerCase())
-        segs.push({ text: m[0], accountId: hit?.id })
-        last = m.index! + m[0].length
-      }
-    }
-    if (last < text.length) segs.push({ text: text.slice(last) })
-    const out: Part[] = []
-    const termRx = /\b(risks?|opportunit(?:y|ies))\b/gi
-    for (const seg of segs) {
-      if (seg.accountId) { out.push(seg); continue }
-      let l = 0
-      for (const m of seg.text.matchAll(termRx)) {
-        if (m.index! > l) out.push({ text: seg.text.slice(l, m.index) })
-        out.push({ text: m[0], term: m[0].toLowerCase().startsWith('risk') ? 'risk' : 'opportunity' })
-        l = m.index! + m[0].length
-      }
-      if (l < seg.text.length) out.push({ text: seg.text.slice(l) })
-    }
-    // Scope each term to the nearest account NAMED in this text (the account
-    // mentioned before it, else the next one after) - "HMRC has seen a rise in
-    // risks" hovers HMRC's risks, not the portfolio's freshest two.
-    let prevAcc: string | undefined
-    for (const p of out) { if (p.accountId) prevAcc = p.accountId; else if (p.term) p.termAccount = prevAcc }
-    let nextAcc: string | undefined
-    for (let i = out.length - 1; i >= 0; i--) { const p = out[i]; if (p.accountId) nextAcc = p.accountId; else if (p.term && !p.termAccount) p.termAccount = nextAcc }
-    return out
-  }, [text])
-  return (
-    <>
-      {parts.map((p, i) =>
-        p.accountId ? (
-          <button key={i} onClick={() => onOpenAccount(p.accountId!)}
-            className="group inline-flex items-baseline font-semibold text-[var(--accent-d)] hover:underline">
-            {p.text}
-            <ArrowRight size={11} className="w-0 translate-y-[1px] opacity-0 transition-all group-hover:ml-0.5 group-hover:w-[11px] group-hover:opacity-100" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SearchBox onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />
+          <button
+            onClick={() => setBriefOpen(true)}
+            className="inline-flex h-[38px] items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold text-white shadow-sm transition-transform hover:scale-[1.02]"
+            style={{ background: 'var(--accent)' }}>
+            <Sparkles size={14} /> Your tnAI brief
           </button>
-        ) : p.term ? (
-          <SignalTerm key={i} word={p.text} kind={p.term} accountId={p.termAccount ?? accountId} context={text} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />
-        ) : (
-          <span key={i}>{p.text}</span>
-        ),
-      )}
-    </>
-  )
-}
-
-// A colour-coded "risk"/"opportunity" mention. Hover: the freshest matching
-// signals (scoped to the account when the prose sits inside an account block).
-function SignalTerm({ word, kind, accountId, context, onOpenAccount, onOpenSignal }: { word: string; kind: 'risk' | 'opportunity'; accountId?: string; context?: string; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
-  const [open, setOpen] = useState(false)
-  // The popup renders in a PORTAL with fixed positioning - inside the card it was
-  // clipped by overflow-hidden (Meesha: "I can't actually read the whole thing").
-  const anchor = useRef<HTMLSpanElement>(null)
-  const closeT = useRef<number>(0)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const show = () => {
-    window.clearTimeout(closeT.current)
-    const r = anchor.current?.getBoundingClientRect()
-    if (r) setPos({ top: Math.min(r.bottom + 8, window.innerHeight - 280), left: Math.max(8, Math.min(r.left, window.innerWidth - 320)) })
-    setOpen(true)
-  }
-  const hide = () => { closeT.current = window.setTimeout(() => setOpen(false), 150) }
-  const items = useMemo(() => {
-    const pool = allSignals.filter((sg) => sg.type === kind && (!accountId || sg.accountId === accountId))
-    // Rank by overlap with the sentence the word sits in, so two "risk" mentions
-    // in different bullets each surface the signals they're actually about.
-    const ctxWords = new Set((context ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 5))
-    const score = (sg: Signal) => {
-      let n = 0
-      for (const w of new Set(`${sg.summary} ${sg.quote}`.toLowerCase().split(/[^a-z0-9]+/))) if (w.length >= 5 && ctxWords.has(w)) n++
-      return n
-    }
-    return [...pool].sort((a, b) => score(b) - score(a) || b.createdAt.localeCompare(a.createdAt)).slice(0, 2)
-  }, [kind, accountId, context])
-  const color = kind === 'risk' ? 'var(--risk)' : 'var(--opp)'
-  if (!items.length) return <span className="font-semibold" style={{ color }}>{word}</span>
-  return (
-    <span ref={anchor} className="relative inline-block" onMouseEnter={show} onMouseLeave={hide}>
-      <button onClick={() => (onOpenSignal ? onOpenSignal(items[0]) : onOpenAccount(accountId ?? items[0].accountId))}
-        title={onOpenSignal ? 'Open this signal where it was flagged' : 'Open the account'}
-        className="font-semibold underline decoration-dotted underline-offset-2" style={{ color, textDecorationColor: color }}>
-        {word}
-      </button>
-      {open && createPortal(
-        <span
-          onMouseEnter={() => window.clearTimeout(closeT.current)} onMouseLeave={hide}
-          className="glass fixed z-[80] block w-[310px] rounded-2xl border bg-surface p-3.5 text-left"
-          style={{ top: pos.top, left: pos.left, borderColor: `color-mix(in srgb, ${color} 35%, var(--line))`, boxShadow: `0 14px 44px -14px color-mix(in srgb, ${color} 50%, transparent), 0 2px 10px rgba(16,24,40,0.12)` }}>
-          <span className="block text-[10px] font-bold uppercase tracking-wide" style={{ color }}>
-            {kind === 'risk' ? 'The risk behind this' : 'The opportunity behind this'}{accountId ? ` · ${accountName(accountId)}` : ''}
-          </span>
-          {items.map((sg) => (
-            <button key={sg.id} onClick={() => (onOpenSignal ? onOpenSignal(sg) : onOpenAccount(sg.accountId))}
-              className="mt-2 block w-full rounded-lg p-1.5 text-left text-[11.5px] font-normal leading-snug text-text transition-colors hover:bg-bg-2">
-              {sg.summary}
-              {sg.quote && <span className="mt-0.5 block italic text-muted">“{sg.quote.length > 130 ? sg.quote.slice(0, 130) + '…' : sg.quote}”</span>}
-            </button>
-          ))}
-          <span className="mt-2 block text-[10px] font-medium text-muted-2">{onOpenSignal ? 'Click an item to open that exact signal · the word opens the account' : 'Click the word to open the account'}</span>
-        </span>,
-        document.body,
-      )}
-    </span>
-  )
-}
-
-
-// ── One account's macro card: headline on the face, tnAI story on expand,
-//    "View the conversations" opens the animated snippet-chain popup. ──
-type CardData = {
-  accountId: string; items: Signal[]; rk: Signal[]; op: Signal[]; cats: string[]
-  gated: boolean; critical: number; oldest: number; value: number; callCount: number
-  worstRisk: Signal | null
-}
-
-function AccountCard({ card, story, onOpenAccount, onOpenSignal }: { card: CardData; story?: Story; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
-  const [open, setOpen] = useState(false)
-  const [convo, setConvo] = useState(false)
-
-  const headline = story?.headline
-    || `${card.rk.length ? `${card.rk.length} risk${card.rk.length !== 1 ? 's' : ''}` : ''}${card.rk.length && card.op.length ? ' and ' : ''}${card.op.length ? `${card.op.length} opportunit${card.op.length !== 1 ? 'ies' : 'y'}` : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period${card.cats.length ? `, centred on ${card.cats.join(' and ').toLowerCase()}` : ''}.`
-
-  const fallbackStory = [
-    `${accountName(card.accountId)} generated ${card.items.length} signal${card.items.length !== 1 ? 's' : ''} across ${card.callCount} call${card.callCount !== 1 ? 's' : ''} this period.`,
-    card.rk.length ? `On the risk side, the conversations kept returning to ${card.cats.length ? card.cats.join(' and ').toLowerCase() : 'delivery concerns'}${card.worstRisk ? ` - most seriously: ${card.worstRisk.summary}` : ''}${card.oldest >= 14 ? ` One item has now sat unresolved for ${card.oldest} days.` : ''}` : '',
-    card.op.length ? `Commercially, ${card.op.length} opportunit${card.op.length !== 1 ? 'ies were' : 'y was'} surfaced${card.value ? ` with roughly ${gbp(card.value)} mentioned` : ''}.` : '',
-    'tnAI writes its full analysis for this account with the next weekly brief.',
-  ].filter(Boolean).join(' ')
-
-  const moments: Moment[] = card.items.map((s) => ({
-    key: s.id, quote: s.quote,
-    color: s.type === 'opportunity' ? 'var(--opp)' : SEV_COLOR[s.severity],
-    caption: s.summary, step: s.suggestedAction,
-    callId: s.callId, callTitle: s.sourceCall.title, date: s.createdAt, accountId: s.accountId,
-  }))
-
-  return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      <button onClick={() => setOpen((o) => !o)} className="min-h-[124px] flex-1 p-4 text-left transition-colors hover:bg-bg-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[15px] font-bold">{accountName(card.accountId)}</span>
-          {card.gated && <Chip color="var(--risk)">needs you</Chip>}
-          {card.critical > 0 && <Chip color="var(--risk)">{card.critical} critical</Chip>}
-          {card.oldest >= 14 && <Chip color="var(--people)">{card.oldest}d unresolved</Chip>}
-          {card.op.length > 0 && <Chip color="var(--opp)">{card.op.length} opp{card.op.length !== 1 ? 's' : ''}{card.value ? ` · ~${gbp(card.value)}` : ''}</Chip>}
-          <ChevronDown size={15} className={`ml-auto shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
-        </div>
-        <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-text" title={headline}>{headline}</p>
-      </button>
-
-      {open && (
-        <div className="border-t border-line bg-surface-2 p-4">
-          <div className="space-y-2.5">
-            {(story?.story ?? fallbackStory).split(/\n\n+/).map((p, i) => (
-              <p key={i} className="text-[13px] leading-relaxed text-text"><RichText text={p} accountId={card.accountId} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} /></p>
-            ))}
-          </div>
-          {/* the signals behind this card - click one to land ON that signal, expanded, in its account/project (Meesha: 'takes you to the calls rather than the risks') */}
-          {onOpenSignal && card.items.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {card.items.slice(0, 6).map((s) => (
-                <button key={s.id} onClick={() => onOpenSignal(s)} title={s.summary} className="group flex w-full items-start gap-2 rounded-lg bg-surface px-3 py-2 text-left text-[12px] leading-snug transition-colors hover:bg-bg-2">
-                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: s.type === 'opportunity' ? 'var(--opp)' : SEV_COLOR[s.severity] }} />
-                  <span className="min-w-0 flex-1 text-text">{s.summary}</span>
-                  <ArrowRight size={12} className="mt-0.5 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
-                </button>
-              ))}
-              {card.items.length > 6 && <div className="pl-3 text-[10.5px] text-muted-2">+{card.items.length - 6} more inside the account</div>}
-            </div>
-          )}
-          <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            <button onClick={() => setConvo(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-semibold text-white transition-transform hover:scale-[1.02]" style={{ background: 'var(--accent)' }}>
-              <MessagesSquare size={13} /> View the conversations
-            </button>
-            <button onClick={() => onOpenAccount(card.accountId)} className="group inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3.5 py-2 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-              Open {accountName(card.accountId)} <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {convo && <ConversationsModal title={`The conversations · ${accountName(card.accountId)}`} moments={moments} onClose={() => setConvo(false)} />}
-    </div>
-  )
-}
-
-// The popup: the week's moments flowing in as an animated chain.
-function ConversationsModal({ title, moments, onClose }: { title: string; moments: Moment[]; onClose: () => void }) {
-  return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div className="flex max-h-[85vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h3 className="text-[15px] font-bold tracking-tight">{title}</h3>
-            <p className="mt-0.5 text-[11.5px] text-muted">The captured moments, in the flow of the actual calls - oldest first.</p>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
-        </div>
-        <div className="overflow-y-auto px-5 py-4">
-          <SnippetChain moments={moments} animated />
         </div>
       </div>
-    </div>,
-    document.body,
-  )
-}
 
-// ── Evidence chain ──
-function SnippetChain({ moments, animated = false }: { moments: Moment[]; animated?: boolean }) {
-  return (
-    <div className="relative mt-1 space-y-4 pl-5">
-      <span className="absolute bottom-2 left-[7px] top-2 w-[2px] rounded-full bg-[var(--line-2)]" aria-hidden />
-      {moments.map((m, i) => (
-        <div key={m.key} className={animated ? 'chain-node' : undefined} style={animated ? { animationDelay: `${i * 140}ms` } : undefined}>
-          <ChainNode m={m} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ChainNode({ m }: { m: Moment }) {
-  const [snip, setSnip] = useState<{ lines: TranscriptLine[]; hit: number } | null | 'pending'>('pending')
-
-  useEffect(() => {
-    let on = true
-    const done = (v: { lines: TranscriptLine[]; hit: number } | null) => { if (on) setSnip(v) }
-    const cands: Call[] = m.callId
-      ? calls.filter((c) => c.id === m.callId)
-      : calls.filter((c) => c.accountId === m.accountId).slice(0, 4)
-    if (!cands.length) { done(null); return }
-    ;(async () => {
-      for (const c of cands) {
-        if (!c.transcript && /^[0-9a-f]{8}-/i.test(c.id)) {
-          try { const r = await fetchTranscript(c.id); if (r.transcript) c.transcript = r.transcript } catch { /* try the next call */ }
-        }
-        if (!on) return
-        const { lines } = transcriptWithMoments(c)
-        const s = snippetAround(lines, m.quote, m.context ?? 2, m.strict ?? false)
-        if (s) { done(s); return }
-      }
-      done(null)
-    })()
-    return () => { on = false }
-  }, [m])
-
-  return (
-    <div className="relative">
-      <span className="absolute -left-[19px] top-3 grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-[var(--surface-2)]" style={{ background: m.color }} aria-hidden />
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
-        {(m.callTitle || m.date) && (
-          <div className="flex items-center gap-2 border-b border-line px-3.5 py-2 text-[11px] text-muted-2">
-            <Video size={11} /> {m.callTitle}{m.date ? ` · ${fmt(m.date)}` : ''}
-          </div>
-        )}
-        <div className="p-3.5">
-          {snip === 'pending' ? (
-            <p className="text-[12px] text-muted-2">Pulling the conversation…</p>
-          ) : snip ? (
-            <div className="space-y-1">
-              {snip.lines.map((l, i) => (
-                <div key={i} className={`rounded-md px-2.5 py-1.5 text-[12.5px] leading-relaxed ${i === snip.hit ? 'font-medium text-text' : 'text-muted'}`}
-                  style={i === snip.hit ? { background: `color-mix(in srgb, ${m.color} 8%, var(--surface))`, boxShadow: `inset 2px 0 0 ${m.color}` } : undefined}>
-                  {l.speaker && <span className="font-semibold">{l.speaker}: </span>}{l.text}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-lg px-3.5 py-3" style={{ background: `color-mix(in srgb, ${m.color} 6%, var(--surface))`, boxShadow: `inset 2px 0 0 ${m.color}` }}>
-              <p className="text-[13px] italic leading-relaxed text-text">“{m.quote}”</p>
-              <p className="mt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-2">Verbatim from this week's calls</p>
-            </div>
-          )}
-          {m.caption && <p className="mt-2.5 text-[12px] font-medium leading-snug text-text">{m.caption}</p>}
-          {m.step && <p className="mt-1 text-[11.5px] leading-snug text-muted"><span className="font-bold uppercase tracking-wide text-[9.5px] text-muted-2">The step · </span>{m.step}</p>}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Potential risks ──
-type RadarItem = { account?: string; insight: string; quote?: string }
-
-function RadarSection({ computed, onOpenAccount }: { computed: { text: string; accountId?: string; evidence?: Signal[] }[]; onOpenAccount: (id: string) => void }) {
-  const [radar, setRadar] = useState<RadarItem[]>([])
-  useEffect(() => {
-    let on = true
-    fetchBrief('radar').then((b) => {
-      if (!on || !b) return
-      const items = (b.content as unknown as { items?: RadarItem[] }).items
-      if (Array.isArray(items)) setRadar(items.slice(0, 5))
-    })
-    return () => { on = false }
-  }, [])
-
-  const accountIdFor = (name?: string) => (name ? accounts.find((a) => a.name.toLowerCase() === name.toLowerCase())?.id : undefined)
-  if (radar.length === 0 && computed.length === 0) return null
-
-  return (
-    <div className="mt-6">
-      <div className="mb-2.5 flex items-center gap-2">
-        <Eye size={15} style={{ color: 'var(--people)' }} />
-        <h3 className="text-[15px] font-semibold">Potential risks forming</h3>
-        <span className="text-[11.5px] text-muted-2">read from the raw conversations, before anything is formally flagged</span>
-      </div>
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
-        {radar.map((r, i) => {
-          const accId = accountIdFor(r.account)
-          return (
-            <WatchCard key={`r${i}`} accountId={accId} onOpenAccount={onOpenAccount}
-              text={<>{r.account && <span className="font-semibold">{r.account}: </span>}{r.insight}</>}
-              moments={r.quote ? [{ key: `rq${i}`, quote: r.quote, color: 'var(--people)', accountId: accId, caption: 'Heard in conversation this week - not yet a formal risk.', strict: true, context: 1 }] : []}
-            />
-          )
-        })}
-        {computed.map((w, i) => (
-          <WatchCard key={`c${i}`} accountId={w.accountId} onOpenAccount={onOpenAccount}
-            text={<>{w.text}</>}
-            moments={(w.evidence ?? []).map((s) => ({
-              key: s.id, quote: s.quote, color: 'var(--people)',
-              caption: s.summary, callId: s.callId, callTitle: s.sourceCall.title, date: s.createdAt, accountId: s.accountId,
-            }))}
-          />
+      {/* period toggle */}
+      <div className="mt-4 inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
+        {([7, 14, 30] as Days[]).map((v) => (
+          <button key={v} onClick={() => setDays(v)} className={`rounded-md px-3 py-1.5 transition-colors ${days === v ? 'bg-[var(--accent)] text-white' : 'text-muted hover:text-text'}`}>
+            {v === 7 ? 'This week' : `${v} days`}
+          </button>
         ))}
       </div>
-    </div>
-  )
-}
 
-function WatchCard({ text, moments, accountId, onOpenAccount }: { text: ReactNode; moments: Moment[]; accountId?: string; onOpenAccount: (id: string) => void }) {
-  const [convo, setConvo] = useState(false)
-  return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      <div className="flex-1 p-4">
-        <p className="text-[13px] leading-relaxed text-text">{text}</p>
+      {/* ── The numbers · Katie's lens, all real ── */}
+      <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Metric icon={<Building2 size={15} />} label="Accounts on track" value={`${d.onTrack}/${accounts.length}`} sub={`${d.watching} with delivery watching · ${d.atRisk} need${d.atRisk === 1 ? 's' : ''} you`}
+          tip="Your lens, not delivery's: an account only counts against you when a risk crosses your escalation bar (critical, or a senior client voice). Amber here means delivery is watching it - their problem until it isn't." />
+        <Metric icon={<Target size={15} />} label="Need your call" value={`${d.needsYou.length}`} sub={d.needsYou.length ? 'critical or a senior client voice' : 'nothing has crossed your line'}
+          tip="Gated by the risk framework the team agreed: only a critical risk, or one raised by a senior client stakeholder, ever reaches this number." />
+        <Metric icon={<TrendingUp size={15} />} label="Opportunities in play" value={`${d.opps.length}`} sub={`across ${new Set(d.opps.map((s) => s.accountId)).size} account${new Set(d.opps.map((s) => s.accountId)).size !== 1 ? 's' : ''} this period`}
+          tip="Opportunities surfaced from the period's calls. No £ values - commercials come off the dashboard until Synergist is the source of truth (agreed with Meesha, 21 Jul)." />
+        <Metric icon={<Radio size={15} />} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.signalCount} signals · ${d.people} people active`}
+          tip="Every transcribed call the brain read this period. Click a signal anywhere to see the exact moment in the conversation." />
       </div>
-      <div className="flex items-center gap-3 border-t border-line bg-surface-2 px-4 py-2.5">
-        {moments.length > 0 && (
-          <button onClick={() => setConvo(true)} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--accent-d)] hover:underline">
-            <MessagesSquare size={12} /> View the conversation
-          </button>
+
+      {/* ── Highest impact actions ── */}
+      <section className="mt-9">
+        <div className="flex flex-wrap items-center gap-3">
+          <SectionHead title="Highest impact actions" sub="the few places your weight changes the outcome" />
+          <span className="flex-1" />
+          <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+            Sort
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}
+              className="h-[30px] rounded-lg border border-line bg-surface px-2 text-[12px] font-semibold normal-case tracking-normal text-text outline-none">
+              <option value="impact">Impact</option>
+              <option value="newest">Newest</option>
+            </select>
+          </label>
+        </div>
+        {sortedImpact.length === 0 ? (
+          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-5 text-[14px]">
+            <CheckCircle2 size={18} style={{ color: 'var(--opp)' }} />
+            <span><span className="font-semibold">You are clear for now.</span> <span className="text-muted">tnAI is monitoring {accounts.length} accounts and will surface the next action the moment a signal crosses your line.</span></span>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {sortedImpact.map((s, i) => <ImpactCard key={s.id} s={s} rank={i + 1} onOpenAccount={onOpenAccount} onOpenSignal={onOpenSignal} />)}
+          </div>
         )}
-        {accountId && (
-          <button onClick={() => onOpenAccount(accountId)} className="group ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
-            Open account <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
-          </button>
+      </section>
+
+      {/* ── The portfolio, by pod ── */}
+      <section className="mt-9">
+        <SectionHead title="The portfolio" sub="every pod at a glance · owners from the Monday boards" />
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {d.podCards.map((pc) => (
+            <PodCard key={pc.key} pc={pc} onClick={() => { setPodFilter(podFilter === pc.key ? null : pc.key); setShowAll(true) }} active={podFilter === pc.key} />
+          ))}
+        </div>
+
+        <button onClick={() => { setShowAll((v) => !v); if (showAll) setPodFilter(null) }}
+          className="mt-4 flex w-full items-center gap-2 rounded-2xl border border-line bg-surface px-5 py-3 text-[13px] font-semibold text-muted transition-colors hover:text-text">
+          <Building2 size={15} /> {showAll ? 'Hide the account list' : `Every account, one line each · ${accounts.length}`}
+          {podFilter && showAll && <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[11px] font-semibold text-muted">filtered · {d.podCards.find((p) => p.key === podFilter)?.name}</span>}
+          <ChevronDown size={15} className={`ml-auto transition-transform ${showAll ? 'rotate-180' : ''}`} />
+        </button>
+        {showAll && (
+          <div className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
+            {d.roster.filter((r) => !podFilter || r.a.pod === podFilter || (podFilter === 'other' && !r.a.pod)).map(({ a, lens: L, risks, opps }, i) => (
+              <button key={a.id} onClick={() => onOpenAccount(a.id)} className={`group flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-bg-2 ${i ? 'border-t border-line' : ''}`}>
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: LENS_DOT[L] }} />
+                <span className="w-[150px] shrink-0 truncate text-[13.5px] font-semibold">{accountName(a.id)}</span>
+                <span className="w-[74px] shrink-0 text-[12px] text-muted-2">{LENS_WORD[L]}</span>
+                <span className="hidden w-[140px] shrink-0 truncate text-[12px] text-muted-2 sm:block">{ownerName(a.clientPartner)}</span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">
+                  {risks || opps ? [risks ? `${risks} open risk${risks !== 1 ? 's' : ''}` : '', opps ? `${opps} opportunit${opps !== 1 ? 'ies' : 'y'}` : ''].filter(Boolean).join(' · ') : 'No open signals'}
+                </span>
+                <ArrowRight size={14} className="shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
         )}
-      </div>
-      {convo && <ConversationsModal title="Potential risk · the conversation" moments={moments} onClose={() => setConvo(false)} />}
+      </section>
+
+      {/* ── Is the team moving? ── */}
+      <section className="mb-2 mt-9">
+        <SectionHead title="Is the team moving?" sub="from the calls the brain actually analysed — no guesswork" />
+        <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
+          <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
+            <Pulse value={`${d.periodCalls.length}`} label="calls analysed" />
+            <Pulse value={`${d.people}`} label="people heard on calls" />
+            <Pulse value={`${d.signalCount}`} label="signals extracted" />
+            <Pulse value={`${d.quiet.length}`} label="accounts gone quiet" warn={d.quiet.length > 0} />
+          </div>
+          {d.quiet.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+              <Eye size={13} className="text-muted-2" />
+              <span className="text-[12px] text-muted-2">Quiet this period — active before, no calls now:</span>
+              {d.quiet.map((id) => (
+                <button key={id} onClick={() => onOpenAccount(id)} className="rounded-full border border-line bg-bg-2 px-2.5 py-1 text-[12px] font-medium text-muted transition-colors hover:text-text">
+                  {accountName(id)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Analytics · one click away when she wants to expand ── */}
+      <button onClick={() => setShowAnalytics((v) => !v)} className="mt-4 flex w-full items-center gap-2 rounded-2xl border border-line bg-surface px-5 py-3 text-[13px] font-semibold text-muted transition-colors hover:text-text">
+        <BarChart3 size={15} /> {showAnalytics ? 'Hide the analytics' : 'Expand the analytics'} <span className="font-normal text-muted-2">signal activity · risk mix · portfolio health</span>
+        <ChevronDown size={15} className={`ml-auto transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
+      </button>
+      {showAnalytics && (
+        <div className="mb-2 mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-line bg-surface p-5">
+            <span className="eyebrow">Signal activity · recent weeks</span>
+            <div className="mt-3 h-[150px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyTrend()} margin={{ top: 4, right: 4, left: -26, bottom: 0 }}>
+                  <CartesianGrid stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="week" tick={{ fontSize: 10.5, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10.5, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                  <ReTooltip cursor={{ fill: 'var(--bg-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
+                  {(['opportunity', 'risk', 'update', 'people'] as const).map((k, i) => (
+                    <Bar key={k} dataKey={k} stackId="s" fill={SIGNAL_META[k].color} animationDuration={850} animationEasing="ease-out" radius={i === 3 ? [3, 3, 0, 0] : undefined} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <Donut title="Risk mix" sub="by framework category, this period"
+            data={(() => { const m = new Map<string, number>(); for (const s of allSignals.filter((x) => x.type === 'risk' && x.status !== 'actioned' && x.status !== 'dismissed')) { const k = s.riskCategory || s.subtype || 'Uncategorised'; m.set(k, (m.get(k) || 0) + 1) } return [...m.entries()].map(([name, value]) => ({ name, value })) })()}
+            palette={['#D64545', '#E68A00', '#B4468E', '#7C5CFF', '#1F62C4', '#1A8B91']} />
+          <Donut title="Portfolio health" sub="current RAG across accounts"
+            data={(['red', 'amber', 'green'] as Health[]).map((h) => ({ name: HEALTH_LABEL[h], value: accounts.filter((a) => a.health === h).length })).filter((x) => x.value > 0)}
+            palette={[HEALTH_COLOR.red, HEALTH_COLOR.amber, HEALTH_COLOR.green]} />
+        </div>
+      )}
+
+      {briefOpen && <BriefModal days={days} onClose={() => setBriefOpen(false)} onOpenAccount={(id) => { onOpenAccount(id); setBriefOpen(false) }} />}
     </div>
   )
 }
 
-function Chip({ children, color }: { children: ReactNode; color: string }) {
+function Donut({ title, sub, data, palette }: { title: string; sub: string; data: { name: string; value: number }[]; palette: string[] }) {
   return (
-    <span className="rounded-full px-2 py-0.5 text-[10.5px] font-bold" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
-      {children}
-    </span>
-  )
-}
-
-function Stat({ icon: Icon, label, value, sub, color }: { icon: typeof Building2; label: string; value: string; sub: string; color?: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className="flex items-center gap-2"><Icon size={15} style={{ color: color ?? 'var(--muted)' }} /><span className="eyebrow">{label}</span></div>
-      <div className="mt-2 text-3xl font-bold">{value}</div>
-      <div className="mt-0.5 text-[12px] text-muted">{sub}</div>
-    </div>
-  )
-}
-
-function DonutCard({ title, sub, data, palette, hint }: { title: string; sub: string; data: { name: string; value: number }[]; palette: string[]; hint?: string }) {
-  return (
-    <div className="glass rounded-2xl p-5">
-      <span className="flex items-center gap-1.5"><h3 className="text-[15px] font-semibold">{title}</h3>{hint && <InfoHint text={hint} />}</span>
-      <p className="text-[11.5px] text-muted-2">{sub}</p>
+    <div className="rounded-2xl border border-line bg-surface p-5">
+      <span className="eyebrow">{title}</span>
+      <p className="mt-0.5 text-[11.5px] text-muted-2">{sub}</p>
       {data.length === 0 ? (
         <p className="py-10 text-center text-[12px] text-muted-2">Nothing in this period.</p>
       ) : (
         <div className="mt-2 flex items-center gap-4">
-          <div className="h-[130px] w-[130px] shrink-0">
+          <div className="h-[120px] w-[120px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" innerRadius={36} outerRadius={60} paddingAngle={2} animationDuration={850} animationEasing="ease-out">
+                <Pie data={data} dataKey="value" nameKey="name" innerRadius={34} outerRadius={56} paddingAngle={2} animationDuration={850} animationEasing="ease-out">
                   {data.map((_, i) => <Cell key={i} fill={palette[i % palette.length]} stroke="var(--surface)" />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
+                <ReTooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -959,12 +368,362 @@ function DonutCard({ title, sub, data, palette, hint }: { title: string; sub: st
               <div key={x.name} className="flex items-center gap-2 text-[12px]">
                 <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: palette[i % palette.length] }} />
                 <span className="truncate text-muted">{x.name}</span>
-                <span className="font-semibold">{x.value}</span>
+                <span className="num font-semibold">{x.value}</span>
               </div>
             ))}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── "Your tnAI brief": the generated overview of everything, on demand.
+//    Fresh briefs (<24h) show instantly; otherwise workflow 13 regenerates over
+//    exactly this window while we animate. ──
+function BriefModal({ days, onClose, onOpenAccount }: { days: Days; onClose: () => void; onOpenAccount: (id: string) => void }) {
+  const [brief, setBrief] = useState<ApiBrief | null>(null)
+  const [generating, setGenerating] = useState(true)
+  const [failed, setFailed] = useState(false)
+  const [msgIdx, setMsgIdx] = useState(0)
+
+  useEffect(() => {
+    let on = true
+    ;(async () => {
+      const b = await fetchBrief('leadership', days)
+      if (!on) return
+      const fresh = b && Date.now() - Date.parse(b.created_at) < 24 * 3600_000
+      if (fresh) { setBrief(b); setGenerating(false); return }
+      if (b) setBrief(b)
+      const g = await generateBrief(days).catch(() => null)
+      if (!on) return
+      if (g) setBrief(g)
+      else if (!b) setFailed(true)
+      setGenerating(false)
+    })()
+    return () => { on = false }
+  }, [days])
+
+  useEffect(() => {
+    if (!generating) return
+    const t = window.setInterval(() => setMsgIdx((i) => i + 1), 2400)
+    return () => window.clearInterval(t)
+  }, [generating])
+
+  const GEN = [
+    `Re-reading the last ${days} days of calls…`,
+    'Cross-checking the weekly reports…',
+    'Weighing the open pipeline…',
+    'Writing your brief…',
+  ]
+  const when = brief ? new Date(brief.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null
+  const c = brief?.content
+
+  return createPortal(
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <div className="flex max-h-[86vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-line bg-surface" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5 border-b border-line px-5 py-4">
+          <span className="grid h-8 w-8 place-items-center rounded-xl text-white" style={{ background: 'var(--accent)' }}><Sparkles size={15} /></span>
+          <div>
+            <h3 className="text-[15px] font-bold tracking-tight">Your tnAI brief</h3>
+            <p className="text-[11.5px] text-muted-2">{days === 7 ? 'this week' : `last ${days} days`}{when && !generating ? ` · generated ${when}` : ''} · reads every call, weekly report + HubSpot</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="ml-auto rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">
+          {generating ? (
+            <div className="flex flex-col items-center gap-3 py-12">
+              <span className="relative grid h-12 w-12 place-items-center rounded-2xl text-white" style={{ background: 'var(--accent)' }}>
+                <Sparkles size={22} className="animate-pulse" />
+                <span className="absolute inset-0 animate-ping rounded-2xl" style={{ background: 'color-mix(in srgb, var(--accent) 25%, transparent)' }} aria-hidden />
+              </span>
+              <p className="text-[13.5px] font-semibold">{GEN[msgIdx % GEN.length]}</p>
+              <p className="text-[11px] text-muted-2">usually under half a minute</p>
+            </div>
+          ) : failed || !c ? (
+            <div className="py-10 text-center">
+              <p className="text-[13.5px] font-semibold">tnAI couldn't write the brief just now.</p>
+              <p className="mt-1 text-[12px] text-muted">It will try again when you reopen this - the rest of the dashboard is unaffected.</p>
+            </div>
+          ) : (
+            <div className="space-y-6 px-1 py-1">
+              <section>
+                <h4 className="text-[14px] font-semibold tracking-[-0.01em]">What's happening</h4>
+                <Prose text={c.whats_happening} onOpenAccount={onOpenAccount} />
+                {c.why && (
+                  <>
+                    <h4 className="mt-4 text-[14px] font-semibold tracking-[-0.01em]">The pattern behind it</h4>
+                    <Prose text={c.why} onOpenAccount={onOpenAccount} />
+                  </>
+                )}
+              </section>
+              {(c.accounts?.length ?? 0) > 0 && (
+                <section className="border-t border-line pt-5">
+                  <h4 className="text-[14px] font-semibold tracking-[-0.01em]">Account by account</h4>
+                  <div className="mt-3 space-y-4">
+                    {c.accounts!.map((a) => (
+                      <div key={a.name} className="border-l-2 pl-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 35%, var(--line))' }}>
+                        <span className="text-[13.5px] font-bold"><Linked text={a.name} onOpenAccount={onOpenAccount} /></span>
+                        <p className="mt-1 text-[13px] leading-relaxed"><Linked text={a.update} onOpenAccount={onOpenAccount} /></p>
+                        {a.why && <p className="mt-1 text-[12.5px] leading-relaxed text-muted"><Linked text={a.why} onOpenAccount={onOpenAccount} /></p>}
+                        {(a.actions?.length ?? 0) > 0 && a.actions!.map((act, i) => (
+                          <p key={i} className="mt-1.5 flex items-start gap-1.5 text-[12.5px] font-medium leading-snug">
+                            <ArrowRight size={13} className="mt-[3px] shrink-0" style={{ color: 'var(--accent)' }} />
+                            <Linked text={act} onOpenAccount={onOpenAccount} />
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {(c.watch_for?.length ?? 0) > 0 && (
+                <section className="border-t border-line pt-5">
+                  <h4 className="text-[14px] font-semibold tracking-[-0.01em]">Watch for</h4>
+                  <div className="mt-2 space-y-1.5">
+                    {c.watch_for!.map((t, i) => (
+                      <p key={i} className="flex items-start gap-2 text-[13px] leading-relaxed">
+                        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--muted-2)]" />
+                        <span className="min-w-0"><Linked text={t} onOpenAccount={onOpenAccount} /></span>
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <section className="border-t border-line pt-5">
+                <h4 className="text-[14px] font-semibold tracking-[-0.01em]">What needs you</h4>
+                <div className="mt-2 space-y-1.5">
+                  {(c.needs_you.length ? c.needs_you : ['Nothing needs your intervention this period.']).map((t, i) => (
+                    <p key={i} className="flex items-start gap-2 text-[13px] leading-relaxed">
+                      <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.needs_you.length ? 'var(--risk)' : 'var(--muted-2)' }} />
+                      <span className="min-w-0"><Linked text={t} onOpenAccount={onOpenAccount} /></span>
+                    </p>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function Prose({ text, onOpenAccount }: { text: string; onOpenAccount: (id: string) => void }) {
+  const blocks = (text || '').split(/\n+/).map((l) => l.trim()).filter(Boolean)
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      {blocks.map((raw, i) => {
+        const isBullet = /^[-•]\s+/.test(raw)
+        const t = raw.replace(/^[-•]\s+/, '')
+        return (
+          <p key={i} className="flex items-start gap-2 text-[13px] leading-relaxed">
+            {isBullet && <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />}
+            <span className="min-w-0"><Linked text={t} onOpenAccount={onOpenAccount} /></span>
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Search: accounts and signals, straight from the header ──
+function SearchBox({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
+  const [q, setQ] = useState('')
+  const [focus, setFocus] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const ql = q.trim().toLowerCase()
+  const accHits = ql ? accounts.filter((a) => a.name.toLowerCase().includes(ql)).slice(0, 4) : []
+  const sigHits = ql
+    ? allSignals.filter((s) => (s.summary + ' ' + s.quote).toLowerCase().includes(ql) && s.status !== 'dismissed').slice(0, 4)
+    : []
+  const open = focus && ql.length >= 2 && (accHits.length > 0 || sigHits.length > 0)
+  return (
+    <div ref={box} className="relative">
+      <div className="flex h-[38px] w-[280px] items-center gap-2 rounded-xl border border-line bg-surface px-3 transition-colors focus-within:border-[var(--accent)]">
+        <Search size={14} className="shrink-0 text-muted-2" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onFocus={() => setFocus(true)}
+          onBlur={() => window.setTimeout(() => setFocus(false), 150)}
+          placeholder="Search accounts and signals"
+          className="w-full bg-transparent text-[13px] text-text outline-none placeholder:text-muted-2"
+        />
+      </div>
+      {open && (
+        <div className="absolute right-0 top-[44px] z-50 w-[340px] overflow-hidden rounded-2xl border border-line bg-surface shadow-xl">
+          {accHits.length > 0 && <div className="eyebrow px-4 pb-1 pt-3">Accounts</div>}
+          {accHits.map((a) => (
+            <button key={a.id} onMouseDown={() => onOpenAccount(a.id)} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-2">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: a.health === 'red' ? 'var(--rag-red)' : a.health === 'amber' ? 'var(--rag-amber)' : 'var(--rag-green)' }} />
+              <span className="text-[13px] font-semibold">{a.name}</span>
+            </button>
+          ))}
+          {sigHits.length > 0 && <div className="eyebrow px-4 pb-1 pt-3">Signals</div>}
+          {sigHits.map((s) => (
+            <button key={s.id} onMouseDown={() => (onOpenSignal ? onOpenSignal(s) : onOpenAccount(s.accountId))} className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: s.type === 'risk' ? 'var(--risk)' : s.type === 'opportunity' ? 'var(--opp)' : 'var(--update)' }} />
+              <span className="min-w-0">
+                <span className="block truncate text-[12.5px] font-medium text-text">{s.summary}</span>
+                <span className="text-[11px] text-muted-2">{accountName(s.accountId)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Building blocks ──
+
+function Metric({ icon, label, value, sub, tip }: { icon: ReactNode; label: string; value: string; sub: string; tip: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-5" title={tip} tabIndex={0}>
+      <div className="flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: 'var(--bg-2)', color: 'var(--muted)' }}>{icon}</span>
+        <span className="eyebrow">{label}</span>
+      </div>
+      <div className="metric-num mt-4">{value}</div>
+      <div className="mt-1.5 text-[12px] text-muted">{sub}</div>
+    </div>
+  )
+}
+
+function SectionHead({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h2 className="text-[19px] font-semibold tracking-[-0.01em]">{title}</h2>
+      <span className="text-[12.5px] text-muted-2">{sub}</span>
+    </div>
+  )
+}
+
+function ScoreRing({ value, color }: { value: number; color: string }) {
+  const r = 14
+  const c = 2 * Math.PI * r
+  return (
+    <span className="relative grid h-9 w-9 shrink-0 place-items-center" title={`tnAI confidence ${value}/100`}>
+      <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90">
+        <circle cx="18" cy="18" r={r} fill="none" stroke="var(--bg-2)" strokeWidth="3.5" />
+        <circle cx="18" cy="18" r={r} fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(value / 100) * c} ${c}`} />
+      </svg>
+      <span className="num absolute text-[10.5px] font-bold" style={{ color }}>{value}</span>
+    </span>
+  )
+}
+
+function ImpactCard({ s, rank, onOpenAccount, onOpenSignal }: { s: Signal; rank: number; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
+  const isRisk = s.type === 'risk'
+  const color = isRisk ? 'var(--risk)' : 'var(--opp)'
+  const tag = isRisk ? (s.severity === 'critical' ? 'Critical risk' : 'Escalated to you') : 'Opportunity'
+  const age = ageDays(s.createdAt)
+  const momentum = isRisk
+    ? { label: age <= 2 ? 'New' : `${age}d open`, color: age > 7 ? 'var(--people)' : 'var(--muted)' }
+    : { label: (s.mentions ?? 1) >= 2 ? `Heard ${s.mentions}×` : 'Moving', color: 'var(--opp)' }
+  const src = sourceOf(s)
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-5 transition-shadow hover:shadow-md">
+      <div className="flex items-start gap-4">
+        <span className="num mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[13px] font-bold" style={{ background: 'var(--bg-2)', color: 'var(--muted)' }}>{rank}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => onOpenAccount(s.accountId)} className="text-[15.5px] font-bold tracking-[-0.01em] hover:underline">{accountName(s.accountId)}</button>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ color, background: `color-mix(in srgb, ${color} 11%, transparent)` }}>{tag}</span>
+            <span className="ml-auto flex items-center gap-2.5">
+              <span className="rounded-full px-2 py-0.5 text-[10.5px] font-bold" style={{ color: momentum.color, background: `color-mix(in srgb, ${momentum.color} 11%, transparent)` }}>
+                {momentum.label}
+              </span>
+              <ScoreRing value={s.confidence} color={color} />
+            </span>
+          </div>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-text">{s.summary}</p>
+          {/* SOURCES - neutral gray pills, Revenue OS style (screenshot, 11 Aug) */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span className="eyebrow mr-1">Sources</span>
+            <SourcePill icon={src.hubspot ? <StickyNote size={11} /> : <Radio size={11} />}
+              label={`${src.hubspot ? 'HubSpot' : src.label} · ${new Date(src.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`} />
+            {s.raisedBy && <SourcePill label={`raised by ${s.raisedBy}`} />}
+            {(s.mentions ?? 1) >= 2 && <SourcePill label={`${s.mentions} calls`} />}
+          </div>
+          {s.suggestedAction && (
+            <div className="mt-3 rounded-xl p-3.5" style={{ background: 'linear-gradient(155deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), color-mix(in srgb, var(--accent) 3%, var(--surface)))', border: '1px solid color-mix(in srgb, var(--accent) 22%, var(--line))' }}>
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={12} style={{ color: 'var(--accent-d)' }} />
+                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-d)' }}>tnAI suggested next step</span>
+              </div>
+              <p className="mt-1 text-[13.5px] font-medium leading-snug text-text">{s.suggestedAction}</p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {onOpenSignal && (
+                  <button onClick={() => onOpenSignal(s)} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold text-white transition-transform hover:scale-[1.02]" style={{ background: 'var(--accent)' }}>
+                    <Eye size={12} /> Review
+                  </button>
+                )}
+                <button onClick={() => onOpenAccount(s.accountId)} className="group inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3.5 py-1.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+                  Open {accountName(s.accountId)} <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TrendIcon({ trend }: { trend: Trend }) {
+  if (trend === 'improving') return <TrendingUp size={14} style={{ color: 'var(--opp)' }} aria-label="Improving" />
+  if (trend === 'declining') return <TrendingDown size={14} style={{ color: 'var(--risk)' }} aria-label="Declining" />
+  return <Minus size={14} style={{ color: 'var(--muted-2)' }} aria-label="Steady" />
+}
+
+type PodCardData = { key: string; name: string; owner: string; accs: Account[]; signals: number; counts: Record<Lens, number>; trend: Trend }
+function PodCard({ pc, onClick, active }: { pc: PodCardData; onClick: () => void; active: boolean }) {
+  const total = pc.accs.length || 1
+  return (
+    <button onClick={onClick} className="rounded-2xl border bg-surface p-4 text-left transition-all hover:shadow-md" style={{ borderColor: active ? 'var(--accent)' : 'var(--line)' }}>
+      <div className="flex items-start gap-2.5">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg" style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent-d)' }}>
+          <Building2 size={14} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-bold leading-tight">{pc.name}</span>
+          <span className="block truncate text-[11px] text-muted-2">{pc.owner}</span>
+        </span>
+        <TrendIcon trend={pc.trend} />
+      </div>
+      <div className="mt-3.5 flex h-[6px] w-full gap-[3px] overflow-hidden rounded-full" role="img"
+        aria-label={`${pc.counts['on-track']} on track, ${pc.counts.watch} watching, ${pc.counts['needs-you']} need you`}>
+        {(['on-track', 'watch', 'needs-you'] as Lens[]).map((h) =>
+          pc.counts[h] ? <span key={h} style={{ width: `${(100 * pc.counts[h]) / total}%`, background: LENS_DOT[h] }} /> : null,
+        )}
+      </div>
+      <div className="mt-1.5 text-[11px] text-muted-2">
+        {pc.counts['on-track']} on track{pc.counts.watch ? ` · ${pc.counts.watch} watch` : ''}{pc.counts['needs-you'] ? ` · ${pc.counts['needs-you']} need you` : ''}
+      </div>
+      <div className="mt-3 flex items-center gap-3 border-t border-line pt-3 text-[11.5px] text-muted">
+        <span>{pc.accs.length} account{pc.accs.length !== 1 ? 's' : ''}</span>
+        <span className="ml-auto">{pc.signals} signal{pc.signals !== 1 ? 's' : ''}</span>
+      </div>
+    </button>
+  )
+}
+
+function SourcePill({ icon, label }: { icon?: ReactNode; label: string }) {
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-muted" style={{ background: 'var(--bg-2)' }}>
+      {icon}{label}
+    </span>
+  )
+}
+
+function Pulse({ value, label, warn }: { value: string; label: string; warn?: boolean }) {
+  return (
+    <div>
+      <div className="metric-num" style={{ fontSize: 30, lineHeight: '32px', color: warn ? 'var(--people)' : undefined }}>{value}</div>
+      <div className="mt-1 text-[12px] text-muted">{label}</div>
     </div>
   )
 }

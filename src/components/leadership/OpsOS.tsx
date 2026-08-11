@@ -253,10 +253,10 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2"><Users size={16} style={{ color: 'var(--accent)' }} /><h3 className="text-[16px] font-bold tracking-tight">Delivery Intel</h3></div>
-          <p className="mt-0.5 text-[13px] text-muted">The team's calls - volume, type, time, coverage and the mood of the room{earliest ? ` - from analysed calls since ${fmt(earliest)}` : ''}.</p>
+          <h1 className="display-title">Delivery Intel</h1>
+          <p className="mt-1.5 text-[14px] text-muted">The team's calls - volume, type, time, coverage and the mood of the room{earliest ? ` · analysed calls since ${fmt(earliest)}` : ''}.</p>
         </div>
         <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-[12px] font-semibold">
           {([7, 14, 30] as Days[]).map((v) => (
@@ -285,6 +285,33 @@ export function OpsOS({ onOpenProject, onOpenAccount }: { onOpenProject?: (id: s
         <div className="min-w-0 flex-1">
           {tab === 'overview' ? (
             <>
+              {/* the numbers first - same visual grammar as Katie's page, all
+                  computed from the analysed calls in this window */}
+              {(() => {
+                const cutoff = Date.now() - days * DAY
+                const win = calls.filter((c) => Date.parse(c.date) >= cutoff)
+                const sigs = win.reduce((t, c) => t + c.signals.length, 0)
+                const accs = new Set(win.map((c) => c.accountId).filter(Boolean)).size
+                const active = roster.filter((r) => r.calls > 0).length
+                const strip = [
+                  { label: 'Calls analysed', value: `${win.length}`, sub: `last ${days} days` },
+                  { label: 'People on calls', value: `${active}`, sub: `of ${roster.length} on the roster` },
+                  { label: 'Signals extracted', value: `${sigs}`, sub: 'from these calls' },
+                  { label: 'Accounts covered', value: `${accs}`, sub: 'heard from this window' },
+                ]
+                return (
+                  <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    {strip.map((m) => (
+                      <div key={m.label} className="rounded-2xl border border-line bg-surface p-5">
+                        <span className="eyebrow">{m.label}</span>
+                        <div className="metric-num mt-3">{m.value}</div>
+                        <div className="mt-1 text-[12px] text-muted">{m.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
               {/* the tnAI read of the calls + the people - composed from the same
                   telemetry the charts below draw, phrased the way the brief is */}
               <CallBrief days={days} roster={roster} />
