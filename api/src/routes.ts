@@ -746,20 +746,26 @@ router.post('/ask', async (req, res, next) => {
                  accIds !== null ? [accIds] : [])).rows
       : [];
 
-    // chart: per-account signal counts, or calls per day when the question is about calls
+    // chart: per-account signal counts; calls per day for call questions; per-day
+    // line when the question is about ONE account or a trend (so single-account
+    // questions still get a visual - 12 Aug feedback).
     let chart: { kind: string; title: string; data: { label: string; value: number }[] } | null = null;
+    const dayLine = (rows: { d: string }[], title: string) => {
+      const byDay = new Map<string, number>();
+      for (const r of rows) { const k = String(r.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
+      if (byDay.size > 1) return { kind: 'line', title, data: [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([label, value]) => ({ label, value })) };
+      return null;
+    };
     if (wantsCalls) {
-      const byDay = new Map<string, number>();
-      for (const c of callRows as { d: string }[]) { const k = String(c.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
-      if (byDay.size > 1) chart = { kind: 'line', title: `Calls per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
-    } else if (/trend|over time|per day|daily|momentum/.test(qs) && sigRows.length) {
-      const byDay = new Map<string, number>();
-      for (const s2 of sigRows as { d: string }[]) { const k = String(s2.d).slice(5, 10); byDay.set(k, (byDay.get(k) || 0) + 1); }
-      if (byDay.size > 1) chart = { kind: 'line', title: `Signals per day · last ${days} days`, data: [...byDay.entries()].reverse().map(([label, value]) => ({ label, value })) };
-    } else if (sigRows.length) {
+      chart = dayLine(callRows as { d: string }[], `Calls per day · last ${days} days`);
+    } else if (/trend|over time|per day|daily|momentum|how are|how is/.test(qs) && sigRows.length) {
+      chart = dayLine(sigRows as { d: string }[], `Signals per day${mentioned.length === 1 ? ` · ${mentioned[0].name}` : ''} · last ${days} days`);
+    }
+    if (!chart && sigRows.length) {
       const byAcc = new Map<string, number>();
       for (const s of sigRows as { account: string | null }[]) if (s.account) byAcc.set(s.account, (byAcc.get(s.account) || 0) + 1);
       if (byAcc.size > 1) chart = { kind: 'bar', title: `${typeFilter ? (wantsRisk ? 'Risks' : wantsOpp ? 'Opportunities' : 'People signals') : 'Signals'} by account · last ${days} days`, data: [...byAcc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value]) => ({ label, value })) };
+      else chart = dayLine(sigRows as { d: string }[], `Signals per day${mentioned.length === 1 ? ` · ${mentioned[0].name}` : ''} · last ${days} days`);
     }
 
     const facts = {
