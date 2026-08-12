@@ -99,7 +99,7 @@ export type ApiAssociate = {
 
 export const fetchAccounts = () => get<ApiAccount[]>('/api/accounts')
 export const fetchProjects = () => get<ApiProject[]>('/api/projects')
-export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=200')
+export const fetchSignals = () => get<ApiSignal[]>('/api/signals?limit=1000')
 export const fetchCalls = () => get<ApiCall[]>('/api/calls')
 // Transcripts load one call at a time when someone opens one - the calls list stays
 // light no matter how much history accumulates.

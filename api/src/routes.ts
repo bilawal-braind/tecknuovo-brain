@@ -291,7 +291,7 @@ router.get('/signals', async (req, res, next) => {
     if (allowed !== null) { params.push(allowed); where.push(`s.account_id = ANY($${params.length}::uuid[])`); }
     if (!(await leadershipVisible(req))) where.push(`COALESCE(s.visibility, 'all') <> 'leadership'`);
     // NaN-proof paging: ?limit=abc must not become a 500.
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 1000);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     params.push(limit); const lp = params.length;
     params.push(offset); const op = params.length;
