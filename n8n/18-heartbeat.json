@@ -45,7 +45,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Paste the Slack incoming-webhook URL for the channel these should land in.\n// No Slack credential needed - a webhook is all it takes.\nconst SLACK_WEBHOOK = '';\n// Counts only - no client names, no content. Healthy = the schedules ran in\n// the last 24h and nothing is stuck mid-pipeline.\nconst r = $input.first().json;\nconst healthy = Number(r.runs_24h) > 0 && Number(r.stuck) === 0;\nconst line = healthy\n  ? `\\u2705 TN Brain healthy \\u00b7 ${r.calls_24h} call(s) ingested and ${r.signals_24h} signal(s) extracted in the last 24h \\u00b7 latest call ${r.latest_call}`\n  : `\\u26a0\\ufe0f TN Brain needs a look \\u00b7 runs in last 24h: ${r.runs_24h} \\u00b7 stuck items: ${r.stuck} \\u00b7 failed items: ${r.failed} \\u00b7 latest call ${r.latest_call}`;\n// Dead-man's switch: paste a healthchecks.io ping URL here. If this heartbeat\n// ever stops arriving, Bilawal gets an email - without any data leaving.\nconst PING_URL = '';\nreturn [{ json: { webhook: SLACK_WEBHOOK, line, healthy, ping: PING_URL ? (healthy ? PING_URL : PING_URL + '/fail') : null } }];"
+        "jsCode": "// Paste the Slack incoming-webhook URL for the channel these should land in.\nconst SLACK_WEBHOOK = '';\n// Counts only - no client names, no content.\nconst r = $input.first().json;\nconst healthy = Number(r.runs_24h) > 0 && Number(r.stuck) === 0 && Number(r.failed) === 0;\nconst d = r.latest_call ? new Date(r.latest_call) : null;\nconst nice = d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : 'none yet';\nconst blocks = [\n  { type: 'section', text: { type: 'mrkdwn', text: healthy\n      ? ':brain: *tnAI · Daily health check*  :large_green_circle:'\n      : ':brain: *tnAI · Daily health check*  :warning: *needs a look*' } },\n  { type: 'section', fields: [\n      { type: 'mrkdwn', text: '*Calls ingested*\\n' + r.calls_24h + ' in the last 24h' },\n      { type: 'mrkdwn', text: '*Signals extracted*\\n' + r.signals_24h + ' in the last 24h' },\n      { type: 'mrkdwn', text: '*Latest call*\\n' + nice },\n      { type: 'mrkdwn', text: '*Queue*\\n' + (Number(r.queue_pending) || 0) + ' waiting' },\n    ] },\n];\nif (!healthy) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: ':warning: ' +\n  (Number(r.stuck) ? r.stuck + ' item(s) stuck mid-pipeline. ' : '') +\n  (Number(r.failed) ? r.failed + ' item(s) failed in the last 24h. ' : '') +\n  (Number(r.runs_24h) === 0 ? 'No pipeline runs recorded in 24h. ' : '') } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'All pipelines monitored · counts only, no client data · <https://ast.tecknuovo.com|open the dashboard>' }] });\nconst line = healthy\n  ? 'tnAI healthy · ' + r.calls_24h + ' calls and ' + r.signals_24h + ' signals in 24h'\n  : 'tnAI needs a look · stuck: ' + r.stuck + ' · failed: ' + r.failed;\n// Dead-man's switch: paste a healthchecks.io ping URL here.\nconst PING_URL = '';\nreturn [{ json: { webhook: SLACK_WEBHOOK, line, blocks, healthy, ping: PING_URL ? (healthy ? PING_URL : PING_URL + '/fail') : null } }];\n"
       },
       "id": "hb_build",
       "name": "Build health line",
@@ -62,7 +62,7 @@
         "url": "={{ $json.webhook }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ text: $json.line }) }}",
+        "jsonBody": "={{ JSON.stringify({ text: $json.line, blocks: $json.blocks }) }}",
         "options": {}
       },
       "id": "hb_slack",
