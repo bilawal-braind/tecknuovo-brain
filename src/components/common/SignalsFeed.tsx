@@ -8,7 +8,7 @@ import { SignalBadge, RagDot, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
 import { useSignal } from './SignalLayer'
-import { ChevronDown, CheckCircle2, EyeOff, X, RotateCcw } from 'lucide-react'
+import { CheckCircle2, EyeOff, X, RotateCcw } from 'lucide-react'
 import { undoFeedback } from '../../data/api'
 
 const CALL_TYPES = ['Daily standup', 'Weekly report', 'Monthly governance', 'Check-in', 'Client kickoff']
