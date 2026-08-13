@@ -79,8 +79,14 @@ for (const item of data.boards[0].items_page.items) {
       commercial_responsible: col('Commercial Respons') || col('Commerical Respons'),
       delivery_responsible: col('Delivery Respons'), delivery_technical: col('Delivery Technical'),
     }
-    const existing = (await db.query(`SELECT id, name FROM projects WHERE account_id = $1`, [acc.id])).rows
-      .find((p) => fuzzy(p.name, s.name))
+    // exact normalised match first, containment only as fallback; a row can be
+    // claimed by ONE subitem per run (overlapping names like GVMS / KMS GVMS)
+    const pool = (await db.query(`SELECT id, name FROM projects WHERE account_id = $1`, [acc.id])).rows
+      .filter((p) => !keepIds.includes(p.id))
+    const exact = pool.find((p) => norm(p.name) === norm(s.name) || cands(p.name)[0] === cands(s.name)[0])
+    const existing = exact || pool
+      .filter((p) => fuzzy(p.name, s.name))
+      .sort((a, b) => Math.abs(norm(a.name).length - norm(s.name).length) - Math.abs(norm(b.name).length - norm(s.name).length))[0]
     if (existing) {
       await db.query(
         `UPDATE projects SET name=$1, monday_item_id=$2, delivery_manager_name=COALESCE($3, delivery_manager_name),
