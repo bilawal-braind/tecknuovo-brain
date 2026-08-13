@@ -659,7 +659,28 @@ router.post('/feedback', async (req, res, next) => {
        user?.name || user?.email || (given_by ? String(given_by).slice(0, 120) : null)]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'signal not found' });
+    // Meesha (12 Aug): marking a signal INCORRECT removes it from every dashboard
+    // immediately - the feedback row still teaches the classifier.
+    if (verdict === 'incorrect') await q(`UPDATE signals SET status='dismissed' WHERE id = $1`, [signal_id]);
     res.status(201).json({ id: r.rows[0].id });
+  } catch (e) { next(e); }
+});
+
+// Undo an "incorrect" verdict: retract the feedback row (so the learning loop
+// never trains on a retracted judgment) and put the signal back in the queue.
+// Only acts when the LATEST feedback on the signal is 'incorrect' - a plain
+// Dismiss/Actioned undo passes through harmlessly.
+router.post('/feedback/undo', async (req, res, next) => {
+  try {
+    const { signal_id } = req.body || {};
+    const denied = await checkSignalWrite(req, signal_id);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    const del = await q(
+      `DELETE FROM feedback WHERE id = (
+         SELECT id FROM feedback WHERE signal_id = $1 ORDER BY created_at DESC LIMIT 1
+       ) AND verdict = 'incorrect' RETURNING id`, [signal_id]);
+    await q(`UPDATE signals SET status='new' WHERE id = $1 AND status = 'dismissed'`, [signal_id]);
+    res.json({ retracted: del.rowCount > 0 });
   } catch (e) { next(e); }
 });
 

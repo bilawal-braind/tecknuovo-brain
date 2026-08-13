@@ -6,6 +6,8 @@ import { accountById, accountName, podName, projectById } from '../../data/org'
 import { SignalBadge, RagDot, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
+import { useSignal } from './SignalLayer'
+import { ChevronDown, CheckCircle2, EyeOff } from 'lucide-react'
 
 const CALL_TYPES = ['Daily standup', 'Weekly report', 'Monthly governance', 'Check-in', 'Client kickoff']
 const TYPE_ORDER: SignalType[] = ['risk', 'opportunity', 'people', 'update']
@@ -26,9 +28,12 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
   const [shownAll, setShownAll] = useState<Record<string, boolean>>({})
   const [flatCount, setFlatCount] = useState(20)
   const GROUP_CAP = 5
+  const { statusOf } = useSignal()
+  const [showResolved, setShowResolved] = useState(false)
+  const [showRemoved, setShowRemoved] = useState(false)
   const count = (t: SignalType) => signals.filter((s) => s.type === t).length
 
-  const feed = useMemo(() => {
+  const parts = useMemo(() => {
     let list = filter === 'all' ? signals : signals.filter((s) => s.type === filter)
     if (filter === 'risk' && riskLevel !== 'all') list = list.filter((s) => riskScope(s) === riskLevel)
     if (callType !== 'all') list = list.filter((s) => s.sourceCall.type === callType)
@@ -50,8 +55,17 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         return hay.includes(ql)
       })
     }
-    return sort === 'newest' ? [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : rankByImpact(list)
-  }, [filter, riskLevel, callType, sort, range, q, signals])
+    // Option A (Meesha, 12 Aug): resolved work collapses to the bottom as a quiet
+    // win pile; removed-as-incorrect hides behind its own strip, restorable.
+    const open = list.filter((x) => { const st = statusOf(x); return st !== 'actioned' && st !== 'dismissed' })
+    const resolved = list.filter((x) => statusOf(x) === 'actioned').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const removed = list.filter((x) => statusOf(x) === 'dismissed').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return {
+      open: sort === 'newest' ? [...open].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : rankByImpact(open),
+      resolved, removed,
+    }
+  }, [filter, riskLevel, callType, sort, range, q, signals, statusOf])
+  const feed = parts.open
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
@@ -164,6 +178,38 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Resolved · the quiet win pile (Option A) */}
+      {parts.resolved.length > 0 && (
+        <div className="mt-4">
+          <button onClick={() => setShowResolved((v) => !v)} className="flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+            <CheckCircle2 size={14} style={{ color: 'var(--opp)' }} /> Resolved · {parts.resolved.length}
+            <span className="font-normal text-muted-2">actioned and done - kept for the record</span>
+            <ChevronDown size={14} className={`ml-auto transition-transform ${showResolved ? 'rotate-180' : ''}`} />
+          </button>
+          {showResolved && (
+            <div className="mt-2 space-y-2">
+              {parts.resolved.slice(0, 30).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Removed as incorrect · restorable */}
+      {parts.removed.length > 0 && (
+        <div className="mt-2">
+          <button onClick={() => setShowRemoved((v) => !v)} className="flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+            <EyeOff size={14} /> Removed · {parts.removed.length}
+            <span className="font-normal text-muted-2">marked incorrect or dismissed - Undo restores them</span>
+            <ChevronDown size={14} className={`ml-auto transition-transform ${showRemoved ? 'rotate-180' : ''}`} />
+          </button>
+          {showRemoved && (
+            <div className="mt-2 space-y-2">
+              {parts.removed.slice(0, 30).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
+            </div>
+          )}
         </div>
       )}
     </>

@@ -302,3 +302,5 @@ export const submitFeedback = (
   verdict: 'correct' | 'incorrect' | 'relabel',
   opts?: { correctType?: string; reason?: string },
 ) => post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, correct_type: opts?.correctType, reason: opts?.reason })
+// Retract an 'incorrect' verdict and put the signal back (learning loop never sees retracted judgments).
+export const undoFeedback = (signalId: string) => post<{ retracted: boolean }>('/api/feedback/undo', { signal_id: signalId })

@@ -5,7 +5,7 @@ import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName, accounts } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback, pushToHubspot, addSignalNote, reassignSignal, addTodo } from '../../data/api'
+import { submitFeedback, undoFeedback, pushToHubspot, addSignalNote, reassignSignal, addTodo } from '../../data/api'
 import { signalNotes, notesForSignal } from '../../data/crm'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
@@ -80,9 +80,22 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
   const sourceCall = signal.callId ? calls.find((c) => c.id === signal.callId) : undefined
 
   // One shared verdict for the row control and the fuller panel in the expanded card.
+  // Meesha (12 Aug): INCORRECT removes the signal from every dashboard - after a
+  // short grace window so a mis-click can be undone in place.
+  const removeTimer = useRef<number>(0)
+  useEffect(() => () => window.clearTimeout(removeTimer.current), [])
   const logFeedback = (v: Verdict, note?: string) => {
     setVerdict(v)
     submitFeedback(signal.id, v.kind, { correctType: v.newType, reason: note }).catch(() => {})
+    if (v.kind === 'incorrect') {
+      removeTimer.current = window.setTimeout(() => setStatus(signal.id, 'dismissed'), 6000)
+    }
+  }
+  const undoIncorrect = () => {
+    window.clearTimeout(removeTimer.current)
+    setVerdict(null)
+    undoFeedback(signal.id).catch(() => {})
+    if (statusOf(signal) === 'dismissed') setStatus(signal.id, 'new')
   }
 
   return (
@@ -117,11 +130,11 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
               <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>
               {/* Meesha's ask: an accidental Dismiss (or Actioned) must be reversible -
                   puts the signal straight back in the queue, persisted like the original click. */}
-              <button onClick={() => setStatus(signal.id, 'new')} title="Undo - put this signal back in the queue"
+              <button onClick={() => { setStatus(signal.id, 'new'); setVerdict(null); undoFeedback(signal.id).catch(() => {}) }} title="Undo - put this signal back in the queue"
                 className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-semibold text-muted transition-colors hover:text-text">Undo</button>
             </span>
           ) : (
-            <FeedbackControl verdict={verdict} onVote={logFeedback} onRelabel={() => setOpen(true)} />
+            <FeedbackControl verdict={verdict} onVote={logFeedback} onRelabel={() => setOpen(true)} onUndo={undoIncorrect} />
           )}
           <button onClick={() => setOpen((o) => !o)} aria-label="Expand" className="rounded-md p-0.5 text-muted-2 transition-colors hover:text-text"><ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button>
         </div>
@@ -470,13 +483,16 @@ function NotesSection({ signalId }: { signalId: string }) {
 // Always-visible feedback control on every signal row, on every dashboard - so anyone
 // (not just people with the Observability dashboard) can mark a signal Correct / Incorrect
 // or open it to relabel. Once given, it shows the logged verdict.
-function FeedbackControl({ verdict, onVote, onRelabel }: { verdict: Verdict | null; onVote: (v: Verdict) => void; onRelabel: () => void }) {
+function FeedbackControl({ verdict, onVote, onRelabel, onUndo }: { verdict: Verdict | null; onVote: (v: Verdict) => void; onRelabel: () => void; onUndo?: () => void }) {
   if (verdict) {
-    const label = verdict.kind === 'correct' ? 'Correct' : verdict.kind === 'incorrect' ? 'Incorrect' : 'Relabelled'
+    const label = verdict.kind === 'correct' ? 'Correct' : verdict.kind === 'incorrect' ? 'Removing' : 'Relabelled'
     const color = verdict.kind === 'correct' ? 'var(--opp)' : verdict.kind === 'incorrect' ? 'var(--risk)' : 'var(--people)'
     return (
       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
         {verdict.kind === 'correct' ? <Check size={11} /> : verdict.kind === 'incorrect' ? <X size={11} /> : <RefreshCw size={10} />} {label}
+        {verdict.kind === 'incorrect' && onUndo && (
+          <button onClick={(e) => { e.stopPropagation(); onUndo() }} className="ml-0.5 rounded-full border border-current px-1.5 text-[9.5px] font-bold">Undo</button>
+        )}
       </span>
     )
   }
