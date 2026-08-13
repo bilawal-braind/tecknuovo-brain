@@ -198,8 +198,8 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
             )}
             {!done && (
               <div className="flex items-center gap-1.5">
-                <button onClick={() => setStatus(signal.id, 'actioned')} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: 'var(--accent)' }}><Check size={12} /> Actioned</button>
-                <button onClick={() => setStatus(signal.id, 'dismissed')} className="rounded-md border border-line p-1 text-muted transition-colors hover:text-text" aria-label="Dismiss"><X size={13} /></button>
+                <button onClick={() => setStatus(signal.id, 'actioned')} title="We dealt with this - moves it to the Resolved pile" className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: 'var(--accent)' }}><Check size={12} /> Actioned</button>
+                <button onClick={() => setStatus(signal.id, 'dismissed')} title="Correct signal, but not worth tracking - hides it without teaching the AI" className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-text"><X size={12} /> Dismiss</button>
               </div>
             )}
           </div>
@@ -499,9 +499,9 @@ function FeedbackControl({ verdict, onVote, onRelabel, onUndo }: { verdict: Verd
   const btn = 'grid h-6 w-6 place-items-center rounded-md border border-line text-muted-2 transition-colors'
   return (
     <span className="inline-flex items-center gap-1" title="Is this signal right? Give feedback">
-      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'correct' }) }} aria-label="Mark correct" className={`${btn} hover:border-[var(--opp)] hover:text-[var(--opp)]`}><Check size={13} /></button>
-      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'incorrect' }) }} aria-label="Mark incorrect" className={`${btn} hover:border-[var(--risk)] hover:text-[var(--risk)]`}><X size={13} /></button>
-      <button onClick={(e) => { e.stopPropagation(); onRelabel() }} aria-label="Relabel or add a note" className={`${btn} hover:border-[var(--people)] hover:text-[var(--people)]`}><RefreshCw size={11} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'correct' }) }} aria-label="Mark correct" title="The AI got this right - trains the brain" className={`${btn} hover:border-[var(--opp)] hover:text-[var(--opp)]`}><Check size={13} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onVote({ kind: 'incorrect' }) }} aria-label="Mark incorrect" title="Wrong signal - removes it everywhere and teaches the brain" className={`${btn} hover:border-[var(--risk)] hover:text-[var(--risk)]`}><X size={13} /></button>
+      <button onClick={(e) => { e.stopPropagation(); onRelabel() }} aria-label="Relabel or add a note" title="Real signal, wrong type - relabel it" className={`${btn} hover:border-[var(--people)] hover:text-[var(--people)]`}><RefreshCw size={11} /></button>
     </span>
   )
 }
