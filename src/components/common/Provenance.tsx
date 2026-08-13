@@ -77,7 +77,7 @@ function stepsForAccount(accountId: string): Step[] {
   return [
     { color: C.monday, icon: ClipboardList, title: owners ? `Owners: ${owners}` : 'Owners not on the board yet', sub: BOARDS.alloc, sub2: 'this board also decides who sees this account at login' },
     { color: C.monday, icon: Users, title: `${acc.consultantCount ?? 0} consultant${(acc.consultantCount ?? 0) !== 1 ? 's' : ''} on site`, sub: BOARDS.assoc },
-    { color: C.sharepoint, icon: FileText, title: 'Projects, phases & RAG trend', sub: BOARDS.sp, sub2: 'no weekly report filed = no project shown' },
+    { color: C.monday, icon: FileText, title: 'Projects: the sublists on Live Projects & Allocations (board 1599188575)', sub: 'each project under its client on the Monday board, with its Delivery Coordinator', sub2: 'phases & RAG then come from the weekly reports filed against those projects' },
     { color: C.monday, icon: ShieldAlert, title: 'Risk register items', sub: BOARDS.risk },
     { color: C.hubspot, icon: Handshake, title: 'Stakeholders & open pipeline', sub: BOARDS.hs },
     { color: C.teams, icon: Video, title: 'Calls & signals', sub: 'from transcribed Teams calls (and HubSpot notes)' },
@@ -90,8 +90,8 @@ function stepsForProject(projectId: string): Step[] {
   const p = projectById(projectId)
   if (!p) return []
   return [
-    { color: C.sharepoint, icon: FileText, title: `Named in the weekly reports`, sub: BOARDS.sp, sub2: 'a project exists on the dashboard because a weekly report names it' },
-    { color: C.sharepoint, icon: UserCog, title: p.deliveryManager ? `Delivery Manager: ${personName(p.deliveryManager)}` : 'No DM named yet', sub: 'named inside that weekly report' },
+    { color: C.monday, icon: FileText, title: `On the project sublist in Monday`, sub: 'Live Projects & Allocations (board 1599188575) - the sublist under this client', sub2: 'a project exists on the dashboard because the Monday sublist names it' },
+    { color: C.monday, icon: UserCog, title: p.deliveryManager ? `Delivery Manager: ${personName(p.deliveryManager)}` : 'No DM named yet', sub: 'the Delivery Coordinator on the Monday sublist' },
     { color: C.sharepoint, icon: Gauge, title: `Current RAG: ${(p.rag || 'unknown').toUpperCase()} · phase: ${p.phase || '-'}`, sub: 'from the latest weekly report · the trend graph shows the history' },
     { color: C.teams, icon: Video, title: 'Signals on this project', sub: 'from transcribed calls matched to it' },
     SCREEN_STEP,

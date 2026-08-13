@@ -153,7 +153,7 @@ router.get('/accounts/:id', async (req, res, next) => {
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END) AS rag
-       FROM projects p WHERE p.account_id = $1 ORDER BY p.sow_value DESC NULLS LAST`,
+       FROM projects p WHERE p.account_id = $1 AND p.retired IS NOT TRUE ORDER BY p.sow_value DESC NULLS LAST`,
       [req.params.id]
     );
     const signals = await q(
@@ -220,7 +220,7 @@ router.get('/projects', async (req, res, next) => {
                 WHEN EXISTS (SELECT 1 FROM signals s WHERE s.project_id = p.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
                 ELSE 'green'
               END) AS rag
-       FROM projects p ${filter} ORDER BY p.sow_value DESC NULLS LAST`,
+       FROM projects p ${filter === '' ? "WHERE p.retired IS NOT TRUE" : filter + ' AND p.retired IS NOT TRUE'} ORDER BY p.sow_value DESC NULLS LAST`,
       params
     );
     res.json(r.rows);
