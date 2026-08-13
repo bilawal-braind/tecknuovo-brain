@@ -113,13 +113,22 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         <Select label="Call type" value={callType} onChange={setCallType} options={[['all', 'All call types'], ...CALL_TYPES.map((c) => [c, c] as [string, string])]} />
         <Select label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[['urgent', 'Most urgent'], ['newest', 'Newest first']]} />
         <Select label="Time" value={range} onChange={(v) => setRange(v as 'all' | '30' | '7')} options={[['all', 'All time'], ['30', 'Last 30 days'], ['7', 'Last 7 days']]} />
-        {parts.removed.length > 0 && (
-          <button onClick={() => setShowRemoved(true)}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text"
-            title="Signals marked incorrect or dismissed - restore any of them">
-            <EyeOff size={13} /> Removed · {parts.removed.length}
-          </button>
-        )}
+        <span className="ml-auto inline-flex items-center gap-1.5">
+          {parts.resolved.length > 0 && (
+            <button onClick={() => setShowResolved(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text"
+              title="Actioned and done - kept for the record, reopen any of them">
+              <CheckCircle2 size={13} style={{ color: 'var(--opp)' }} /> Resolved · {parts.resolved.length}
+            </button>
+          )}
+          {parts.removed.length > 0 && (
+            <button onClick={() => setShowRemoved(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text"
+              title="Signals marked incorrect or dismissed - restore any of them">
+              <EyeOff size={13} /> Removed · {parts.removed.length}
+            </button>
+          )}
+        </span>
       </div>
 
       {feed.length === 0 && <p className="mt-3 rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No signals match these filters.</p>}
@@ -190,43 +199,38 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         </div>
       )}
 
-      {/* Resolved · the quiet win pile (Option A) */}
-      {parts.resolved.length > 0 && (
-        <div className="mt-4">
-          <button onClick={() => setShowResolved((v) => !v)} className="flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-            <CheckCircle2 size={14} style={{ color: 'var(--opp)' }} /> Resolved · {parts.resolved.length}
-            <span className="font-normal text-muted-2">actioned and done - kept for the record</span>
-            <ChevronDown size={14} className={`ml-auto transition-transform ${showResolved ? 'rotate-180' : ''}`} />
-          </button>
-          {showResolved && (
-            <div className="mt-2 space-y-2">
-              {parts.resolved.slice(0, 30).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
-            </div>
-          )}
-        </div>
+      {showResolved && (
+        <StatusPanel signals={parts.resolved} onClose={() => setShowResolved(false)}
+          icon={<CheckCircle2 size={15} style={{ color: 'var(--opp)' }} />} title="Resolved signals"
+          subtitle="actioned and done - kept for the record, Reopen puts one back" actionLabel="Reopen" retract={false} />
       )}
-
-      {showRemoved && <RemovedPanel signals={parts.removed} onClose={() => setShowRemoved(false)} />}
+      {showRemoved && (
+        <StatusPanel signals={parts.removed} onClose={() => setShowRemoved(false)}
+          icon={<EyeOff size={15} className="text-muted" />} title="Removed signals"
+          subtitle="marked incorrect or dismissed - Restore puts one straight back" actionLabel="Restore" retract />
+      )}
     </>
   )
 }
 
-// The restore panel: everything marked incorrect or dismissed, one click to put
-// back - opened from the toolbar so nobody scrolls hunting for a removed signal.
-function RemovedPanel({ signals, onClose }: { signals: Signal[]; onClose: () => void }) {
+// The status panel: Resolved and Removed signals, one click to put back -
+// opened from the toolbar so nobody scrolls hunting for a signal.
+function StatusPanel({ signals, onClose, icon, title, subtitle, actionLabel, retract }: {
+  signals: Signal[]; onClose: () => void; icon: React.ReactNode; title: string; subtitle: string; actionLabel: string; retract: boolean
+}) {
   const { setStatus } = useSignal()
   const restore = (id: string) => {
-    undoFeedback(id).catch(() => {})
+    if (retract) undoFeedback(id).catch(() => {})
     setStatus(id, 'new')
   }
   return createPortal(
     <div className="fixed inset-0 z-[85] grid place-items-center bg-black/35 p-4" onClick={onClose}>
       <div className="flex max-h-[72vh] w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2.5 border-b border-line px-5 py-3.5">
-          <EyeOff size={15} className="text-muted" />
+          {icon}
           <div>
-            <div className="text-[14px] font-bold tracking-tight">Removed signals</div>
-            <div className="text-[11px] text-muted-2">marked incorrect or dismissed - Restore puts one straight back</div>
+            <div className="text-[14px] font-bold tracking-tight">{title}</div>
+            <div className="text-[11px] text-muted-2">{subtitle}</div>
           </div>
           <button onClick={onClose} aria-label="Close" className="ml-auto rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
         </div>
@@ -242,7 +246,7 @@ function RemovedPanel({ signals, onClose }: { signals: Signal[]; onClose: () => 
                 </div>
                 <button onClick={() => restore(s.id)}
                   className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-d)] transition-colors hover:border-[var(--accent)]">
-                  <RotateCcw size={11} /> Restore
+                  <RotateCcw size={11} /> {actionLabel}
                 </button>
               </div>
             ))}
