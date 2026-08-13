@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowRight, Search } from 'lucide-react'
 import type { Signal, SignalType } from '../../data/types'
 import { rankByImpact, riskScope } from '../../data/signals'
@@ -7,7 +8,8 @@ import { SignalBadge, RagDot, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
 import { useSignal } from './SignalLayer'
-import { ChevronDown, CheckCircle2, EyeOff } from 'lucide-react'
+import { ChevronDown, CheckCircle2, EyeOff, X, RotateCcw } from 'lucide-react'
+import { undoFeedback } from '../../data/api'
 
 const CALL_TYPES = ['Daily standup', 'Weekly report', 'Monthly governance', 'Check-in', 'Client kickoff']
 const TYPE_ORDER: SignalType[] = ['risk', 'opportunity', 'people', 'update']
@@ -111,6 +113,13 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         <Select label="Call type" value={callType} onChange={setCallType} options={[['all', 'All call types'], ...CALL_TYPES.map((c) => [c, c] as [string, string])]} />
         <Select label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[['urgent', 'Most urgent'], ['newest', 'Newest first']]} />
         <Select label="Time" value={range} onChange={(v) => setRange(v as 'all' | '30' | '7')} options={[['all', 'All time'], ['30', 'Last 30 days'], ['7', 'Last 7 days']]} />
+        {parts.removed.length > 0 && (
+          <button onClick={() => setShowRemoved(true)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text"
+            title="Signals marked incorrect or dismissed - restore any of them">
+            <EyeOff size={13} /> Removed · {parts.removed.length}
+          </button>
+        )}
       </div>
 
       {feed.length === 0 && <p className="mt-3 rounded-xl border border-line bg-surface p-8 text-center text-[12px] text-muted-2">No signals match these filters.</p>}
@@ -197,22 +206,51 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         </div>
       )}
 
-      {/* Removed as incorrect · restorable */}
-      {parts.removed.length > 0 && (
-        <div className="mt-2">
-          <button onClick={() => setShowRemoved((v) => !v)} className="flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
-            <EyeOff size={14} /> Removed · {parts.removed.length}
-            <span className="font-normal text-muted-2">marked incorrect or dismissed - Undo restores them</span>
-            <ChevronDown size={14} className={`ml-auto transition-transform ${showRemoved ? 'rotate-180' : ''}`} />
-          </button>
-          {showRemoved && (
-            <div className="mt-2 space-y-2">
-              {parts.removed.slice(0, 30).map((s) => <TriageCard key={s.id} signal={s} showAccount onOpenAccount={onOpenAccount} />)}
-            </div>
-          )}
-        </div>
-      )}
+      {showRemoved && <RemovedPanel signals={parts.removed} onClose={() => setShowRemoved(false)} />}
     </>
+  )
+}
+
+// The restore panel: everything marked incorrect or dismissed, one click to put
+// back - opened from the toolbar so nobody scrolls hunting for a removed signal.
+function RemovedPanel({ signals, onClose }: { signals: Signal[]; onClose: () => void }) {
+  const { setStatus } = useSignal()
+  const restore = (id: string) => {
+    undoFeedback(id).catch(() => {})
+    setStatus(id, 'new')
+  }
+  return createPortal(
+    <div className="fixed inset-0 z-[85] grid place-items-center bg-black/35 p-4" onClick={onClose}>
+      <div className="flex max-h-[72vh] w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.5 border-b border-line px-5 py-3.5">
+          <EyeOff size={15} className="text-muted" />
+          <div>
+            <div className="text-[14px] font-bold tracking-tight">Removed signals</div>
+            <div className="text-[11px] text-muted-2">marked incorrect or dismissed - Restore puts one straight back</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="ml-auto rounded-md p-1 text-muted-2 transition-colors hover:text-text"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto p-3">
+          {signals.length === 0 && <p className="p-6 text-center text-[12px] text-muted-2">Nothing here - every signal is live.</p>}
+          <div className="space-y-1.5">
+            {signals.map((s) => (
+              <div key={s.id} className="flex items-start gap-2.5 rounded-xl border border-line bg-bg-2 px-3.5 py-2.5">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: SIGNAL_META[s.type].color }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] leading-snug text-text">{s.summary}</div>
+                  <div className="text-[10.5px] text-muted-2">{accountName(s.accountId)} · {s.sourceCall.title}</div>
+                </div>
+                <button onClick={() => restore(s.id)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-d)] transition-colors hover:border-[var(--accent)]">
+                  <RotateCcw size={11} /> Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
