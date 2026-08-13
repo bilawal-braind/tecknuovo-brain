@@ -71,6 +71,18 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
   const m = SIGNAL_META[signal.type]
   const status = statusOf(signal)
   const done = status === 'actioned' || status === 'dismissed'
+  // Done signals LEAVE the list everywhere (Meesha, 12 Aug) - they live in the
+  // Resolved / Removed panels on the Signals page. A card resolved just now shows
+  // a slim confirmation bar with Undo for a few seconds, then goes; a card that
+  // was already done when the view loaded renders nothing at all.
+  const [gone, setGone] = useState(done)
+  const wasDoneAtMount = useRef(done)
+  useEffect(() => {
+    if (!done) { setGone(false); wasDoneAtMount.current = false; return }
+    if (wasDoneAtMount.current) { setGone(true); return }
+    const t = window.setTimeout(() => setGone(true), 5000)
+    return () => window.clearTimeout(t)
+  }, [done])
   const scope = riskScope(signal)
   const noteCount = notesForSignal(signal.id).length
   // Full context on demand: the complete transcript of the source call, opened
@@ -98,6 +110,20 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
     if (statusOf(signal) === 'dismissed') setStatus(signal.id, 'new')
   }
 
+  if (gone) return null
+  if (done) {
+    const resolved = status === 'actioned'
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[12px] text-muted">
+        {resolved ? <Check size={13} style={{ color: 'var(--opp)' }} /> : <X size={13} />}
+        <span className="min-w-0 flex-1 truncate">
+          <b className="font-semibold text-text">{resolved ? 'Resolved' : 'Removed'}</b> · moved to the {resolved ? 'Resolved' : 'Removed'} panel at the top of the Signals page
+        </span>
+        <button onClick={() => { setStatus(signal.id, 'new'); setVerdict(null); undoFeedback(signal.id).catch(() => {}) }}
+          className="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] font-semibold text-muted transition-colors hover:text-text">Undo</button>
+      </div>
+    )
+  }
   return (
     <div ref={cardRef} className={`overflow-hidden rounded-xl border border-line bg-surface transition-all duration-700 ${done ? 'opacity-60' : ''}`}
       style={{ borderLeft: `3px solid color-mix(in srgb, ${m.color} 60%, transparent)`, boxShadow: highlight ? `0 0 0 3px color-mix(in srgb, ${m.color} 45%, transparent), 0 8px 30px -8px color-mix(in srgb, ${m.color} 40%, transparent)` : undefined }}>
