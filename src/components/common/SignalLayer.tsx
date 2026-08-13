@@ -10,6 +10,13 @@ type Ctx = {
 const SignalCtx = createContext<Ctx>({ statusOf: (s) => s.status, setStatus: () => {} })
 export const useSignal = () => useContext(SignalCtx)
 
+// The live working set: everything not resolved or removed. Every count shown to
+// a user comes from this, so marking 3 of 20 risks incorrect shows 17 (12 Aug).
+export const useOpenSignals = (list: Signal[]) => {
+  const { statusOf } = useSignal()
+  return list.filter((s) => { const st = statusOf(s); return st !== 'actioned' && st !== 'dismissed' })
+}
+
 export function SignalProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<Record<string, SignalStatus>>({})
   const statusOf = useCallback((s: Signal) => overrides[s.id] ?? s.status, [overrides])

@@ -33,7 +33,8 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
   const { statusOf } = useSignal()
   const [showResolved, setShowResolved] = useState(false)
   const [showRemoved, setShowRemoved] = useState(false)
-  const count = (t: SignalType) => signals.filter((s) => s.type === t).length
+  const live = signals.filter((s) => { const st = statusOf(s); return st !== 'actioned' && st !== 'dismissed' })
+  const count = (t: SignalType) => live.filter((s) => s.type === t).length
 
   const parts = useMemo(() => {
     let list = filter === 'all' ? signals : signals.filter((s) => s.type === filter)
@@ -94,7 +95,7 @@ export function SignalsFeed({ signals, onOpenAccount }: { signals: Signal[]; onO
         />
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${signals.length})`} />
+        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${live.length})`} />
         <FilterChip active={filter === 'opportunity'} onClick={() => setFilter('opportunity')} color={SIGNAL_META.opportunity.color} label={`Opportunities (${count('opportunity')})`} />
         <FilterChip active={filter === 'risk'} onClick={() => setFilter('risk')} color={SIGNAL_META.risk.color} label={`Risks (${count('risk')})`} />
         <FilterChip active={filter === 'update'} onClick={() => setFilter('update')} color={SIGNAL_META.update.color} label={`Updates (${count('update')})`} />

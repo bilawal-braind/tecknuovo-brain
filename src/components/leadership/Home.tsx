@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { signals as allSignals } from '../../data/signals'
+import { useSignal } from '../common/SignalLayer'
 import { calls, callForSignal } from '../../data/calls'
 import { accounts, accountName, pods, personName, podName } from '../../data/org'
 import { weeklyTrend } from '../../data/trends'
@@ -101,17 +102,19 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
     }).catch(() => {})
   }, [])
 
+  const { statusOf } = useSignal()
   const d = useMemo(() => {
     const cutoff = Date.now() - days * DAY
     const prevCutoff = Date.now() - 2 * days * DAY
     const inP = (iso: string) => Date.parse(iso) >= cutoff
     const inPrev = (iso: string) => { const t = Date.parse(iso); return t >= prevCutoff && t < cutoff }
 
-    const period = allSignals.filter((s) => inP(s.createdAt))
+    // removed-as-incorrect signals never count anywhere (12 Aug)
+    const period = allSignals.filter((s) => inP(s.createdAt) && statusOf(s) !== 'dismissed')
     const opps = period.filter((s) => s.type === 'opportunity')
     const periodCalls = calls.filter((c) => inP(c.date))
     const prevCalls = calls.filter((c) => inPrev(c.date))
-    const needsYou = allSignals.filter(needsHer)
+    const needsYou = allSignals.filter((s) => needsHer(s) && statusOf(s) !== 'dismissed' && statusOf(s) !== 'actioned')
 
     // ── Katie's lens on every account ──
     // needs-you: an open signal crossed HER gate. watch: delivery marks it
@@ -170,7 +173,7 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
       .sort((x, y) => LENS_RANK[y.lens] - LENS_RANK[x.lens] || y.risks - x.risks)
 
     return { opps, periodCalls, needsYou, onTrack, watching, atRisk, people: speakers.size, quiet, impact, podCards, roster, signalCount: period.length }
-  }, [days])
+  }, [days, statusOf])
 
   const sortedImpact = useMemo(() => {
     const arr = [...d.impact]

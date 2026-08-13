@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { LayoutDashboard, Radio, Building2, PoundSterling, ArrowRight, Search } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
 import { accounts, projectsForAccount } from '../../data/org'
+import { useOpenSignals } from '../common/SignalLayer'
 import { signals, rankByImpact, topByImpact, riskScope } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
 import { TriageCard } from '../common/TriageCard'
@@ -22,7 +23,8 @@ export function ClientPartner() {
   const [focusSignal, setFocusSignal] = useState<string | null>(null)
   const [acctQ, setAcctQ] = useState('')
 
-  const actionable = useMemo(() => rankByImpact(signals.filter((s) => s.type !== 'update')), [])
+  const openSignals = useOpenSignals(signals)
+  const actionable = rankByImpact(openSignals.filter((s) => s.type !== 'update'))
   const opps = actionable.filter((s) => s.type === 'opportunity')
   const risks = actionable.filter((s) => s.type === 'risk')
   const acctRiskN = risks.filter((r) => riskScope(r) === 'account').length
@@ -42,7 +44,7 @@ export function ClientPartner() {
       role="Client Partner" persona="Commercial view · your accounts" active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-        { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
+        { id: 'signals', label: 'Signals', icon: Radio, count: openSignals.length },
         { id: 'accounts', label: 'Portfolio', icon: Building2, count: accounts.length },
         // Commercials returns when a trusted £ source (Synergist) lands - see SHOW_SOW.
         ...(SHOW_SOW ? [{ id: 'commercials', label: 'Commercials', icon: PoundSterling }] : []),

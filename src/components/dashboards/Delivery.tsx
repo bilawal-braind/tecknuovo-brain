@@ -6,6 +6,7 @@ import { projects, accountName } from '../../data/org'
 import { signals, topByImpact } from '../../data/signals'
 import { calls } from '../../data/calls'
 import { TriageCard } from '../common/TriageCard'
+import { useOpenSignals, useSignal } from '../common/SignalLayer'
 import { ExecSummary } from '../common/ExecSummary'
 import { SignalsDonut } from '../common/SignalsDonut'
 import { SignalsFeed } from '../common/SignalsFeed'
@@ -28,7 +29,9 @@ export function Delivery() {
   const [focusSignal, setFocusSignal] = useState<string | null>(null)
 
   const offTrack = useMemo(() => projects.filter((p) => p.rag !== 'green').length, [])
-  const toAction = useMemo(() => signals.filter((s) => s.status === 'new').length, [])
+  const { statusOf } = useSignal()
+  const open = useOpenSignals(signals)
+  const toAction = signals.filter((s) => statusOf(s) === 'new').length
   const callsThisWeek = useMemo(() => {
     const cutoff = Date.now() - 7 * 86_400_000
     return calls.filter((c) => Date.parse(c.date) >= cutoff).length
@@ -49,7 +52,7 @@ export function Delivery() {
       role="Delivery" persona="Every delivery and its signals" active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-        { id: 'signals', label: 'Signals', icon: Radio, count: signals.length },
+        { id: 'signals', label: 'Signals', icon: Radio, count: open.length },
         { id: 'weekly', label: 'Weekly reports', icon: FileText },
       ]}
     >
@@ -67,7 +70,7 @@ export function Delivery() {
 
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
                   <ExecSummary items={keySignals} onOpen={openSignal} />
-                  <SignalsDonut signals={signals} />
+                  <SignalsDonut signals={open} />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
