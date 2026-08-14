@@ -15,7 +15,7 @@ import {
   ArrowRight, ChevronDown, CheckCircle2, Eye, X, StickyNote,
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { signals as allSignals } from '../../data/signals'
+import { signals as allSignals, riskScope } from '../../data/signals'
 import { useSignal } from '../common/SignalLayer'
 import { calls, callForSignal } from '../../data/calls'
 import { accounts, accountName, pods, personName, podName } from '../../data/org'
@@ -36,12 +36,17 @@ const LENS_DOT: Record<Lens, string> = { 'needs-you': 'var(--rag-red)', watch: '
 const LENS_WORD: Record<Lens, string> = { 'needs-you': 'Needs you', watch: 'Watch', 'on-track': 'On track' }
 const ageDays = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / DAY)
 
-// The MD escalation gate, per the client's own framework (ext Slack, 21 Jul:
-// Meesha's "risks I wouldn't expect to be there" + the risk matrix): only a
-// CRITICAL risk, or one voiced by a SENIOR CLIENT stakeholder, reaches Katie.
+// The MD escalation gate - the TRIPLE gate committed to the client (ext Slack,
+// 21 Jul) and re-tightened 14 Aug: a risk reaches Katie only when it is
+//   1. ACCOUNT-level (commercial/relationship - delivery mechanics never qualify),
+//   2. CRITICAL on the client's own risk matrix, AND
+//   3. politically loaded or stuck: raised by a SENIOR CLIENT stakeholder,
+//      or unresolved 14+ days (someone owning a fresh risk is delivery's job).
 const needsHer = (s: Signal) =>
   s.type === 'risk' && s.status !== 'actioned' && s.status !== 'dismissed' &&
-  (s.severity === 'critical' || s.escalate === true)
+  riskScope(s) === 'account' &&
+  s.severity === 'critical' &&
+  (s.escalate === true || ageDays(s.createdAt) >= 14)
 
 function parsePounds(v?: string): number {
   const m = (v || '').match(/£\s*([\d.]+)\s*(k|m)?/i)
@@ -219,8 +224,8 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
       <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Metric icon={<Building2 size={15} />} label="Accounts on track" value={`${d.onTrack}/${accounts.length}`} sub={`${d.watching} with delivery watching · ${d.atRisk} need${d.atRisk === 1 ? 's' : ''} you`}
           tip="Your lens, not delivery's: an account only counts against you when a risk crosses your escalation bar (critical, or a senior client voice). Amber here means delivery is watching it - their problem until it isn't." />
-        <Metric icon={<Target size={15} />} label="Need your call" value={`${d.needsYou.length}`} sub={d.needsYou.length ? 'critical or a senior client voice' : 'nothing has crossed your line'}
-          tip="Gated by the risk framework the team agreed: only a critical risk, or one raised by a senior client stakeholder, ever reaches this number." />
+        <Metric icon={<Target size={15} />} label="Need your call" value={`${d.needsYou.length}`} sub={d.needsYou.length ? 'account-level critical, senior voice or stuck 14+ days' : 'nothing has crossed your line'}
+          tip="The triple gate agreed with the team: an account-level risk, critical on the risk matrix, that is either raised by a senior client stakeholder or has sat unresolved 14+ days. Everything quieter stays with delivery." />
         <Metric icon={<TrendingUp size={15} />} label="Opportunities in play" value={`${d.opps.length}`} sub={`across ${new Set(d.opps.map((s) => s.accountId)).size} account${new Set(d.opps.map((s) => s.accountId)).size !== 1 ? 's' : ''} this period`}
           tip="Opportunities surfaced from the period's calls. No £ values - commercials come off the dashboard until Synergist is the source of truth (agreed with Meesha, 21 Jul)." />
         <Metric icon={<Radio size={15} />} label="Calls analysed" value={`${d.periodCalls.length}`} sub={`${d.signalCount} signals · ${d.people} people active`}

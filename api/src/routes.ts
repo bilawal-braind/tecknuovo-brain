@@ -684,6 +684,67 @@ router.post('/feedback/undo', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── Push a risk to the Monday risk register (Meesha, 13 Aug) ────────────────
+// The mirror of the HubSpot opportunity push: a deliberate human click creates
+// the item on the Risks, Issues & Incidents board (1583443098, Incoming group).
+// Monday is the system of record; this is the system of intelligence.
+router.post('/signals/:id/push-register', async (req, res, next) => {
+  try {
+    const signalId = req.params.id;
+    const denied = await checkSignalWrite(req, signalId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    const token = process.env.MONDAY_API_TOKEN;
+    if (!token) return res.status(503).json({ error: 'Monday token not configured' });
+    const r = await q(
+      `SELECT s.type, s.summary, s.quote, s.suggested_action, s.details, a.name AS account
+       FROM signals s LEFT JOIN accounts a ON a.id = s.account_id WHERE s.id = $1`, [signalId]);
+    const sig = r.rows[0];
+    if (!sig) return res.status(404).json({ error: 'signal not found' });
+    if (!String(sig.type).toLowerCase().includes('risk')) return res.status(400).json({ error: 'only risks push to the register' });
+    const det = (sig.details && typeof sig.details === 'object' ? sig.details : {}) as Record<string, unknown>;
+    if (det.register_item_id) return res.json({ item_id: String(det.register_item_id), already: true });
+
+    const band = String(det.band ?? '').toLowerCase();
+    const impact = band.includes('critical') || band.includes('high') ? 'High' : band.includes('medium') ? 'Medium' : 'Low';
+    const desc = [sig.summary, sig.quote ? `Heard on a call: "${sig.quote}"` : '', 'Flagged by tnAI (the Second Brain).'].filter(Boolean).join('\n\n');
+    const name = String(sig.summary || 'Risk from tnAI').slice(0, 120);
+
+    const monday = async (cols: Record<string, unknown>) => {
+      const body = {
+        query: `mutation ($name: String!, $cols: JSON!) {
+          create_item(board_id: 1583443098, group_id: "group_mkq8tm9b", item_name: $name, column_values: $cols, create_labels_if_missing: true) { id }
+        }`,
+        variables: { name, cols: JSON.stringify(cols) },
+      };
+      const resp = await fetch('https://api.monday.com/v2', {
+        method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json', 'API-Version': '2024-10' },
+        body: JSON.stringify(body),
+      });
+      const j = (await resp.json()) as { data?: { create_item?: { id?: string } }; errors?: unknown };
+      if (j.errors || !j.data?.create_item?.id) throw new Error(JSON.stringify(j.errors ?? j).slice(0, 300));
+      return j.data.create_item.id;
+    };
+
+    let itemId: string;
+    const fullCols: Record<string, unknown> = {
+      single_select__1: { label: 'Risk' },
+      long_text32__1: { text: desc.slice(0, 2000) },
+      status_17: { label: impact },
+      reference: `tnAI ${signalId}`,
+    };
+    if (sig.suggested_action) fullCols.long_text__1 = { text: String(sig.suggested_action).slice(0, 2000) };
+    if (sig.account) fullCols.dropdown = { labels: [String(sig.account)] };
+    try {
+      itemId = await monday(fullCols);
+    } catch {
+      // a label the board doesn't know must not block the push - retry minimal
+      itemId = await monday({ long_text32__1: { text: desc.slice(0, 2000) }, reference: `tnAI ${signalId}` });
+    }
+    await q(`UPDATE signals SET details = COALESCE(details,'{}'::jsonb) || jsonb_build_object('register_item_id', $2::text, 'register_pushed_at', now()::text) WHERE id = $1`, [signalId, itemId]);
+    res.status(201).json({ item_id: itemId });
+  } catch (e) { next(e); }
+});
+
 // ── tnAI · Ask the brain (V1 beta) ───────────────────────────────────────────
 // A deterministic retrieval engine over the SCOPED data (same account + leadership
 // filters as every endpoint) with an optional LLM phrasing pass: when

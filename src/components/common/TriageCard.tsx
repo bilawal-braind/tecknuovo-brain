@@ -5,7 +5,8 @@ import type { Signal } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
 import { projectById, accountName, accounts } from '../../data/org'
 import { riskScope } from '../../data/signals'
-import { submitFeedback, undoFeedback, pushToHubspot, addSignalNote, reassignSignal, addTodo } from '../../data/api'
+import { submitFeedback, undoFeedback, pushToHubspot, pushToRegister, addSignalNote, reassignSignal, addTodo } from '../../data/api'
+import { isLive as isLiveData } from '../../data/source'
 import { signalNotes, notesForSignal } from '../../data/crm'
 import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
 import { QAReview } from './QAReview'
@@ -211,6 +212,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
           <FrameworkScore signal={signal} />
 
           {signal.type === 'opportunity' && !done && <HubspotApproval signal={signal} />}
+          {signal.type === 'risk' && !done && <RegisterPush signal={signal} />}
 
           <NotesSection signalId={signal.id} />
 
@@ -312,6 +314,31 @@ function MoveSignal({ signal }: { signal: Signal }) {
           {state === 'error' && <span className="text-[11px]" style={{ color: 'var(--risk)' }}>Could not move it - try again.</span>}
         </div>
       )}
+    </div>
+  )
+}
+
+// Push a risk onto the Monday risk register - the audit system of record
+// (Meesha, 13 Aug). Deliberate human click, mirrors the HubSpot opportunity push.
+function RegisterPush({ signal }: { signal: Signal }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(signal.registerItemId ? 'done' : 'idle')
+  const push = () => {
+    setState('busy')
+    if (!isLiveData) { window.setTimeout(() => setState('done'), 700); return }
+    pushToRegister(signal.id).then(() => setState('done')).catch(() => setState('error'))
+  }
+  if (state === 'done')
+    return <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] font-semibold" style={{ color: 'var(--opp)', background: 'color-mix(in srgb, var(--opp) 10%, transparent)' }}>On the Monday risk register - filed to the Incoming group for triage.</div>
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+      <span className="text-[12px] text-muted">Not on the Monday risk register yet? Push it there so the audit record stays complete.</span>
+      <span className="flex items-center gap-2">
+        {state === 'error' && <span className="text-[11px] font-semibold" style={{ color: 'var(--risk)' }}>Could not reach Monday - try again</span>}
+        <button onClick={push} disabled={state === 'busy'}
+          className="rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>
+          {state === 'busy' ? 'Adding...' : 'Add to risk register'}
+        </button>
+      </span>
     </div>
   )
 }

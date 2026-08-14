@@ -195,6 +195,11 @@ export type Me = { email: string; role: string; scope: string; name: string | nu
 export const fetchMe = () => get<Me>('/api/me')
 // Human approval on an opportunity -> queue the HubSpot deal push (workflow 11 pushes).
 // Approval requires the deal value + close date (the dashboard form enforces this too).
+// Push a risk signal onto the Monday risk register (board 1583443098, Incoming
+// group) - the mirror of the HubSpot opportunity push. Human click only.
+export const pushToRegister = (signalId: string) =>
+  post<{ item_id: string }>(`/api/signals/${signalId}/push-register`, {})
+
 export const pushToHubspot = (
   signalId: string,
   approve: boolean,

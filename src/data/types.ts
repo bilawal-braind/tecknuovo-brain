@@ -79,6 +79,8 @@ export type Signal = {
   mentions?: number
   lastSeen?: string
   callId?: string
+  // Monday risk-register item created from this signal (push-to-register)
+  registerItemId?: string
   likelihood?: number
   impact?: number
   networksTotal?: number
