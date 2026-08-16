@@ -118,9 +118,12 @@ router.get('/accounts', async (req, res, next) => {
               COALESCE(a.delivery_lead_name,
                        (SELECT w.customer_lead FROM weekly_reports w WHERE w.account_id = a.id AND w.customer_lead IS NOT NULL
                         ORDER BY w.week_ending DESC LIMIT 1)) AS delivery_lead,
+              -- Cormac's roll-up (13 Aug): 9-of-10-healthy is NOT at risk. Red needs a
+              -- majority of red projects or 2+ open critical signals; one red project,
+              -- a majority amber, one critical or 3+ open risks = watching (amber).
               CASE
-                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new' AND s.details->>'band' = 'Critical') THEN 'red'
-                WHEN EXISTS (SELECT 1 FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') THEN 'amber'
+                WHEN (pj.tot > 0 AND pj.red * 2 >= pj.tot) OR sg.crit >= 2 THEN 'red'
+                WHEN pj.red > 0 OR (pj.tot > 0 AND pj.amb * 2 >= pj.tot) OR sg.crit = 1 OR sg.risks >= 3 THEN 'amber'
                 ELSE 'green'
               END AS health,
               (SELECT count(*) FROM signals s WHERE s.account_id = a.id AND s.status = 'new') AS open_signals,
@@ -129,7 +132,16 @@ router.get('/accounts', async (req, res, next) => {
               COALESCE((SELECT sum(p.budget_remaining) FROM projects p WHERE p.account_id = a.id), 0) AS headroom
        FROM accounts a
        LEFT JOIN people cp ON cp.id = a.client_partner
-       LEFT JOIN people cd ON cd.id = a.client_director ${filter} ORDER BY a.name`,
+       LEFT JOIN people cd ON cd.id = a.client_director
+       LEFT JOIN LATERAL (
+         SELECT count(*) FILTER (WHERE p2.retired IS NOT TRUE)::int AS tot,
+                count(*) FILTER (WHERE p2.retired IS NOT TRUE AND lower(p2.rag) = 'red')::int AS red,
+                count(*) FILTER (WHERE p2.retired IS NOT TRUE AND lower(p2.rag) = 'amber')::int AS amb
+         FROM projects p2 WHERE p2.account_id = a.id) pj ON true
+       LEFT JOIN LATERAL (
+         SELECT count(*) FILTER (WHERE s.details->>'band' = 'Critical')::int AS crit, count(*)::int AS risks
+         FROM signals s WHERE s.account_id = a.id AND s.type = 'risk' AND s.status = 'new') sg ON true
+       ${filter} ORDER BY a.name`,
       params
     );
     res.json(r.rows);
@@ -753,6 +765,26 @@ router.post('/signals/:id/push-register', async (req, res, next) => {
 // the chat never depends on the model being reachable. Charts are returned as
 // simple {kind,title,data} payloads the dashboard renders itself.
 async function llmPhrase(question: string, facts: unknown): Promise<string | null> {
+  // First choice: workflow 20 in n8n (webhook -> AI Agent on the client's own
+  // Azure OpenAI credential, like every other automation). Falls back to the
+  // direct Azure call, then to the deterministic templates - the chat never
+  // depends on any single hop being up.
+  const askUrl = process.env.N8N_ASK_URL || 'http://localhost:5678/webhook/tnai-ask';
+  try {
+    const ctl0 = new AbortController();
+    const t0 = setTimeout(() => ctl0.abort(), 25000);
+    const prompt = 'You are tnAI, the assistant inside the Tecknuovo Second Brain dashboard. Answer the question using ONLY the facts JSON provided - never invent names, numbers or events. Be brief (2-5 sentences), plain UK business English, no markdown headings, no bullet spam. Never use em dashes. If the facts are empty, say so plainly and suggest what to ask instead.\n\nQUESTION: ' + question + '\n\nFACTS:\n' + JSON.stringify(facts).slice(0, 9000);
+    const r0 = await fetch(askUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }), signal: ctl0.signal,
+    });
+    clearTimeout(t0);
+    if (r0.ok) {
+      const j0 = (await r0.json()) as { answer?: string };
+      const a = typeof j0.answer === 'string' ? j0.answer.trim() : '';
+      if (a) return a.slice(0, 2000);
+    }
+  } catch { /* fall through to direct Azure */ }
   const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
   const key = process.env.AZURE_OPENAI_KEY;
   const dep = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o-mini';

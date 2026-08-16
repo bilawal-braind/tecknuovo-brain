@@ -42,8 +42,9 @@ function deriveAccountHealth(sigs: Signal[], registerHigh = 0): { health: Health
   const otherRisks = risks.length - critical - high
 
   let health: Health
-  if (critical >= 1 || high >= 2) health = 'red'      // a critical, or multiple serious risks
-  else if (high >= 1 || risks.length >= 2) health = 'amber' // one serious risk, or a few smaller ones
+  // Cormac's roll-up (13 Aug): one bad item never reddens a whole account.
+  if (critical >= 2 || high >= 3) health = 'red'      // a cluster of serious trouble
+  else if (critical === 1 || high >= 1 || risks.length >= 3) health = 'amber' // worth watching
   else health = 'green'
 
   // Clear positive momentum softens one level (an account winning more than it's losing

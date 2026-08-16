@@ -1,0 +1,152 @@
+{
+  "updatedAt": "2026-08-16T17:20:40.000Z",
+  "createdAt": "2026-08-16T17:17:53.797Z",
+  "id": "tnAiAskWebhook20",
+  "name": "TN Brain \u00b7 20 \u00b7 tnAI Ask (webhook)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Ask webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tnai-ask",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b7e3f2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b"
+    },
+    {
+      "id": "a2",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.prompt }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Azure OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+      "typeVersion": 1,
+      "position": [
+        240,
+        220
+      ],
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "maxTokens": 900
+        }
+      },
+      "credentials": {
+        "azureOpenAiApi": {
+          "id": "W7KKkeJLvjngHgZA",
+          "name": "Azure Open AI account"
+        }
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: $json.output }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Ask webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Azure OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "830f7620-196e-45b4-b8fe-fc05c42c6a8f",
+  "activeVersionId": "830f7620-196e-45b4-b8fe-fc05c42c6a8f",
+  "versionCounter": 2,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-16T17:17:53.802Z",
+      "createdAt": "2026-08-16T17:17:53.802Z",
+      "role": "workflow:owner",
+      "workflowId": "tnAiAskWebhook20",
+      "projectId": "YoodBrR0reAHCU45",
+      "project": {
+        "updatedAt": "2026-08-10T13:52:12.430Z",
+        "createdAt": "2026-06-17T15:00:46.173Z",
+        "id": "YoodBrR0reAHCU45",
+        "name": "Arjun Mammen <arjun.mammen@tecknuovo.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "df3e8762-44c5-4b90-9615-01dd348e3ec3"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
