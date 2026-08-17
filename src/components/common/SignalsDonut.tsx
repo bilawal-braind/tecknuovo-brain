@@ -25,7 +25,7 @@ export function SignalsDonut({ signals }: { signals: Signal[] }) {
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold">{total}</span>
+            <span className="metric-num" style={{ fontSize: 24, lineHeight: '26px' }}>{total}</span>
             <span className="text-[10px] text-muted-2">signals</span>
           </div>
         </div>

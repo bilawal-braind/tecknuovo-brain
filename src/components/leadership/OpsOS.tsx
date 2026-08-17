@@ -701,20 +701,20 @@ function CallPulse({ days }: { days: Days }) {
       <p className="mt-0.5 text-[11px] text-muted-2">Volume, time, mood and coverage - all read from the analysed calls.</p>
       <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <QCard label="Calls analysed">
-          <span className="text-2xl font-bold">{pCalls.length}</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{pCalls.length}</span>
           <span className="ml-1.5 text-[11px] text-muted">{delta === 0 ? 'level with' : `${delta > 0 ? '+' : ''}${delta} vs`} the previous {days} days</span>
         </QCard>
         <QCard label="Time in calls">
-          <span className="text-2xl font-bold">~{hoursLabel(totalMins)}</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>~{hoursLabel(totalMins)}</span>
           <span className="ml-1.5 text-[11px] text-muted">across the team · ~{avgMins}m per call</span>
         </QCard>
         <QCard label="Mood of the room">
-          <span className="text-2xl font-bold">{posPc}%</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{posPc}%</span>
           <span className="ml-1.5 text-[11px] text-muted">positive{neg ? ` · ${neg} call${neg !== 1 ? 's' : ''} ran negative` : ' · none ran negative'}</span>
           <Split a={posPc} b={100 - posPc - negPc} colors={['var(--opp)', 'var(--line-2)', 'var(--risk)']} />
         </QCard>
         <QCard label="Account coverage">
-          <span className="text-2xl font-bold">{covered}</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{covered}</span>
           <span className="ml-1.5 text-[11px] text-muted">of {accounts.length} heard from{quiet ? ` · ${quiet} quiet` : ''}</span>
           <Split a={accounts.length ? Math.round((100 * covered) / accounts.length) : 0} colors={['var(--accent)', 'var(--line-2)']} />
         </QCard>
@@ -889,9 +889,9 @@ function PersonFootprint({ days, theirCalls, accountIds }: { days: Days; theirCa
       <div className="eyebrow">Their footprint · last {days} days</div>
       <p className="mt-0.5 text-[11px] text-muted-2">What their conversations put into the brain, and the state of the accounts they cover.</p>
       <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QCard label="Risks surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--risk)' }}>{risks}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
-        <QCard label="Opportunities surfaced"><span className="text-2xl font-bold" style={{ color: 'var(--opp)' }}>{opps}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
-        <QCard label="Open items on their accounts"><span className="text-2xl font-bold">{openOnAccounts}</span><span className="ml-1.5 text-[11px] text-muted">awaiting action</span></QCard>
+        <QCard label="Risks surfaced"><span className="metric-num" style={{ fontSize: 26, lineHeight: '30px', color: 'var(--risk)' }}>{risks}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
+        <QCard label="Opportunities surfaced"><span className="metric-num" style={{ fontSize: 26, lineHeight: '30px', color: 'var(--opp)' }}>{opps}</span><span className="ml-1.5 text-[11px] text-muted">from their calls</span></QCard>
+        <QCard label="Open items on their accounts"><span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{openOnAccounts}</span><span className="ml-1.5 text-[11px] text-muted">awaiting action</span></QCard>
         <QCard label="Their accounts' health">
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             {health.length ? health.map((a) => (
@@ -1060,9 +1060,9 @@ function CallPerformance({ theirCalls, days }: { theirCalls: Call[]; days: Days 
       <div className="eyebrow">How their calls run · last {days} days</div>
       <p className="mt-0.5 text-[11px] text-muted-2">Length, mood and the shape of their week - from the analysed calls.</p>
       <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QCard label="Average call"><span className="text-2xl font-bold">~{avg}m</span><span className="ml-1.5 text-[11px] text-muted">across {theirCalls.length} call{theirCalls.length !== 1 ? 's' : ''}</span></QCard>
+        <QCard label="Average call"><span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>~{avg}m</span><span className="ml-1.5 text-[11px] text-muted">across {theirCalls.length} call{theirCalls.length !== 1 ? 's' : ''}</span></QCard>
         <QCard label="Mood of their calls">
-          <span className="text-2xl font-bold">{posPc}%</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{posPc}%</span>
           <span className="ml-1.5 text-[11px] text-muted">positive{neg ? ` · ${neg} ran negative` : ''}</span>
           <Split a={posPc} b={100 - posPc - negPc} colors={['var(--opp)', 'var(--line-2)', 'var(--risk)']} />
         </QCard>
@@ -1070,7 +1070,7 @@ function CallPerformance({ theirCalls, days }: { theirCalls: Call[]; days: Days 
           <span className="text-[15px] font-bold">{topType ? topType[0] : '-'}</span>
           <span className="ml-1.5 text-[11px] text-muted">{topType ? `${topType[1]} of their ${theirCalls.length} calls` : ''}</span>
         </QCard>
-        <QCard label="Cadence"><span className="text-2xl font-bold">{perWeek}</span><span className="ml-1.5 text-[11px] text-muted">calls per week on average</span></QCard>
+        <QCard label="Cadence"><span className="metric-num" style={{ fontSize: 26, lineHeight: '30px' }}>{perWeek}</span><span className="ml-1.5 text-[11px] text-muted">calls per week on average</span></QCard>
       </div>
     </div>
   )
@@ -1100,7 +1100,7 @@ function BigStat({ icon: Icon, label, value, sub, color }: { icon: typeof Video;
   return (
     <div className="rounded-xl border border-line bg-bg-2 p-3.5">
       <div className="flex items-center gap-1.5"><Icon size={13} style={{ color }} /><span className="eyebrow">{label}</span></div>
-      <div className="mt-1.5 text-2xl font-bold">{value}</div>
+      <div className="metric-num mt-1.5" style={{ fontSize: 26, lineHeight: '30px' }}>{value}</div>
       <div className="text-[11px] text-muted-2">{sub}</div>
     </div>
   )
@@ -1109,7 +1109,7 @@ function BigStat({ icon: Icon, label, value, sub, color }: { icon: typeof Video;
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-bg-2 px-2 py-1.5 text-center">
-      <div className="text-[15px] font-bold leading-tight">{value}</div>
+      <div className="num text-[15px] font-semibold leading-tight tracking-[-0.02em]">{value}</div>
       <div className="text-[9.5px] font-semibold uppercase tracking-wide text-muted-2">{label}</div>
     </div>
   )

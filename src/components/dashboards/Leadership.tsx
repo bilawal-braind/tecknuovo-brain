@@ -254,7 +254,7 @@ function Kpi({ icon: Icon, label, value, sub, color }: { icon: typeof Building2;
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-center gap-2"><Icon size={15} style={{ color: color ?? 'var(--muted)' }} /><span className="eyebrow">{label}</span></div>
-      <div className="mt-2 text-3xl font-bold" >{value}</div>
+      <div className="metric-num mt-3" >{value}</div>
       <div className="mt-0.5 text-[12px] text-muted">{sub}</div>
     </div>
   )

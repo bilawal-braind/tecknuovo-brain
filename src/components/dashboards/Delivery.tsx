@@ -153,7 +153,7 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub: 
         {color && <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />}
         <span className="eyebrow">{label}</span>
       </div>
-      <div className="mt-2 text-3xl font-bold">{value}</div>
+      <div className="metric-num mt-3" >{value}</div>
       <div className="mt-0.5 text-[12px] text-muted">{sub}</div>
     </div>
   )

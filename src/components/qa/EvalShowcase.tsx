@@ -163,7 +163,7 @@ function Gauge({ label, value, source, delay = 0 }: { label: string; value: numb
           />
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[26px] font-extrabold" style={{ color: col }}>{Math.round(v)}%</span>
+          <span className="metric-num" style={{ fontSize: 26, lineHeight: '28px', color: col }}>{Math.round(v)}%</span>
         </div>
       </div>
       <div className="mt-1 text-center text-[12.5px] font-semibold">{label}</div>
@@ -476,7 +476,7 @@ function Detects() {
               })}
             </svg>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[28px] font-bold">{total}</span>
+              <span className="metric-num" style={{ fontSize: 28, lineHeight: '30px' }}>{total}</span>
               <span className="text-[10px] text-muted-2">signals found</span>
             </div>
           </div>

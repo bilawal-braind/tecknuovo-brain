@@ -4,7 +4,7 @@
 // teach well. Read-only over the feedback table + wf3's lesson summaries.
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap, Users, Building2, ListChecks, Lightbulb, MessageSquare } from 'lucide-react'
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
+import { ResponsiveContainer, ComposedChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { fetchLearning } from '../../data/api'
 import type { Learning } from '../../data/api'
 import { isLive } from '../../data/source'
@@ -66,10 +66,22 @@ export function LearningView() {
         <span className="text-[12.5px] text-muted-2">every piece of feedback, the lessons written from it, and the improvement it buys</span>
       </div>
 
+      {/* the loop in one line - so the page explains itself */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-line bg-surface px-4 py-3 text-[12.5px]">
+        <span className="grid h-5 w-5 place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>1</span>
+        <span className="text-muted"><b className="text-text">The team reviews signals</b> - correct, incorrect (with a reason chip), or relabel</span>
+        <span className="mx-1 text-muted-2">then</span>
+        <span className="grid h-5 w-5 place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>2</span>
+        <span className="text-muted"><b className="text-text">the brain writes lessons</b> from those verdicts (shown below)</span>
+        <span className="mx-1 text-muted-2">then</span>
+        <span className="grid h-5 w-5 place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>3</span>
+        <span className="text-muted"><b className="text-text">every future call is classified with those lessons</b> - so the same mistake stops repeating</span>
+      </div>
+
       {/* headline numbers */}
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={ListChecks} label="Feedback given" value={`${t.total}`} sub={`${t.signals_reviewed} signals reviewed`} />
-        <Stat icon={GraduationCap} label="Coverage" value={`${coverage}%`} sub={`of ${t.signals_total} signals have a verdict`} />
+        <Stat icon={GraduationCap} label="Signals reviewed" value={`${t.signals_reviewed}/${t.signals_total}`} sub={`${coverage}% of everything the brain has flagged`} />
         <Stat icon={MessageSquare} label="With a reason" value={`${reasonRate}%`} sub="reasons teach far more than bare clicks" />
         <Stat icon={Lightbulb} label="Lessons written" value={`${data.lessons.length}`} sub="live in the classifier on every new call" />
       </div>
@@ -77,29 +89,26 @@ export function LearningView() {
       {/* the improvement curve + accounts */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-line bg-surface p-5">
-          <span className="eyebrow">Wrong-rate by week</span>
-          <p className="mt-0.5 text-[11.5px] text-muted-2">share of reviewed signals marked incorrect - this is the improvement curve</p>
+          <span className="eyebrow">How often the team corrects the brain</span>
+          <p className="mt-0.5 text-[11.5px] text-muted-2">bars = reviews given that week · line = share marked incorrect. The line falling while bars stay tall = the brain learning.</p>
           <div className="mt-3 h-[170px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={weekly} margin={{ top: 4, right: 6, left: -26, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="learn-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--risk)" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="var(--risk)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={weekly} margin={{ top: 4, right: -18, left: -26, bottom: 0 }}>
                 <CartesianGrid stroke="var(--line)" vertical={false} />
                 <XAxis dataKey="week" tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <YAxis unit="%" tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11.5 }} formatter={(v: number) => [`${v}%`, 'wrong-rate']} />
-                <Area type="monotone" dataKey="wrongRate" stroke="var(--risk)" strokeWidth={2.25} fill="url(#learn-fill)" dot={{ r: 3, fill: 'var(--risk)', strokeWidth: 0 }} animationDuration={800} />
-              </AreaChart>
+                <YAxis yAxisId="n" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="pct" orientation="right" unit="%" domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11.5 }}
+                  formatter={(v: number, name: string) => (name === 'reviews' ? [`${v}`, 'reviews given'] : [`${v}%`, 'marked incorrect'])} />
+                <Bar yAxisId="n" dataKey="total" name="reviews" fill="color-mix(in srgb, var(--accent) 30%, transparent)" radius={[4, 4, 0, 0]} animationDuration={700} />
+                <Line yAxisId="pct" type="monotone" dataKey="wrongRate" name="wrong" stroke="var(--risk)" strokeWidth={2.25} dot={{ r: 3, fill: 'var(--risk)', strokeWidth: 0 }} animationDuration={900} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-5">
-          <span className="eyebrow">Feedback by account</span>
-          <p className="mt-0.5 text-[11.5px] text-muted-2">where the team is correcting the brain the most</p>
+          <span className="eyebrow">Where the corrections land</span>
+          <p className="mt-0.5 text-[11.5px] text-muted-2">accounts with the most feedback - teal is all feedback, red is marked-incorrect</p>
           <div className="mt-3 h-[170px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.accounts} margin={{ top: 4, right: 6, left: -26, bottom: 0 }}>
