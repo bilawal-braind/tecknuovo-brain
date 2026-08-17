@@ -96,17 +96,27 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
   // Meesha (12 Aug): INCORRECT removes the signal from every dashboard - after a
   // short grace window so a mis-click can be undone in place.
   const removeTimer = useRef<number>(0)
+  const reasonRef = useRef<string | undefined>(undefined)
+  const [chipReason, setChipReason] = useState<string | null>(null)
   useEffect(() => () => window.clearTimeout(removeTimer.current), [])
   const logFeedback = (v: Verdict, note?: string) => {
     setVerdict(v)
-    submitFeedback(signal.id, v.kind, { correctType: v.newType, reason: note }).catch(() => {})
-    if (v.kind === 'incorrect') {
-      removeTimer.current = window.setTimeout(() => setStatus(signal.id, 'dismissed'), 6000)
+    if (v.kind !== 'incorrect') {
+      submitFeedback(signal.id, v.kind, { correctType: v.newType, reason: note }).catch(() => {})
+      return
     }
+    // Incorrect DEFERS submission for a grace window so a one-tap reason chip
+    // (or Undo) can ride along - a tapped why teaches far more than a bare click.
+    reasonRef.current = note
+    removeTimer.current = window.setTimeout(() => {
+      submitFeedback(signal.id, 'incorrect', { reason: reasonRef.current }).catch(() => {})
+      setStatus(signal.id, 'dismissed')
+    }, 7000)
   }
+  const pickReason = (r: string) => { reasonRef.current = r; setChipReason(r) }
   const undoIncorrect = () => {
     window.clearTimeout(removeTimer.current)
-    setVerdict(null)
+    setVerdict(null); setChipReason(null); reasonRef.current = undefined
     undoFeedback(signal.id).catch(() => {})
     if (statusOf(signal) === 'dismissed') setStatus(signal.id, 'new')
   }
@@ -166,6 +176,20 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
           <button onClick={() => setOpen((o) => !o)} aria-label="Expand" className="rounded-md p-0.5 text-muted-2 transition-colors hover:text-text"><ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button>
         </div>
       </div>
+
+      {/* one-tap reasons while an incorrect verdict is in its grace window */}
+      {verdict?.kind === 'incorrect' && !done && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-3 py-2">
+          <span className="text-[10.5px] font-semibold text-muted-2">{chipReason ? 'Noted - the brain learns this:' : 'Why? One tap teaches the brain:'}</span>
+          {['Not a risk', 'Wrong account', 'Duplicate', 'Too trivial for this level', 'Out of date'].map((r) => (
+            <button key={r} onClick={(e) => { e.stopPropagation(); pickReason(r) }}
+              className="rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors"
+              style={chipReason === r ? { color: 'var(--accent-d)', borderColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)' } : { color: 'var(--muted)', borderColor: 'var(--line)' }}>
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && (
         <div className="border-t border-line bg-surface-2 p-4">

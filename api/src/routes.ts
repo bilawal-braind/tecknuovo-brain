@@ -696,6 +696,51 @@ router.post('/feedback/undo', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ── The learning loop, made visible (Cormac, 17 Aug) ────────────────────────
+// Everything the feedback system knows: who reviewed what, which accounts get
+// the most correction, the weekly wrong-rate curve, and the lessons the brain
+// wrote from it all. Read-only aggregation - the Learning tab and the weekly
+// digest both draw from here.
+router.get('/learning', async (req, res, next) => {
+  try {
+    if (!(await leadershipVisible(req))) return res.status(403).json({ error: 'forbidden' });
+    const weekly = (await q(
+      `SELECT to_char(date_trunc('week', created_at), 'DD Mon') AS week,
+              count(*)::int AS total,
+              count(*) FILTER (WHERE verdict = 'incorrect')::int AS incorrect,
+              count(*) FILTER (WHERE verdict = 'relabel')::int AS relabel,
+              count(reason)::int AS with_reason
+       FROM feedback GROUP BY date_trunc('week', created_at) ORDER BY date_trunc('week', created_at)`)).rows;
+    const reviewers = (await q(
+      `SELECT COALESCE(given_by, 'unknown') AS name, count(*)::int AS total,
+              count(reason)::int AS with_reason,
+              count(*) FILTER (WHERE verdict = 'correct')::int AS correct,
+              count(*) FILTER (WHERE verdict = 'incorrect')::int AS incorrect,
+              count(*) FILTER (WHERE verdict = 'relabel')::int AS relabel
+       FROM feedback GROUP BY 1 ORDER BY 2 DESC LIMIT 20`)).rows;
+    const accounts = (await q(
+      `SELECT a.name, count(*)::int AS total,
+              count(*) FILTER (WHERE f.verdict = 'incorrect')::int AS incorrect
+       FROM feedback f JOIN accounts a ON a.id = f.account_id
+       GROUP BY a.name ORDER BY 2 DESC LIMIT 12`)).rows;
+    const recent = (await q(
+      `SELECT f.verdict, f.correct_type, f.reason, COALESCE(f.given_by,'unknown') AS given_by,
+              f.created_at, a.name AS account, s.summary
+       FROM feedback f LEFT JOIN accounts a ON a.id = f.account_id LEFT JOIN signals s ON s.id = f.signal_id
+       ORDER BY f.created_at DESC LIMIT 40`)).rows;
+    const lessons = (await q(
+      `SELECT a.name AS account, a.feedback_summary AS summary,
+              (SELECT count(*)::int FROM feedback f WHERE f.account_id = a.id) AS feedback_count
+       FROM accounts a WHERE a.feedback_summary IS NOT NULL ORDER BY 3 DESC`)).rows;
+    const totals = (await q(
+      `SELECT count(*)::int AS total, count(reason)::int AS with_reason,
+              count(DISTINCT signal_id)::int AS signals_reviewed,
+              (SELECT count(*)::int FROM signals) AS signals_total
+       FROM feedback`)).rows[0];
+    res.json({ weekly, reviewers, accounts, recent, lessons, totals });
+  } catch (e) { next(e); }
+});
+
 // ── Push a risk to the Monday risk register (Meesha, 13 Aug) ────────────────
 // The mirror of the HubSpot opportunity push: a deliberate human click creates
 // the item on the Risks, Issues & Incidents board (1583443098, Incoming group).

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Gauge, ClipboardCheck, TrendingUp, TrendingDown, Minus, Check, X, RefreshCw } from 'lucide-react'
+import { Gauge, ClipboardCheck, GraduationCap, TrendingUp, TrendingDown, Minus, Check, X, RefreshCw } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
+import { LearningView } from '../common/LearningView'
 import { observabilityChecks, reviewItems } from '../../data/observability'
 import type { ObservabilityCheck, Trend, SignalType } from '../../data/types'
 import { SIGNAL_META } from '../../data/types'
@@ -12,7 +13,7 @@ import { TriageCard } from '../common/TriageCard'
 import { fmt } from '../common/SignalLayer'
 
 
-type View = 'checks' | 'review'
+type View = 'checks' | 'review' | 'learning'
 type Verdict = { kind: 'correct' | 'incorrect' | 'relabel'; newType?: SignalType; note?: string }
 const TYPES: SignalType[] = ['opportunity', 'risk', 'update', 'people']
 
@@ -45,6 +46,7 @@ export function Observability() {
       sections={[
         { id: 'checks', label: 'Quality checks', icon: Gauge, count: observabilityChecks.length },
         { id: 'review', label: 'Review & feedback', icon: ClipboardCheck, count: isLive ? liveReview.length : reviewItems.length - reviewed },
+        { id: 'learning', label: 'Learning', icon: GraduationCap },
       ]}
     >
       <div className="px-7 py-6">
@@ -95,6 +97,7 @@ export function Observability() {
           </>
         )}
 
+        {view === 'learning' && <LearningView />}
         {view === 'review' && (
           <>
             <div className="flex flex-wrap items-end justify-between gap-3">

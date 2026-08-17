@@ -232,6 +232,17 @@ export type AskItem = { id: string; type: string; summary: string; account: stri
 export type AskResponse = { answer: string; llm: boolean; chart: AskChart | null; items: AskItem[]; window_days: number }
 export const askBrain = (question: string) => post<AskResponse>('/api/ask', { question })
 
+// ── The learning loop (Observability Learning tab) ──
+export type Learning = {
+  weekly: { week: string; total: number; incorrect: number; relabel: number; with_reason: number }[]
+  reviewers: { name: string; total: number; with_reason: number; correct: number; incorrect: number; relabel: number }[]
+  accounts: { name: string; total: number; incorrect: number }[]
+  recent: { verdict: string; correct_type: string | null; reason: string | null; given_by: string; created_at: string; account: string | null; summary: string | null }[]
+  lessons: { account: string; summary: string; feedback_count: number }[]
+  totals: { total: number; with_reason: number; signals_reviewed: number; signals_total: number }
+}
+export const fetchLearning = () => get<Learning>('/api/learning')
+
 // ── Provenance feedback ("this looks wrong" in the source-trace sidebar) ──
 export const sendSourceFeedback = (kind: string, refId: string, refLabel: string, note: string) =>
   post<{ id: string }>('/api/source-feedback', { kind, ref_id: refId, ref_label: refLabel, note })
