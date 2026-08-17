@@ -2,7 +2,7 @@
   "updatedAt": "2026-08-17T10:09:54.000Z",
   "createdAt": "2026-08-17T10:09:50.288Z",
   "id": "tnAiLearnDigest21",
-  "name": "TN Brain \u00b7 21 \u00b7 Learning digest (Mondays 08:35)",
+  "name": "TN Brain · 21 · Learning digest (Mondays 08:35)",
   "description": null,
   "active": true,
   "isArchived": false,
@@ -38,7 +38,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT jsonb_build_object(\n 'week', (SELECT jsonb_build_object('total', count(*), 'with_reason', count(reason),\n          'incorrect', count(*) FILTER (WHERE verdict = 'incorrect'),\n          'reviewers', count(DISTINCT given_by)) FROM feedback WHERE created_at > now() - interval '7 days'),\n 'prev', (SELECT jsonb_build_object('total', count(*),\n          'incorrect', count(*) FILTER (WHERE verdict = 'incorrect'))\n          FROM feedback WHERE created_at > now() - interval '14 days' AND created_at <= now() - interval '7 days'),\n 'coverage', (SELECT jsonb_build_object('reviewed', count(DISTINCT signal_id),\n              'total', (SELECT count(*) FROM signals)) FROM feedback),\n 'lessons', (SELECT count(*) FROM accounts WHERE feedback_summary IS NOT NULL),\n 'top_accounts', COALESCE((SELECT jsonb_agg(x) FROM (\n    SELECT a.name, count(*)::int AS n FROM feedback f JOIN accounts a ON a.id = f.account_id\n    WHERE f.created_at > now() - interval '7 days' GROUP BY a.name ORDER BY 2 DESC LIMIT 3) x), '[]'::jsonb)\n) AS ctx;",
+        "query": "SELECT jsonb_build_object(\n 'week', (SELECT jsonb_build_object('total', count(*), 'with_reason', count(reason),\n          'incorrect', count(*) FILTER (WHERE verdict = 'incorrect'),\n          'relabel', count(*) FILTER (WHERE verdict = 'relabel'),\n          'reviewers', count(DISTINCT given_by)) FROM feedback WHERE created_at > now() - interval '7 days'),\n 'coverage', (SELECT jsonb_build_object('reviewed', count(DISTINCT signal_id),\n              'total', (SELECT count(*) FROM signals)) FROM feedback),\n 'lessons', (SELECT count(*) FROM accounts WHERE feedback_summary IS NOT NULL),\n 'top_accounts', COALESCE((SELECT jsonb_agg(x) FROM (\n    SELECT a.name, count(*)::int AS n FROM feedback f JOIN accounts a ON a.id = f.account_id\n    WHERE f.created_at > now() - interval '7 days' GROUP BY a.name ORDER BY 2 DESC LIMIT 3) x), '[]'::jsonb)\n) AS ctx;",
         "options": {}
       },
       "credentials": {
@@ -58,7 +58,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const SLACK_WEBHOOK = '';\nconst ctx = $input.first().json.ctx;\nconst w = ctx.week, p = ctx.prev, c = ctx.coverage;\nconst rate = (x) => (Number(x.total) ? Math.round(100 * Number(x.incorrect) / Number(x.total)) : null);\nconst wr = rate(w), pr = rate(p);\nconst cov = Number(c.total) ? Math.round(100 * Number(c.reviewed) / Number(c.total)) : 0;\nconst reasonPct = Number(w.total) ? Math.round(100 * Number(w.with_reason) / Number(w.total)) : 0;\nconst tops = (ctx.top_accounts || []).map((a) => a.name + ' (' + a.n + ')').join(', ');\nlet line = ':brain: *tnAI learning \u00b7 weekly digest*  -  ' + w.total + ' review' + (Number(w.total) === 1 ? '' : 's') + ' by ' + w.reviewers + ' reviewer' + (Number(w.reviewers) === 1 ? '' : 's') + ' this week';\nline += '  \u00b7  ' + reasonPct + '% carried a reason';\nif (wr !== null) line += '  \u00b7  wrong-rate ' + (pr !== null ? pr + '% -> ' : '') + wr + '%';\nline += '  \u00b7  coverage ' + cov + '% of all signals  \u00b7  ' + ctx.lessons + ' lesson' + (Number(ctx.lessons) === 1 ? '' : 's') + ' live in the classifier';\nif (tops) line += '\\n:memo: Most corrected this week: ' + tops;\nif (Number(w.total) > 0 && reasonPct < 40) line += '\\n:bulb: Reasons are thin - remind the team one tapped chip teaches more than ten bare clicks.';\nif (Number(w.total) === 0) line = ':brain: *tnAI learning \u00b7 weekly digest*  -  no feedback given this week. The loop only learns when the team clicks.';\nreturn [{ json: { webhook: SLACK_WEBHOOK, line } }];"
+        "jsCode": "const SLACK_WEBHOOK = '';\nconst ctx = $input.first().json.ctx;\nconst w = ctx.week, c = ctx.coverage;\nconst n = (x) => Number(x) || 0;\nconst s = (k) => (k === 1 ? '' : 's');\nconst agreed = Math.max(0, n(w.total) - n(w.incorrect) - n(w.relabel));\nconst lines = [':brain: *tnAI learning · weekly digest*'];\nif (n(w.total) === 0) {\n  lines.push('No feedback given this week - the loop only learns when the team clicks.');\n} else {\n  lines.push('This week: *' + n(w.total) + ' review' + s(n(w.total)) + '* from ' + n(w.reviewers) + ' reviewer' + s(n(w.reviewers)) + ' - ' + n(w.incorrect) + ' said incorrect, ' + n(w.relabel) + ' relabelled, ' + agreed + ' agreed. ' + n(w.with_reason) + ' of the ' + n(w.total) + ' came with a reason.');\n  const tops = (ctx.top_accounts || []).map((a) => a.name + ' (' + a.n + ')').join(', ');\n  if (tops) lines.push(':memo: Most reviewed: ' + tops);\n  if (n(w.with_reason) * 2 < n(w.total)) lines.push(':bulb: Only ' + n(w.with_reason) + ' of ' + n(w.total) + ' carried a reason - one tapped chip teaches more than ten bare clicks.');\n}\nlines.push('The classifier carries ' + n(ctx.lessons) + ' lesson' + s(n(ctx.lessons)) + '. ' + n(c.reviewed) + ' of ' + n(c.total) + ' signals have been reviewed so far.');\nreturn [{ json: { webhook: SLACK_WEBHOOK, line: lines.join('\\n') } }];"
       }
     },
     {

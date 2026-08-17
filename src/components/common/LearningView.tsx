@@ -1,9 +1,10 @@
-// The learning loop, made visible (Cormac, 17 Aug): account by account, fully
-// expanded - who gave feedback, what action they took, the reason they gave,
-// and the lesson the brain wrote from it. Lessons are editable; a hand-edited
-// lesson pauses auto-learning for that account until resumed.
+// The learning loop, made visible (Cormac, 17 Aug). Overview: headline numbers
+// and one card per account. Clicking a card opens that account's own page -
+// the full feedback trail (who did what, and the reason they gave) beside the
+// lesson the brain wrote from it. Lessons are editable; a hand-edited lesson
+// pauses auto-learning for that account until resumed.
 import { useEffect, useMemo, useState } from 'react'
-import { GraduationCap, Users, ListChecks, Lightbulb, MessageSquare, Pencil, RotateCcw, Check } from 'lucide-react'
+import { GraduationCap, Users, ListChecks, Lightbulb, MessageSquare, Pencil, RotateCcw, Check, ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchLearning, saveLesson, resumeLessonAuto } from '../../data/api'
 import type { Learning } from '../../data/api'
 import { isLive } from '../../data/source'
@@ -35,6 +36,8 @@ const DEMO: Learning = {
   totals: { total: 62, with_reason: 33, signals_reviewed: 58, signals_total: 456 },
 }
 
+type AccountLearning = { name: string; lesson: Learning['lessons'][number] | null; feedback: Learning['recent'] }
+
 // Turn a stored lesson blob ("- rule one. - rule two.") into displayable bullets.
 function lessonBullets(text: string): string[] {
   return text
@@ -53,6 +56,7 @@ function actionPhrase(f: Learning['recent'][number]): string {
 export function LearningView() {
   const [data, setData] = useState<Learning | null>(isLive ? null : DEMO)
   const [failed, setFailed] = useState(false)
+  const [openAccount, setOpenAccount] = useState<string | null>(null)
   useEffect(() => {
     if (!isLive) return
     let on = true
@@ -60,10 +64,10 @@ export function LearningView() {
     return () => { on = false }
   }, [])
 
-  // One section per account: its full feedback trail + the lesson written from it.
-  const accounts = useMemo(() => {
+  // One entry per account: its full feedback trail + the lesson written from it.
+  const accounts = useMemo<AccountLearning[]>(() => {
     if (!data) return []
-    const byName = new Map<string, { name: string; lesson: Learning['lessons'][number] | null; feedback: Learning['recent'] }>()
+    const byName = new Map<string, AccountLearning>()
     for (const l of data.lessons) byName.set(l.account, { name: l.account, lesson: l, feedback: [] })
     for (const f of data.recent) {
       if (!f.account) continue
@@ -73,8 +77,17 @@ export function LearningView() {
     return [...byName.values()].sort((a, b) => b.feedback.length - a.feedback.length)
   }, [data])
 
+  const open = (name: string | null) => {
+    setOpenAccount(name)
+    document.querySelector('main')?.scrollTo({ top: 0 })
+    window.scrollTo({ top: 0 })
+  }
+
   if (failed) return <p className="mt-4 rounded-xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted">Couldn't load the learning data - check the API connection.</p>
   if (!data) return <p className="mt-4 rounded-xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted-2">Reading the feedback ledger...</p>
+
+  const selected = openAccount ? accounts.find((a) => a.name === openAccount) : null
+  if (selected) return <AccountPage account={selected} onBack={() => open(null)} />
 
   const t = data.totals
   const coverage = t.signals_total ? Math.round((100 * t.signals_reviewed) / t.signals_total) : 0
@@ -84,7 +97,7 @@ export function LearningView() {
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-[16px] font-bold tracking-tight">The learning loop</h3>
-        <span className="text-[12.5px] text-muted-2">account by account - who gave feedback, what they said, and the lesson the brain wrote from it</span>
+        <span className="text-[12.5px] text-muted-2">open an account to see who gave feedback, what they said, and the lesson the brain wrote from it</span>
       </div>
 
       {/* the loop in one line - so the page explains itself */}
@@ -93,7 +106,7 @@ export function LearningView() {
         <span className="text-muted"><b className="text-text">The team reviews signals</b> - correct, incorrect (with a reason chip), or relabel</span>
         <span className="mx-1 text-muted-2">then</span>
         <span className="grid h-5 w-5 place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>2</span>
-        <span className="text-muted"><b className="text-text">the brain writes lessons</b> from those verdicts (shown below)</span>
+        <span className="text-muted"><b className="text-text">the brain writes lessons</b> from those verdicts</span>
         <span className="mx-1 text-muted-2">then</span>
         <span className="grid h-5 w-5 place-items-center rounded-full text-[10.5px] font-bold text-white" style={{ background: 'var(--accent)' }}>3</span>
         <span className="text-muted"><b className="text-text">every future call is classified with those lessons</b> - so the same mistake stops repeating</span>
@@ -107,21 +120,49 @@ export function LearningView() {
         <Stat icon={Lightbulb} label="Lessons written" value={`${data.lessons.length}`} sub="live in the classifier on every new call" />
       </div>
 
-      {/* account by account - everything expanded, nothing hidden */}
+      {/* one card per account - click through to its page */}
+      <div className="mt-5 flex items-baseline gap-2">
+        <span className="text-[14px] font-semibold">Learning by account</span>
+        <span className="text-[11px] text-muted-2">most feedback first</span>
+      </div>
       {accounts.length === 0 ? (
-        <p className="mt-4 rounded-2xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted-2">No feedback yet - this fills in as the team reviews signals.</p>
+        <p className="mt-3 rounded-2xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted-2">No feedback yet - this fills in as the team reviews signals.</p>
       ) : (
-        <div className="mt-4 space-y-4">
-          {accounts.map((a) => <AccountSection key={a.name} name={a.name} lesson={a.lesson} feedback={a.feedback} />)}
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {accounts.map((a) => {
+            const people = [...new Set(a.feedback.map((f) => f.given_by))]
+            const last = a.feedback[0]?.created_at
+            return (
+              <button key={a.name} onClick={() => open(a.name)}
+                className="group rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_20px_-8px_rgba(0,0,0,0.18)]">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[14px] font-bold tracking-tight">{a.name}</span>
+                  <ArrowRight size={14} className="mt-0.5 shrink-0 text-muted-2 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--accent-d)' }} />
+                </div>
+                <p className="mt-1 text-[11.5px] text-muted">
+                  <b className="num text-text">{a.lesson?.feedback_count ?? a.feedback.length}</b> piece{(a.lesson?.feedback_count ?? a.feedback.length) !== 1 ? 's' : ''} of feedback
+                  {last && <span className="text-muted-2"> · last {String(last).slice(0, 10)}</span>}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {a.lesson
+                    ? <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-d)', background: 'color-mix(in srgb, var(--accent) 11%, transparent)' }}>{a.lesson.manual ? 'lesson edited by hand' : 'lesson live in classifier'}</span>
+                    : <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-muted-2">no lesson yet</span>}
+                </div>
+                {people.length > 0 && (
+                  <p className="mt-2 truncate text-[11px] text-muted-2" title={people.join(', ')}>from {people.join(', ')}</p>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* reviewers roll-up - plain rows, the detail lives in the account sections above */}
+      {/* reviewers roll-up */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
         <div className="flex items-center gap-2">
           <Users size={15} className="text-muted" />
           <span className="text-[14px] font-semibold">The reviewers</span>
-          <span className="text-[11px] text-muted-2">volume and teaching quality per person - their individual feedback is in the account sections above</span>
+          <span className="text-[11px] text-muted-2">volume and teaching quality per person - their individual feedback is inside each account page</span>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {data.reviewers.map((r) => {
@@ -154,50 +195,78 @@ export function LearningView() {
   )
 }
 
-// One account, fully expanded: the feedback trail on the left, the lesson the
-// brain wrote from it on the right. Nothing collapsed, nothing to click open.
-function AccountSection({ name, lesson, feedback }: { name: string; lesson: Learning['lessons'][number] | null; feedback: Learning['recent'] }) {
+// One account's own page: the lesson the brain runs with (editable), and the
+// full feedback trail that built it - who did what, and the reason they gave.
+function AccountPage({ account, onBack }: { account: AccountLearning; onBack: () => void }) {
+  const { name, lesson, feedback } = account
+  const counts = {
+    incorrect: feedback.filter((f) => f.verdict === 'incorrect').length,
+    relabel: feedback.filter((f) => f.verdict === 'relabel' || (f.verdict !== 'incorrect' && f.correct_type)).length,
+    correct: feedback.filter((f) => f.verdict === 'correct').length,
+    with_reason: feedback.filter((f) => f.reason).length,
+  }
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-[15px] font-bold tracking-tight">{name}</span>
-        <span className="text-[11px] text-muted-2">
-          {lesson ? `${lesson.feedback_count} piece${lesson.feedback_count !== 1 ? 's' : ''} of feedback → 1 lesson in the classifier` : `${feedback.length} piece${feedback.length !== 1 ? 's' : ''} of feedback · no lesson written yet`}
+    <div>
+      <button onClick={onBack} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold text-muted transition-colors hover:text-text">
+        <ArrowLeft size={13} /> All accounts
+      </button>
+
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="display-title text-[22px] font-bold tracking-tight">{name}</h3>
+        <span className="text-[12.5px] text-muted-2">
+          {lesson ? `${lesson.feedback_count} piece${lesson.feedback_count !== 1 ? 's' : ''} of feedback → 1 lesson live in the classifier` : `${feedback.length} piece${feedback.length !== 1 ? 's' : ''} of feedback · no lesson written yet`}
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* what the feedback said, in numbers */}
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MiniStat label="Marked incorrect" value={counts.incorrect} color="var(--risk)" />
+        <MiniStat label="Relabelled" value={counts.relabel} color="var(--people)" />
+        <MiniStat label="Confirmed right" value={counts.correct} color="var(--opp)" />
+        <MiniStat label="Came with a reason" value={counts.with_reason} color="var(--accent-d)" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-5">
         {/* the feedback trail */}
-        <div>
-          <span className="eyebrow">Who said what</span>
-          <div className="mt-2 space-y-2">
-            {feedback.map((f, i) => {
-              const c = VERDICT_COLOR[f.verdict] ?? 'var(--muted)'
-              return (
-                <div key={i} className="rounded-xl bg-bg-2 px-3.5 py-2.5" style={{ borderLeft: `3px solid ${c}` }}>
-                  <p className="text-[12.5px] leading-snug">
-                    <b>{f.given_by}</b> <span style={{ color: c }} className="font-semibold">{actionPhrase(f)}</span>
-                    <span className="text-muted-2"> · {String(f.created_at).slice(0, 10)}</span>
-                  </p>
-                  {f.summary && <p className="mt-1 text-[11.5px] leading-snug text-muted">The signal: {f.summary}</p>}
-                  <p className="mt-1 text-[12px] leading-snug">
-                    {f.reason
-                      ? <><span className="text-muted-2">Their reason: </span><b className="text-text">"{f.reason}"</b></>
-                      : <span className="text-muted-2">No reason given - the brain had to guess why.</span>}
-                  </p>
-                </div>
-              )
-            })}
-            {feedback.length === 0 && <p className="rounded-xl bg-bg-2 px-3.5 py-2.5 text-[11.5px] text-muted-2">The feedback behind this lesson is older than the latest 400 items shown here.</p>}
+        <div className="xl:col-span-3">
+          <div className="rounded-2xl border border-line bg-surface p-5">
+            <span className="text-[14px] font-semibold">Who said what</span>
+            <p className="mt-0.5 text-[11px] text-muted-2">every piece of feedback on this account, newest first</p>
+            <div className="mt-3 space-y-2">
+              {feedback.map((f, i) => {
+                const c = VERDICT_COLOR[f.verdict] ?? 'var(--muted)'
+                return (
+                  <div key={i} className="rounded-xl bg-bg-2 px-4 py-3" style={{ borderLeft: `3px solid ${c}` }}>
+                    <p className="text-[13px] leading-snug">
+                      <b>{f.given_by}</b> <span style={{ color: c }} className="font-semibold">{actionPhrase(f)}</span>
+                      <span className="text-muted-2"> · {String(f.created_at).slice(0, 10)}</span>
+                    </p>
+                    {f.summary && <p className="mt-1 text-[12px] leading-snug text-muted">The signal: {f.summary}</p>}
+                    <p className="mt-1 text-[12.5px] leading-snug">
+                      {f.reason
+                        ? <><span className="text-muted-2">Their reason: </span><b className="text-text">"{f.reason}"</b></>
+                        : <span className="text-muted-2">No reason given - the brain had to guess why.</span>}
+                    </p>
+                  </div>
+                )
+              })}
+              {feedback.length === 0 && <p className="rounded-xl bg-bg-2 px-4 py-3 text-[12px] text-muted-2">The feedback behind this lesson is older than the latest 400 items shown here.</p>}
+            </div>
           </div>
         </div>
 
         {/* the lesson */}
-        <div>
-          <span className="eyebrow">What the brain learned</span>
-          {lesson
-            ? <LessonEditor lesson={lesson} />
-            : <p className="mt-2 rounded-xl bg-bg-2 px-3.5 py-2.5 text-[12px] text-muted-2">No lesson yet - the learning loop writes one once feedback accumulates for this account.</p>}
+        <div className="xl:col-span-2">
+          <div className="rounded-2xl border border-line bg-surface p-5 xl:sticky xl:top-4">
+            <div className="flex items-center gap-2">
+              <Lightbulb size={15} style={{ color: 'var(--accent-d)' }} />
+              <span className="text-[14px] font-semibold">What the brain learned</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-2">injected into every future classification for {name} - edit it and your wording applies from the next call</p>
+            {lesson
+              ? <LessonEditor lesson={lesson} />
+              : <p className="mt-3 rounded-xl bg-bg-2 px-4 py-3 text-[12px] text-muted-2">No lesson yet - the learning loop writes one once feedback accumulates for this account.</p>}
+          </div>
         </div>
       </div>
     </div>
@@ -224,7 +293,7 @@ function LessonEditor({ lesson }: { lesson: Learning['lessons'][number] }) {
     setBusy(false)
   }
   return (
-    <div className="mt-2 rounded-xl bg-bg-2 p-3.5" style={{ borderLeft: '3px solid color-mix(in srgb, var(--accent) 55%, var(--line))' }}>
+    <div className="mt-3 rounded-xl bg-bg-2 p-4" style={{ borderLeft: '3px solid color-mix(in srgb, var(--accent) 55%, var(--line))' }}>
       <div className="flex flex-wrap items-center gap-1.5">
         {manual && <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-d)', background: 'color-mix(in srgb, var(--accent) 11%, transparent)' }}>edited by hand · auto-learning paused</span>}
         <span className="ml-auto flex items-center gap-1.5">
@@ -239,10 +308,10 @@ function LessonEditor({ lesson }: { lesson: Learning['lessons'][number] }) {
       </div>
       {editing ? (
         <div className="mt-2">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6}
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8}
             className="w-full resize-y rounded-lg border border-line bg-surface px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus:border-[var(--accent)]" />
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <button onClick={save} disabled={busy || !text.trim()} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}><Check size={11} /> Save - the classifier uses this from the next call</button>
+            <button onClick={save} disabled={busy || !text.trim()} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}><Check size={11} /> Save - live from the next call</button>
             <button onClick={() => { setEditing(false); setText(saved) }} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted">Cancel</button>
           </div>
         </div>
@@ -256,6 +325,15 @@ function LessonEditor({ lesson }: { lesson: Learning['lessons'][number] }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <span className="eyebrow">{label}</span>
+      <div className="metric-num mt-1.5" style={{ fontSize: 26, lineHeight: '28px', color }}>{value}</div>
     </div>
   )
 }
