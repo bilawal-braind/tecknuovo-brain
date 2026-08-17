@@ -95,7 +95,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// All-items mode: one UPDATE per usable summary; skipping items is legal here.\nconst e=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst prompts=$('Build prompt').all();\nconst out=[];\nfor (let i=0;i<items.length;i++){\n  const j=items[i].json||{};\n  const raw=j.text??j.response??j.output??'';\n  const summary=(typeof raw==='string'?raw:JSON.stringify(raw)).trim();\n  const accId=prompts[i]?.json?.account_id;\n  if(!summary||!accId) continue;\n  out.push({json:{sql:\"UPDATE accounts SET feedback_summary='\"+e(summary)+\"' WHERE id='\"+e(accId)+\"';\",account_id:accId,chars:summary.length}});\n}\nreturn out;",
+        "jsCode": "// All-items mode: one UPDATE per usable summary; skipping items is legal here.\nconst e=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst prompts=$('Build prompt').all();\nconst out=[];\nfor (let i=0;i<items.length;i++){\n  const j=items[i].json||{};\n  const raw=j.text??j.response??j.output??'';\n  const summary=(typeof raw==='string'?raw:JSON.stringify(raw)).trim();\n  const accId=prompts[i]?.json?.account_id;\n  if(!summary||!accId) continue;\n  out.push({json:{sql:\"UPDATE accounts SET feedback_summary='\"+e(summary)+\"' WHERE id='\"+e(accId)+\"' AND feedback_summary_manual IS NOT TRUE;\",account_id:accId,chars:summary.length}});\n}\nreturn out;",
         "mode": "runOnceForAllItems"
       },
       "id": "fb_build",

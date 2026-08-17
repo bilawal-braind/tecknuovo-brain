@@ -27,6 +27,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(bearer() ? { Authorization: `Bearer ${bearer()}` } : {}) },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`PUT ${path} -> ${res.status}`)
+  return (await res.json()) as T
+}
+
 // ── Shapes the API actually returns (snake_case, nullable as the DB allows) ──
 export type ApiAccount = {
   id: string
@@ -238,10 +248,15 @@ export type Learning = {
   reviewers: { name: string; total: number; with_reason: number; correct: number; incorrect: number; relabel: number }[]
   accounts: { name: string; total: number; incorrect: number }[]
   recent: { verdict: string; correct_type: string | null; reason: string | null; given_by: string; created_at: string; account: string | null; summary: string | null }[]
-  lessons: { account: string; summary: string; feedback_count: number }[]
+  lessons: { account_id: string; account: string; summary: string; manual: boolean; feedback_count: number }[]
   totals: { total: number; with_reason: number; signals_reviewed: number; signals_total: number }
 }
 export const fetchLearning = () => get<Learning>('/api/learning')
+// Hand-edit an account's lesson (pauses auto-learning for it) or resume auto.
+export const saveLesson = (accountId: string, summary: string) =>
+  put<{ manual: boolean }>('/api/learning/lesson', { account_id: accountId, summary })
+export const resumeLessonAuto = (accountId: string) =>
+  put<{ manual: boolean }>('/api/learning/lesson', { account_id: accountId, resume: true })
 
 // ── Provenance feedback ("this looks wrong" in the source-trace sidebar) ──
 export const sendSourceFeedback = (kind: string, refId: string, refLabel: string, note: string) =>

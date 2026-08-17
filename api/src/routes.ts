@@ -727,17 +727,38 @@ router.get('/learning', async (req, res, next) => {
       `SELECT f.verdict, f.correct_type, f.reason, COALESCE(f.given_by,'unknown') AS given_by,
               f.created_at, a.name AS account, s.summary
        FROM feedback f LEFT JOIN accounts a ON a.id = f.account_id LEFT JOIN signals s ON s.id = f.signal_id
-       ORDER BY f.created_at DESC LIMIT 40`)).rows;
+       ORDER BY f.created_at DESC LIMIT 400`)).rows;
     const lessons = (await q(
-      `SELECT a.name AS account, a.feedback_summary AS summary,
+      `SELECT a.id AS account_id, a.name AS account, a.feedback_summary AS summary,
+              a.feedback_summary_manual AS manual,
               (SELECT count(*)::int FROM feedback f WHERE f.account_id = a.id) AS feedback_count
-       FROM accounts a WHERE a.feedback_summary IS NOT NULL ORDER BY 3 DESC`)).rows;
+       FROM accounts a WHERE a.feedback_summary IS NOT NULL ORDER BY 4 DESC`)).rows;
     const totals = (await q(
       `SELECT count(*)::int AS total, count(reason)::int AS with_reason,
               count(DISTINCT signal_id)::int AS signals_reviewed,
               (SELECT count(*)::int FROM signals) AS signals_total
        FROM feedback`)).rows[0];
     res.json({ weekly, reviewers, accounts, recent, lessons, totals });
+  } catch (e) { next(e); }
+});
+
+// Edit an account's lesson by hand (17 Aug): the classifier uses this text on
+// every future call for the account. A manual edit pauses the auto-learner for
+// that account (workflow 3 skips it) until auto-learning is resumed.
+router.put('/learning/lesson', async (req, res, next) => {
+  try {
+    if (!(await leadershipVisible(req))) return res.status(403).json({ error: 'forbidden' });
+    const { account_id, summary, resume } = (req.body ?? {}) as Record<string, unknown>;
+    if (!isUuid(account_id)) return res.status(400).json({ error: 'invalid account_id' });
+    if (resume === true) {
+      await q(`UPDATE accounts SET feedback_summary_manual = false WHERE id = $1`, [account_id]);
+      return res.json({ manual: false });
+    }
+    const text = String(summary ?? '').trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: 'summary required' });
+    const r = await q(`UPDATE accounts SET feedback_summary = $2, feedback_summary_manual = true WHERE id = $1 RETURNING name`, [account_id, text]);
+    if (!r.rows.length) return res.status(404).json({ error: 'account not found' });
+    res.json({ manual: true });
   } catch (e) { next(e); }
 });
 

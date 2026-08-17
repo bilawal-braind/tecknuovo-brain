@@ -3,9 +3,9 @@
 // lessons the brain wrote from it, and a guidance card so reviewers learn to
 // teach well. Read-only over the feedback table + wf3's lesson summaries.
 import { useEffect, useMemo, useState } from 'react'
-import { GraduationCap, Users, Building2, ListChecks, Lightbulb, MessageSquare } from 'lucide-react'
-import { ResponsiveContainer, ComposedChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
-import { fetchLearning } from '../../data/api'
+import { GraduationCap, Users, Building2, ListChecks, Lightbulb, MessageSquare, ChevronDown, Pencil, RotateCcw, Check } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
+import { fetchLearning, saveLesson, resumeLessonAuto } from '../../data/api'
 import type { Learning } from '../../data/api'
 import { isLive } from '../../data/source'
 
@@ -31,8 +31,8 @@ const DEMO: Learning = {
     { verdict: 'relabel', correct_type: 'update', reason: 'This is a milestone, not a risk', given_by: 'Kiera Battersby', created_at: '2026-08-12', account: 'DEFRA', summary: 'Environment provisioning may block the next development phase.' },
   ],
   lessons: [
-    { account: 'HMRC', summary: 'Routine SOW and PO paperwork chasers are administrative follow-ups, not delivery risks. Contract renewal signals only qualify as risks when a client stakeholder expresses doubt.', feedback_count: 18 },
-    { account: 'Cabinet Office', summary: 'Recurring production issues already tracked by the team should merge into the existing signal rather than appearing as new risks each week.', feedback_count: 12 },
+    { account_id: 'demo-hmrc', account: 'HMRC', manual: false, summary: 'Routine SOW and PO paperwork chasers are administrative follow-ups, not delivery risks. Contract renewal signals only qualify as risks when a client stakeholder expresses doubt.', feedback_count: 18 },
+    { account_id: 'demo-cabo', account: 'Cabinet Office', manual: false, summary: 'Recurring production issues already tracked by the team should merge into the existing signal rather than appearing as new risks each week.', feedback_count: 12 },
   ],
   totals: { total: 62, with_reason: 33, signals_reviewed: 58, signals_total: 456 },
 }
@@ -49,8 +49,9 @@ export function LearningView() {
 
   const weekly = useMemo(() => (data?.weekly ?? []).map((w) => ({
     ...w,
-    wrongRate: w.total ? Math.round((100 * w.incorrect) / w.total) : 0,
+    correct: Math.max(0, w.total - w.incorrect - w.relabel),
   })), [data])
+  const latest = weekly.length ? weekly[weekly.length - 1] : null
 
   if (failed) return <p className="mt-4 rounded-xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted">Couldn't load the learning data - check the API connection.</p>
   if (!data) return <p className="mt-4 rounded-xl border border-line bg-surface p-6 text-center text-[12.5px] text-muted-2">Reading the feedback ledger...</p>
@@ -89,22 +90,28 @@ export function LearningView() {
       {/* the improvement curve + accounts */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-line bg-surface p-5">
-          <span className="eyebrow">How often the team corrects the brain</span>
-          <p className="mt-0.5 text-[11.5px] text-muted-2">bars = reviews given that week · line = share marked incorrect. The line falling while bars stay tall = the brain learning.</p>
-          <div className="mt-3 h-[170px]">
+          <span className="eyebrow">Reviews each week, by verdict</span>
+          <p className="mt-0.5 text-[11.5px] text-muted-2">plain counts - green agreed with the brain, red said incorrect, amber relabelled</p>
+          <div className="mt-3 h-[160px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={weekly} margin={{ top: 4, right: -18, left: -26, bottom: 0 }}>
+              <BarChart data={weekly} margin={{ top: 4, right: 6, left: -28, bottom: 0 }}>
                 <CartesianGrid stroke="var(--line)" vertical={false} />
                 <XAxis dataKey="week" tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="n" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="pct" orientation="right" unit="%" domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11.5 }}
-                  formatter={(v: number, name: string) => (name === 'reviews' ? [`${v}`, 'reviews given'] : [`${v}%`, 'marked incorrect'])} />
-                <Bar yAxisId="n" dataKey="total" name="reviews" fill="color-mix(in srgb, var(--accent) 30%, transparent)" radius={[4, 4, 0, 0]} animationDuration={700} />
-                <Line yAxisId="pct" type="monotone" dataKey="wrongRate" name="wrong" stroke="var(--risk)" strokeWidth={2.25} dot={{ r: 3, fill: 'var(--risk)', strokeWidth: 0 }} animationDuration={900} />
-              </ComposedChart>
+                <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--muted-2)' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 11.5 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="correct" name="agreed" stackId="v" fill="var(--opp)" animationDuration={700} />
+                <Bar dataKey="incorrect" name="said incorrect" stackId="v" fill="var(--risk)" animationDuration={700} />
+                <Bar dataKey="relabel" name="relabelled" stackId="v" fill="var(--people)" radius={[4, 4, 0, 0]} animationDuration={700} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
+          {latest && (
+            <p className="mt-2 rounded-lg bg-bg-2 px-3 py-2 text-[12px] text-muted">
+              Latest week: <b className="text-text">{latest.total} review{latest.total !== 1 ? 's' : ''}</b>
+              {latest.total > 0 && <> - {latest.incorrect} said incorrect, {latest.relabel} relabelled, {latest.correct} agreed</>}.
+            </p>
+          )}
         </div>
         <div className="rounded-2xl border border-line bg-surface p-5">
           <span className="eyebrow">Where the corrections land</span>
@@ -124,26 +131,18 @@ export function LearningView() {
         </div>
       </div>
 
-      {/* lessons ledger - the proof of learning */}
+      {/* lessons ledger - the proof of learning, expandable and editable */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
         <div className="flex items-center gap-2">
           <Lightbulb size={15} style={{ color: 'var(--accent-d)' }} />
           <span className="text-[14px] font-semibold">What the brain has learned</span>
-          <span className="text-[11px] text-muted-2">written by the learning loop from your feedback · injected into every future classification for that account</span>
+          <span className="text-[11px] text-muted-2">open a lesson to see exactly whose feedback built it - or edit it, and the classifier uses your wording from the next call</span>
         </div>
         {data.lessons.length === 0 ? (
           <p className="mt-3 text-[12.5px] text-muted-2">No lessons yet - they appear as feedback accumulates.</p>
         ) : (
           <div className="mt-3 space-y-3">
-            {data.lessons.map((l) => (
-              <div key={l.account} className="border-l-2 pl-4" style={{ borderColor: 'color-mix(in srgb, var(--accent) 35%, var(--line))' }}>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-[13px] font-bold">{l.account}</span>
-                  <span className="text-[10.5px] text-muted-2">built from {l.feedback_count} piece{l.feedback_count !== 1 ? 's' : ''} of feedback</span>
-                </div>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-text">{l.summary}</p>
-              </div>
-            ))}
+            {data.lessons.map((l) => <LessonCard key={l.account_id} lesson={l} feedback={data.recent.filter((f) => f.account === l.account)} />)}
           </div>
         )}
       </div>
@@ -157,19 +156,7 @@ export function LearningView() {
             <span className="text-[11px] text-muted-2">volume and teaching quality per person</span>
           </div>
           <div className="mt-3 space-y-1.5">
-            {data.reviewers.map((r) => {
-              const q = r.total ? Math.round((100 * r.with_reason) / r.total) : 0
-              return (
-                <div key={r.name} className="flex items-center gap-3 rounded-xl bg-bg-2 px-3.5 py-2.5">
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{r.name}</span>
-                  <span className="num text-[11.5px] text-muted">{r.total} review{r.total !== 1 ? 's' : ''}</span>
-                  <span className="num rounded-full px-2 py-0.5 text-[10.5px] font-bold" style={{ color: q >= 50 ? 'var(--opp)' : 'var(--people)', background: `color-mix(in srgb, ${q >= 50 ? 'var(--opp)' : 'var(--people)'} 11%, transparent)` }}
-                    title="Share of reviews that included a reason or relabel - the teaching quality">
-                    {q}% with reasons
-                  </span>
-                </div>
-              )
-            })}
+            {data.reviewers.map((r) => <ReviewerRow key={r.name} r={r} items={data.recent.filter((f) => f.given_by === r.name)} />)}
             {data.reviewers.length === 0 && <p className="text-[12.5px] text-muted-2">No reviews yet.</p>}
           </div>
         </div>
@@ -210,6 +197,118 @@ export function LearningView() {
           <p><b className="text-text">Relabel</b> when the catch was right but the type was wrong - that keeps the signal and corrects the category.</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+// One reviewer, expandable to every piece of feedback they gave.
+function ReviewerRow({ r, items }: { r: Learning['reviewers'][number]; items: Learning['recent'] }) {
+  const [open, setOpen] = useState(false)
+  const q = r.total ? Math.round((100 * r.with_reason) / r.total) : 0
+  return (
+    <div className="overflow-hidden rounded-xl bg-bg-2">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left">
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{r.name}</span>
+        <span className="num text-[11.5px] text-muted">{r.total} review{r.total !== 1 ? 's' : ''}</span>
+        <span className="num rounded-full px-2 py-0.5 text-[10.5px] font-bold" style={{ color: q >= 50 ? 'var(--opp)' : 'var(--people)', background: `color-mix(in srgb, ${q >= 50 ? 'var(--opp)' : 'var(--people)'} 11%, transparent)` }}
+          title="Share of reviews that included a reason or relabel - the teaching quality">
+          {q}% with reasons
+        </span>
+        <ChevronDown size={13} className={`shrink-0 text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="max-h-[240px] space-y-1 overflow-y-auto border-t border-line px-3 py-2">
+          {items.map((f, i) => (
+            <div key={i} className="rounded-lg bg-surface px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="rounded-full px-1.5 py-px font-bold uppercase tracking-wide" style={{
+                  color: f.verdict === 'correct' ? 'var(--opp)' : f.verdict === 'incorrect' ? 'var(--risk)' : 'var(--people)',
+                  background: `color-mix(in srgb, ${f.verdict === 'correct' ? 'var(--opp)' : f.verdict === 'incorrect' ? 'var(--risk)' : 'var(--people)'} 11%, transparent)`,
+                }}>{f.verdict}{f.correct_type ? ` → ${f.correct_type}` : ''}</span>
+                {f.account && <span className="text-muted-2">{f.account}</span>}
+                <span className="ml-auto text-muted-2">{String(f.created_at).slice(0, 10)}</span>
+              </div>
+              {f.summary && <p className="mt-0.5 text-[11.5px] leading-snug text-muted">{f.summary}</p>}
+              {f.reason && <p className="mt-0.5 text-[11.5px] font-medium text-text">"{f.reason}"</p>}
+            </div>
+          ))}
+          {items.length === 0 && <p className="px-1 py-1 text-[11.5px] text-muted-2">Their reviews are older than the latest 400 shown here.</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// One account's lesson: expand for the exact feedback behind it; edit to
+// override what the classifier is taught (pauses auto-learning for the account).
+function LessonCard({ lesson, feedback }: { lesson: Learning['lessons'][number]; feedback: Learning['recent'] }) {
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(lesson.summary)
+  const [saved, setSaved] = useState(lesson.summary)
+  const [manual, setManual] = useState(lesson.manual)
+  const [busy, setBusy] = useState(false)
+  const demo = lesson.account_id.startsWith('demo-')
+  const save = async () => {
+    setBusy(true)
+    try { if (!demo) await saveLesson(lesson.account_id, text.trim()); setSaved(text.trim()); setManual(true); setEditing(false) } catch { /* keep editing */ }
+    setBusy(false)
+  }
+  const resume = async () => {
+    setBusy(true)
+    try { if (!demo) await resumeLessonAuto(lesson.account_id); setManual(false) } catch { /* noop */ }
+    setBusy(false)
+  }
+  return (
+    <div className="rounded-xl border border-line bg-bg-2 p-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[13px] font-bold">{lesson.account}</span>
+        <span className="text-[10.5px] text-muted-2">built from {lesson.feedback_count} piece{lesson.feedback_count !== 1 ? 's' : ''} of feedback</span>
+        {manual && <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-d)', background: 'color-mix(in srgb, var(--accent) 11%, transparent)' }}>edited by hand · auto-learning paused</span>}
+        <span className="ml-auto flex items-center gap-1.5">
+          {manual && !editing && (
+            <button onClick={resume} disabled={busy} title="Let the learning loop take over this lesson again"
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[10.5px] font-semibold text-muted transition-colors hover:text-text"><RotateCcw size={10} /> Resume auto</button>
+          )}
+          {!editing && (
+            <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[10.5px] font-semibold text-muted transition-colors hover:text-text"><Pencil size={10} /> Edit</button>
+          )}
+          <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[10.5px] font-semibold text-muted transition-colors hover:text-text">
+            The feedback behind it <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        </span>
+      </div>
+      {editing ? (
+        <div className="mt-2">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
+            className="w-full resize-y rounded-lg border border-line bg-surface px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus:border-[var(--accent)]" />
+          <div className="mt-1.5 flex items-center gap-2">
+            <button onClick={save} disabled={busy || !text.trim()} className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}><Check size={11} /> Save - the classifier uses this from the next call</button>
+            <button onClick={() => { setEditing(false); setText(saved) }} className="rounded-md border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-text">{saved}</p>
+      )}
+      {open && (
+        <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto border-t border-line pt-2">
+          {feedback.map((f, i) => (
+            <div key={i} className="rounded-lg bg-surface px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="rounded-full px-1.5 py-px font-bold uppercase tracking-wide" style={{
+                  color: f.verdict === 'correct' ? 'var(--opp)' : f.verdict === 'incorrect' ? 'var(--risk)' : 'var(--people)',
+                  background: `color-mix(in srgb, ${f.verdict === 'correct' ? 'var(--opp)' : f.verdict === 'incorrect' ? 'var(--risk)' : 'var(--people)'} 11%, transparent)`,
+                }}>{f.verdict}{f.correct_type ? ` → ${f.correct_type}` : ''}</span>
+                <span className="font-semibold text-muted">{f.given_by}</span>
+                <span className="ml-auto text-muted-2">{String(f.created_at).slice(0, 10)}</span>
+              </div>
+              {f.summary && <p className="mt-0.5 text-[11.5px] leading-snug text-muted">{f.summary}</p>}
+              {f.reason && <p className="mt-0.5 text-[11.5px] font-medium text-text">"{f.reason}"</p>}
+            </div>
+          ))}
+          {feedback.length === 0 && <p className="px-1 py-1 text-[11.5px] text-muted-2">The contributing feedback is older than the latest 400 shown here.</p>}
+        </div>
+      )}
     </div>
   )
 }
