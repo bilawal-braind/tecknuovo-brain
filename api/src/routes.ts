@@ -725,8 +725,13 @@ router.get('/learning', async (req, res, next) => {
        GROUP BY a.name ORDER BY 2 DESC LIMIT 12`)).rows;
     const recent = (await q(
       `SELECT f.verdict, f.correct_type, f.reason, COALESCE(f.given_by,'unknown') AS given_by,
-              f.created_at, a.name AS account, s.summary
-       FROM feedback f LEFT JOIN accounts a ON a.id = f.account_id LEFT JOIN signals s ON s.id = f.signal_id
+              f.created_at, a.name AS account, s.summary,
+              s.type AS signal_type, s.subtype, s.quote, s.suggested_action,
+              s.details, s.created_at AS signal_at, p.name AS project
+       FROM feedback f
+       LEFT JOIN accounts a ON a.id = f.account_id
+       LEFT JOIN signals s ON s.id = f.signal_id
+       LEFT JOIN projects p ON p.id = s.project_id
        ORDER BY f.created_at DESC LIMIT 400`)).rows;
     const lessons = (await q(
       `SELECT a.id AS account_id, a.name AS account, a.feedback_summary AS summary,

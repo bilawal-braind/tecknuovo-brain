@@ -25,7 +25,7 @@ const DEMO: Learning = {
     { name: 'Cabinet Office', total: 12, incorrect: 4 },
   ],
   recent: [
-    { verdict: 'incorrect', correct_type: null, reason: 'SOW paperwork is not a risk', given_by: 'Meesha Chotai', created_at: '2026-08-13', account: 'HMRC', summary: 'Potential risk of overcharging or undercharging due to updates not feeding through.' },
+    { verdict: 'incorrect', correct_type: null, reason: 'SOW paperwork is not a risk', given_by: 'Meesha Chotai', created_at: '2026-08-13', account: 'HMRC', summary: 'Potential risk of overcharging or undercharging due to updates not feeding through.', signal_type: 'risk', subtype: 'commercial', quote: 'The SOW updates still have not fed through to billing.', suggested_action: 'Escalate the outstanding SOW paperwork to the account lead.', project: 'Billing platform', signal_at: '2026-08-12' },
     { verdict: 'relabel', correct_type: 'update', reason: 'This is a milestone, not a risk', given_by: 'Kiera Battersby', created_at: '2026-08-12', account: 'HMRC', summary: 'Environment provisioning may block the next development phase.' },
     { verdict: 'correct', correct_type: null, reason: null, given_by: 'Chloe Hollinshead', created_at: '2026-08-11', account: 'Cabinet Office', summary: 'Recurring production incident raised for the third week running.' },
   ],
@@ -47,6 +47,12 @@ function lessonBullets(text: string): string[] {
 }
 
 const VERDICT_COLOR: Record<string, string> = { correct: 'var(--opp)', incorrect: 'var(--risk)', relabel: 'var(--people)' }
+const TYPE_COLOR: Record<string, string> = { risk: 'var(--risk)', opportunity: 'var(--opp)', people: 'var(--people)', update: 'var(--accent-d)' }
+// Framework-specific severity lives in the details jsonb (5x5 band, etc).
+function severityOf(d?: Record<string, unknown> | null): string | null {
+  const v = d && (d['band'] ?? d['severity'] ?? d['impact_level'])
+  return typeof v === 'string' && v ? v : null
+}
 function actionPhrase(f: Learning['recent'][number]): string {
   if (f.verdict === 'incorrect') return 'marked this incorrect'
   if (f.verdict === 'relabel' || f.correct_type) return `relabelled this to ${f.correct_type ?? 'another type'}`
@@ -235,14 +241,39 @@ function AccountPage({ account, onBack }: { account: AccountLearning; onBack: ()
             <div className="mt-3 space-y-2">
               {feedback.map((f, i) => {
                 const c = VERDICT_COLOR[f.verdict] ?? 'var(--muted)'
+                const tc = TYPE_COLOR[f.signal_type ?? ''] ?? 'var(--muted)'
+                const sev = severityOf(f.details)
                 return (
                   <div key={i} className="rounded-xl bg-bg-2 px-4 py-3" style={{ borderLeft: `3px solid ${c}` }}>
                     <p className="text-[13px] leading-snug">
                       <b>{f.given_by}</b> <span style={{ color: c }} className="font-semibold">{actionPhrase(f)}</span>
                       <span className="text-muted-2"> · {String(f.created_at).slice(0, 10)}</span>
                     </p>
-                    {f.summary && <p className="mt-1 text-[12px] leading-snug text-muted">The signal: {f.summary}</p>}
-                    <p className="mt-1 text-[12.5px] leading-snug">
+
+                    {/* the signal in full - type, project, what it said, the quote it came from, and the action it proposed */}
+                    <div className="mt-2 rounded-lg bg-surface px-3 py-2.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {f.signal_type && (
+                          <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide" style={{ color: tc, background: `color-mix(in srgb, ${tc} 11%, transparent)` }}>
+                            {f.signal_type}{f.subtype ? ` · ${f.subtype}` : ''}
+                          </span>
+                        )}
+                        {sev && <span className="rounded-full bg-bg-2 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-muted">{sev}</span>}
+                        {f.project && <span className="text-[10.5px] text-muted-2">{f.project}</span>}
+                        {f.signal_at && <span className="ml-auto text-[10.5px] text-muted-2">flagged {String(f.signal_at).slice(0, 10)}</span>}
+                      </div>
+                      {f.summary && <p className="mt-1.5 text-[12.5px] font-medium leading-snug text-text">{f.summary}</p>}
+                      {f.quote && <p className="mt-1.5 border-l-2 border-line pl-2.5 text-[11.5px] italic leading-snug text-muted">"{f.quote}"</p>}
+                      {f.suggested_action && (
+                        <p className="mt-1.5 text-[12px] leading-snug">
+                          <span className="font-semibold" style={{ color: 'var(--accent-d)' }}>The brain suggested:</span>{' '}
+                          <span className="text-muted">{f.suggested_action}</span>
+                        </p>
+                      )}
+                      {!f.summary && !f.quote && <p className="mt-1 text-[11.5px] text-muted-2">The signal itself has since been deleted.</p>}
+                    </div>
+
+                    <p className="mt-2 text-[12.5px] leading-snug">
                       {f.reason
                         ? <><span className="text-muted-2">Their reason: </span><b className="text-text">"{f.reason}"</b></>
                         : <span className="text-muted-2">No reason given - the brain had to guess why.</span>}
