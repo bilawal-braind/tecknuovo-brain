@@ -1,0 +1,40 @@
+-- 18 Aug cleanse (Cormac's promise on the Kiera/Chloe call): trim the signal
+-- noise so the team feedback pass runs on a credible list. Applied live 18 Aug:
+-- 513 open signals -> 292 (91 near-duplicates + 132 daily-standup noise dismissed).
+-- Every dismissal is marked in details.auto_cleanse and reversible by flipping
+-- status back to 'new'. Protected from the cleanse: signals a human confirmed
+-- correct, signals pushed to the risk register, and any non-'new' status.
+
+-- Extension-free similarity (pg_trgm is not allow-listed on Azure Postgres):
+-- Jaccard overlap of distinct lowercase words of length >= 4. Also used by
+-- workflow 1's insert guard so near-duplicates can never be inserted again.
+CREATE OR REPLACE FUNCTION tn_word_sim(a text, b text) RETURNS numeric LANGUAGE sql IMMUTABLE AS $fn$
+  WITH wa AS (SELECT DISTINCT w FROM unnest(string_to_array(lower(regexp_replace(coalesce(a,''),'[^a-zA-Z0-9 ]',' ','g')),' ')) w WHERE length(w) >= 4),
+       wb AS (SELECT DISTINCT w FROM unnest(string_to_array(lower(regexp_replace(coalesce(b,''),'[^a-zA-Z0-9 ]',' ','g')),' ')) w WHERE length(w) >= 4)
+  SELECT CASE WHEN (SELECT count(*) FROM wa) = 0 OR (SELECT count(*) FROM wb) = 0 THEN 0
+         ELSE (SELECT count(*) FROM (SELECT w FROM wa INTERSECT SELECT w FROM wb) i)::numeric
+            / (SELECT count(*) FROM (SELECT w FROM wa UNION SELECT w FROM wb) u) END
+$fn$;
+
+-- call_type backfill for the 74 pre-metrics calls, from their titles.
+UPDATE calls SET call_type = CASE
+    WHEN title ~* '(stand.?up|stand.?down|standup)' THEN 'Daily standup'
+    WHEN title ~* '(weekly|bi.?weekly|fortnightly)' THEN 'Weekly report'
+    WHEN title ~* '(governance|steering|review session|monthly)' THEN 'Monthly governance'
+    WHEN title ~* '(kick.?off)' THEN 'Client kickoff'
+    WHEN title ~* '(catch.?up|check.?in|sync|1.?2.?1|wash.?up)' THEN 'Check-in'
+    ELSE call_type END
+WHERE call_type IS NULL;
+
+-- The dismissals themselves ran via scripts/cleanse-signals.mjs (this repo),
+-- dry-run first. Rules:
+--   duplicate:     same account + type, word-sim > 0.45 to a NEWER open signal
+--                  (newest of each cluster survives)
+--   standup_noise: signal from a daily standup / stand up / stand down call,
+--                  except opportunities, risks scoring likelihood x impact >= 15,
+--                  and risks mentioning SOW / contract / commercial / invoicing /
+--                  funding / budget / extension / renewal / PO (working-at-risk
+--                  themes always survive)
+-- To undo any of it:
+--   UPDATE signals SET status = 'new'
+--   WHERE details->>'auto_cleanse' = '2026-08-18' [AND details->>'cleanse_rule' = '...'];
