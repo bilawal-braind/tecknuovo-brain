@@ -38,3 +38,10 @@ WHERE call_type IS NULL;
 -- To undo any of it:
 --   UPDATE signals SET status = 'new'
 --   WHERE details->>'auto_cleanse' = '2026-08-18' [AND details->>'cleanse_rule' = '...'];
+
+-- 19 Aug correction (post-cleanse audit): where dedupe kept a survivor and the
+-- standup rule then dismissed that survivor too, whole clusters vanished. The
+-- client rule is one tracked signal per issue, never zero - so the newest copy
+-- of each fully-dead risk/people/opportunity cluster was restored (9 signals,
+-- marked details.cleanse_restored). Routine update clusters stay dismissed.
+-- Ran via scripts/restore-clusters.mjs. Open signals: 292 -> 301.
