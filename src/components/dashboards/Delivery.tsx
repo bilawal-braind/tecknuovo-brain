@@ -8,6 +8,7 @@ import { calls } from '../../data/calls'
 import { TriageCard } from '../common/TriageCard'
 import { useOpenSignals, useSignal } from '../common/SignalLayer'
 import { ExecSummary } from '../common/ExecSummary'
+import { RagDot } from '../common/primitives'
 import { SignalsDonut } from '../common/SignalsDonut'
 import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
@@ -28,7 +29,8 @@ export function Delivery() {
   // that signal's card expanded and scrolled into view, not just the account.
   const [focusSignal, setFocusSignal] = useState<string | null>(null)
 
-  const offTrack = useMemo(() => projects.filter((p) => p.rag !== 'green').length, [])
+  const offTrackProjects = useMemo(() => projects.filter((p) => p.rag !== 'green'), [])
+  const [showOffTrack, setShowOffTrack] = useState(false)
   const { statusOf } = useSignal()
   const open = useOpenSignals(signals)
   const toAction = signals.filter((s) => statusOf(s) === 'new').length
@@ -75,7 +77,23 @@ export function Delivery() {
 
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <Kpi label="Active deliveries" value={`${projects.length}`} sub="across the team" />
-                  <Kpi label="Off track" value={`${offTrack}`} sub="amber or red" color="var(--risk)" />
+                  <button onClick={() => offTrackProjects.length && setShowOffTrack((v) => !v)} className="relative rounded-2xl border border-line bg-surface p-4 text-left transition-colors hover:border-[var(--risk)]">
+                    <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--risk)' }} /><span className="eyebrow">Off track</span></div>
+                    <div className="metric-num mt-3">{offTrackProjects.length}</div>
+                    <div className="mt-0.5 text-[12px] text-muted">amber or red · {offTrackProjects.length ? 'click to see which' : 'nothing off track'}</div>
+                    {showOffTrack && offTrackProjects.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-10 mt-1 space-y-1 rounded-xl border border-line bg-surface p-2 shadow-lg">
+                        {offTrackProjects.map((p) => (
+                          <span key={p.id} role="button" tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); setSel(p.accountId); setSelProject(p.id) }}
+                            className="block w-full cursor-pointer rounded-lg bg-bg-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--line)]">
+                            <span className="flex items-center gap-2 text-[12px] font-semibold"><RagDot health={p.rag} />{p.name}</span>
+                            <span className="mt-0.5 block text-[10.5px] text-muted">{[accountName(p.accountId), p.rag === 'red' ? 'red' : 'amber', p.phase].filter(Boolean).join(' · ')} · click to open</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
                   <Kpi label="Signals to action" value={`${toAction}`} sub="new this week" color="var(--people)" />
                   <Kpi label="Calls this week" value={`${callsThisWeek}`} sub="captured from Teams" color="var(--accent)" />
                 </div>

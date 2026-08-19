@@ -1,4 +1,5 @@
-import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight, Briefcase, Contact, ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Users, FolderKanban, CalendarCheck, ChevronRight, ChevronDown, Briefcase, Contact, ShieldAlert } from 'lucide-react'
 import { accountById, personName, podName, projectsForAccount } from '../../data/org'
 import { signalsForAccount } from '../../data/signals'
 import { callsForAccount } from '../../data/calls'
@@ -11,6 +12,7 @@ import { CallsView } from './CallsView'
 import { ReportCard } from './WeeklyReports'
 import { RagTrend } from './RagTrend'
 import { ProvenanceButton } from './Provenance'
+import { TriageCard } from './TriageCard'
 
 export function money(n: number) {
   return n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2)}m` : `£${Math.round(n / 1000)}k`
@@ -37,7 +39,6 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
   const projects = projectsForAccount(account.id)
   const calls = callsForAccount(account.id)
   const openCount = signalsForAccount(account.id).filter((s) => s.status === 'new' || s.status === 'routed').length
-  const offTrack = projects.filter((p) => p.rag !== 'green').length
 
   return (
     <div>
@@ -76,7 +77,7 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
             <>
               <Stat label="Projects" value={`${projects.length}`} />
               <Stat label="Open signals" value={`${openCount}`} color="var(--accent)" />
-              <Stat label="Off track" value={`${offTrack}`} color={offTrack ? 'var(--risk)' : undefined} />
+              <OffTrackStat projects={projects} onOpenProject={onOpenProject} />
             </>
           )}
         </div>
@@ -130,40 +131,104 @@ export function AccountView({ accountId, onBack, onOpenProject, backLabel = 'Bac
 // like Thames Water administration must be visible even when no call mentions them).
 // Renders nothing until the register sync has run (mock mode stays clean).
 const IMPACT_COLOR: Record<string, string> = { High: 'var(--risk)', Medium: 'var(--people)', Low: 'var(--muted)' }
+
+// Word-overlap similarity (same idea as the server's tn_word_sim): enough to
+// suggest which call signals relate to a register item without a hard link.
+function wordSim(a: string, b: string): number {
+  const w = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((x) => x.length >= 4))
+  const wa = w(a), wb = w(b)
+  if (!wa.size || !wb.size) return 0
+  let inter = 0
+  for (const x of wa) if (wb.has(x)) inter++
+  return inter / (wa.size + wb.size - inter)
+}
+
 function RiskRegister({ accountId }: { accountId: string }) {
   const items = registerRisksForAccount(accountId)
   if (!items.length) return null
+  const accSignals = signalsForAccount(accountId)
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
       <div className="mb-2.5 flex items-center gap-2">
         <ShieldAlert size={14} className="text-muted-2" />
         <h3 className="text-[14px] font-semibold">Risk register</h3>
-        <span className="text-[11px] text-muted-2">from Monday · open items</span>
+        <span className="text-[11px] text-muted-2">from Monday · open items · click one for the full record</span>
         <ProvenanceButton preset="register" refLabel="Risk register" />
       </div>
       <div className="space-y-2">
-        {items.map((r) => (
-          <div key={r.id} className="rounded-lg bg-bg-2 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[12.5px] font-semibold leading-snug">{r.name}</span>
-              {r.impact_level && (
-                <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
-                  style={{ color: IMPACT_COLOR[r.impact_level] ?? 'var(--muted)', background: `color-mix(in srgb, ${IMPACT_COLOR[r.impact_level] ?? 'var(--muted)'} 12%, transparent)` }}>
-                  {r.impact_level}
-                </span>
-              )}
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              {[r.kind, r.status, r.responsible].filter(Boolean).join(' · ')}
-            </div>
-            {r.treatment_plan && (
-              <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted" title={r.treatment_plan}>
-                {r.treatment_plan.length > 180 ? r.treatment_plan.slice(0, 180) + '…' : r.treatment_plan}
-              </p>
-            )}
-          </div>
-        ))}
+        {items.map((r) => <RegisterCard key={r.id} r={r} accSignals={accSignals} />)}
       </div>
+    </div>
+  )
+}
+
+// One register item, expandable like a signal (Kiera, 18 Aug call): the full
+// Monday record, plus the tnAI signal that was pushed into it and any call
+// signals that look related - so a high register risk traces back to the
+// transcript without hunting through the signals list.
+function RegisterCard({ r, accSignals }: { r: ReturnType<typeof registerRisksForAccount>[number]; accSignals: ReturnType<typeof signalsForAccount> }) {
+  const [open, setOpen] = useState(false)
+  const pushed = accSignals.filter((s) => s.registerItemId === r.id)
+  const related = open
+    ? accSignals.filter((s) => s.type === 'risk' && !pushed.includes(s) && wordSim(r.name ?? '', s.summary) > 0.3)
+    : []
+  return (
+    <div className="overflow-hidden rounded-lg bg-bg-2">
+      <button onClick={() => setOpen((v) => !v)} className="w-full p-3 text-left">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-[12.5px] font-semibold leading-snug">{r.name}</span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {r.impact_level && (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                style={{ color: IMPACT_COLOR[r.impact_level] ?? 'var(--muted)', background: `color-mix(in srgb, ${IMPACT_COLOR[r.impact_level] ?? 'var(--muted)'} 12%, transparent)` }}>
+                {r.impact_level}
+              </span>
+            )}
+            {pushed.length > 0 && (
+              <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--accent-d)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>from tnAI</span>
+            )}
+            <ChevronDown size={13} className={`text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </span>
+        </div>
+        <div className="mt-1 text-[11px] text-muted">
+          {[r.kind, r.status, r.responsible].filter(Boolean).join(' · ')}
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-line px-3 pb-3 pt-2.5">
+          {/* the full Monday record */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3">
+            {([['Type', r.kind], ['Status', r.status], ['Impact', r.impact_level], ['Likelihood', r.likelihood], ['Severity', r.severity], ['Escalation', r.escalation], ['Responsible', r.responsible], ['Age', r.age_days != null ? `${r.age_days} days` : null], ['Last verified', r.last_verified ? String(r.last_verified).slice(0, 10) : null]] as [string, string | null][])
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={k}><span className="eyebrow">{k}</span><div className="mt-0.5 text-[12px] font-medium">{v}</div></div>
+              ))}
+          </div>
+          {r.treatment_plan && (
+            <div className="mt-2.5">
+              <span className="eyebrow">Treatment plan</span>
+              <p className="mt-0.5 whitespace-pre-wrap text-[11.5px] leading-relaxed text-muted">{r.treatment_plan}</p>
+            </div>
+          )}
+
+          {/* trace back to the call signals */}
+          {pushed.length > 0 && (
+            <div className="mt-3">
+              <span className="eyebrow">The tnAI signal behind this item</span>
+              <div className="mt-1.5 space-y-2">{pushed.map((s) => <TriageCard key={s.id} signal={s} showCall />)}</div>
+            </div>
+          )}
+          {related.length > 0 && (
+            <div className="mt-3">
+              <span className="eyebrow">Possibly related call signals</span>
+              <div className="mt-1.5 space-y-2">{related.slice(0, 3).map((s) => <TriageCard key={s.id} signal={s} showCall />)}</div>
+            </div>
+          )}
+          {pushed.length === 0 && related.length === 0 && (
+            <p className="mt-3 text-[11px] text-muted-2">No call signal relates to this item - it predates tnAI or was raised directly on Monday.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -239,6 +304,32 @@ function CrmPanel({ accountId }: { accountId: string }) {
             })}
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+// "Off track" answers when clicked (Kiera, 18 Aug call): which projects, and
+// their current state - one more click opens the project itself.
+function OffTrackStat({ projects, onOpenProject }: { projects: ReturnType<typeof projectsForAccount>; onOpenProject?: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const off = projects.filter((p) => p.rag !== 'green')
+  return (
+    <div className="relative">
+      <button onClick={() => off.length && setOpen((v) => !v)} disabled={!off.length}
+        className={`w-full rounded-xl border border-line bg-bg-2 p-3 text-left ${off.length ? 'transition-colors hover:border-[var(--risk)]' : ''}`}>
+        <div className="eyebrow flex items-center justify-between">Off track {off.length > 0 && <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}</div>
+        <div className="mt-1 text-xl font-bold" style={off.length ? { color: 'var(--risk)' } : undefined}>{off.length}</div>
+      </button>
+      {open && off.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 space-y-1 rounded-xl border border-line bg-surface p-2 shadow-lg">
+          {off.map((p) => (
+            <button key={p.id} onClick={() => onOpenProject?.(p.id)} className="w-full rounded-lg bg-bg-2 px-2.5 py-2 text-left transition-colors hover:bg-[var(--line)]">
+              <span className="flex items-center gap-2 text-[12px] font-semibold"><RagDot health={p.rag} />{p.name}</span>
+              <span className="mt-0.5 block text-[10.5px] text-muted">{[p.rag === 'red' ? 'red' : 'amber', p.phase, p.sprint].filter(Boolean).join(' · ')} · click to open</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
