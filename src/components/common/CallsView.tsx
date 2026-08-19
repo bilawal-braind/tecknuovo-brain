@@ -12,7 +12,7 @@ import { SignalBadge, FilterChip } from './primitives'
 import { SIGNAL_META } from '../../data/types'
 import { TriageCard } from './TriageCard'
 import { ProvenanceButton } from './Provenance'
-import { fmt } from './SignalLayer'
+import { fmt, useSignal } from './SignalLayer'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 type Filter = 'all' | SignalType
@@ -30,7 +30,10 @@ export function CallsView({ calls, title = 'Calls', subtitle, accountId, focusSi
 
   // In an account context, a call only counts the signals filed to THAT account -
   // a multi-client standup shows each account its own extractions, not everyone's.
+  // Only OPEN signals count: dismissed noise and resolved items don't inflate calls.
+  const { statusOf } = useSignal()
   const sigsOf = (c: Call) => (accountId ? c.signals.filter((s) => s.accountId === accountId) : c.signals)
+    .filter((s) => { const st = statusOf(s); return st !== 'actioned' && st !== 'dismissed' })
 
   const counts = useMemo(() => ({
     all: calls.length,
@@ -108,7 +111,10 @@ function CallCard({ call, accountId, focusSignalId }: { call: Call; accountId?: 
   const hasFocus = !!focusSignalId && call.signals.some((s) => s.id === focusSignalId)
   const [open, setOpen] = useState(hasFocus)
   const [showTranscript, setShowTranscript] = useState(false)
-  const sigs = accountId ? call.signals.filter((s) => s.accountId === accountId) : call.signals
+  const { statusOf } = useSignal()
+  const scoped = accountId ? call.signals.filter((s) => s.accountId === accountId) : call.signals
+  const sigs = scoped.filter((s) => { const st = statusOf(s); return st !== 'actioned' && st !== 'dismissed' })
+  const removed = scoped.filter((s) => statusOf(s) === 'dismissed').length
   const types = Array.from(new Set(sigs.map((s) => s.type)))
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -130,7 +136,9 @@ function CallCard({ call, accountId, focusSignalId }: { call: Call; accountId?: 
           <div className="flex items-center gap-1">
             {types.map((t) => <SignalBadge key={t} type={t} size="sm" />)}
           </div>
-          <span className="hidden text-[11px] text-muted-2 sm:inline">{sigs.length} signal{sigs.length !== 1 ? 's' : ''}</span>
+          <span className="hidden text-[11px] text-muted-2 sm:inline">
+            {sigs.length} signal{sigs.length !== 1 ? 's' : ''}{removed > 0 && <span className="text-muted-2"> · {removed} removed</span>}
+          </span>
           <ChevronDown size={15} className={`text-muted-2 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </button>
@@ -138,7 +146,9 @@ function CallCard({ call, accountId, focusSignalId }: { call: Call; accountId?: 
       {open && (
         <div className="border-t border-line bg-surface-2 p-3.5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">Signals from this call ({sigs.length})</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+              Signals from this call ({sigs.length}{removed > 0 ? ` open · ${removed} removed as noise or duplicates` : ''})
+            </span>
             <span className="flex items-center gap-1.5">
               <ProvenanceButton call={call} />
               <button onClick={() => setShowTranscript(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:text-text">
