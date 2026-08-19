@@ -54,10 +54,14 @@ function asSeverity(details: unknown, confidence: number): Severity {
   const d = (details && typeof details === 'object' ? details : {}) as Record<string, unknown>
   const explicit = String(d.severity ?? '').toLowerCase()
   if (SEVS.includes(explicit as Severity)) return explicit as Severity
+  // 5x5 framework v1.1 bands: Critical 20-25, High 12-19, Medium 8-11,
+  // Low-Medium 4-7, Low 1-3. 'Low-Medium' must resolve low, and 'Medium'
+  // must resolve medium (it previously fell through to the confidence guess).
   const band = String(d.risk_band ?? d.band ?? '').toLowerCase()
   if (band.includes('critical') || band.includes('severe') || band.includes('extreme')) return 'critical'
   if (band.includes('high')) return 'high'
   if (band.includes('low') || band.includes('minor')) return 'low'
+  if (band.includes('medium') || band.includes('moderate')) return 'medium'
   return confidence >= 90 ? 'high' : confidence >= 75 ? 'medium' : 'low'
 }
 

@@ -787,8 +787,12 @@ router.post('/signals/:id/push-register', async (req, res, next) => {
     const det = (sig.details && typeof sig.details === 'object' ? sig.details : {}) as Record<string, unknown>;
     if (det.register_item_id) return res.json({ item_id: String(det.register_item_id), already: true });
 
+    // 5x5 v1.1 bands -> the register's three impact labels. 'Low-Medium' (4-7,
+    // tolerable per the framework) must land Low, not Medium.
     const band = String(det.band ?? '').toLowerCase();
-    const impact = band.includes('critical') || band.includes('high') ? 'High' : band.includes('medium') ? 'Medium' : 'Low';
+    const impact = band.includes('critical') || band.includes('high') ? 'High'
+      : band.includes('low') ? 'Low'
+      : band.includes('medium') ? 'Medium' : 'Low';
     const desc = [sig.summary, sig.quote ? `Heard on a call: "${sig.quote}"` : '', 'Flagged by tnAI (the Second Brain).'].filter(Boolean).join('\n\n');
     const name = String(sig.summary || 'Risk from tnAI').slice(0, 120);
 
