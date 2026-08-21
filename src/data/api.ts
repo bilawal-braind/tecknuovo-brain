@@ -17,11 +17,12 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, init?: { keepalive?: boolean }): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(bearer() ? { Authorization: `Bearer ${bearer()}` } : {}) },
     body: JSON.stringify(body),
+    ...(init?.keepalive ? { keepalive: true } : {}),
   })
   if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`)
   return (await res.json()) as T
@@ -336,6 +337,6 @@ export const submitFeedback = (
   signalId: string,
   verdict: 'correct' | 'incorrect' | 'relabel',
   opts?: { correctType?: string; reason?: string },
-) => post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, correct_type: opts?.correctType, reason: opts?.reason })
+) => post<{ id: string }>('/api/feedback', { signal_id: signalId, verdict, correct_type: opts?.correctType, reason: opts?.reason }, { keepalive: true })
 // Retract an 'incorrect' verdict and put the signal back (learning loop never sees retracted judgments).
 export const undoFeedback = (signalId: string) => post<{ retracted: boolean }>('/api/feedback/undo', { signal_id: signalId })

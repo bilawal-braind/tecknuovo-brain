@@ -703,7 +703,10 @@ router.post('/feedback/undo', async (req, res, next) => {
 // digest both draw from here.
 router.get('/learning', async (req, res, next) => {
   try {
-    if (!(await leadershipVisible(req))) return res.status(403).json({ error: 'forbidden' });
+    // Open to every signed-in user - reviewers (Kiera, Meesha) must see their own
+    // feedback land. Only the signal text itself is visibility-filtered below;
+    // editing lessons stays leadership-gated (PUT /learning/lesson).
+    const leader = await leadershipVisible(req);
     const weekly = (await q(
       `SELECT to_char(date_trunc('week', created_at), 'DD Mon') AS week,
               count(*)::int AS total,
@@ -732,6 +735,7 @@ router.get('/learning', async (req, res, next) => {
        LEFT JOIN accounts a ON a.id = f.account_id
        LEFT JOIN signals s ON s.id = f.signal_id
        LEFT JOIN projects p ON p.id = s.project_id
+       ${leader ? '' : "WHERE s.id IS NULL OR COALESCE(s.visibility,'all') <> 'leadership'"}
        ORDER BY f.created_at DESC LIMIT 400`)).rows;
     const lessons = (await q(
       `SELECT a.id AS account_id, a.name AS account, a.feedback_summary AS summary,

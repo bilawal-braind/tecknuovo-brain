@@ -98,7 +98,19 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
   const removeTimer = useRef<number>(0)
   const reasonRef = useRef<string | undefined>(undefined)
   const [chipReason, setChipReason] = useState<string | null>(null)
-  useEffect(() => () => window.clearTimeout(removeTimer.current), [])
+  // A pending "incorrect" must SEND, never be lost: the grace window exists for
+  // Undo, but navigating away, switching dashboards or closing the tab flushes
+  // the feedback immediately (Kiera's VodafoneThree feedback vanished this way).
+  const pendingFlush = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    const onPageHide = () => pendingFlush.current?.()
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      window.clearTimeout(removeTimer.current)
+      pendingFlush.current?.()
+    }
+  }, [])
   const logFeedback = (v: Verdict, note?: string) => {
     setVerdict(v)
     if (v.kind !== 'incorrect') {
@@ -108,14 +120,20 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
     // Incorrect DEFERS submission for a grace window so a one-tap reason chip
     // (or Undo) can ride along - a tapped why teaches far more than a bare click.
     reasonRef.current = note
-    removeTimer.current = window.setTimeout(() => {
+    const fire = () => {
+      if (pendingFlush.current !== fire) return
+      pendingFlush.current = null
+      window.clearTimeout(removeTimer.current)
       submitFeedback(signal.id, 'incorrect', { reason: reasonRef.current }).catch(() => {})
       setStatus(signal.id, 'dismissed')
-    }, 7000)
+    }
+    pendingFlush.current = fire
+    removeTimer.current = window.setTimeout(fire, 7000)
   }
   const pickReason = (r: string) => { reasonRef.current = r; setChipReason(r) }
   const undoIncorrect = () => {
     window.clearTimeout(removeTimer.current)
+    pendingFlush.current = null
     setVerdict(null); setChipReason(null); reasonRef.current = undefined
     undoFeedback(signal.id).catch(() => {})
     if (statusOf(signal) === 'dismissed') setStatus(signal.id, 'new')
