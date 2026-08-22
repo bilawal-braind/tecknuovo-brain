@@ -28,6 +28,7 @@ function renderDash(route: string) {
     route === 'leadership' ? <Leadership /> :
     route === 'observability' ? <Observability /> :
     route === 'delivery' ? <Delivery /> :
+    route === 'kiera' ? <Delivery personaOverride="Kiera Battersby" /> :
     null
   if (!dash) return <Landing />
   return <SignalProvider>{dash}</SignalProvider>
@@ -67,8 +68,10 @@ export default function App() {
 
   // Role → what they can open. scope 'all' (or admin) can navigate every dashboard,
   // and at the root route they get the landing page to pick from (the tn logo links
-  // back to it). Everyone else is pinned to their own dashboard.
-  const allowAll = me.role === 'admin' || me.scope === 'all'
+  // back to it). scope 'assigned' keeps the same navigation - only the DATA is
+  // filtered to their accounts (API-side) - so nobody loses tabs when scoped.
+  // Everyone else is pinned to their own dashboard.
+  const allowAll = me.role === 'admin' || me.scope === 'all' || me.scope === 'assigned'
   return renderDash(allowAll ? route : me.role)
 }
 

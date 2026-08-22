@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { LayoutDashboard, Radio, FileText, ArrowRight, Cloud, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { DashboardShell } from '../shell/DashboardShell'
@@ -9,6 +9,9 @@ import { TriageCard } from '../common/TriageCard'
 import { useOpenSignals, useSignal } from '../common/SignalLayer'
 import { ExecSummary } from '../common/ExecSummary'
 import { RagDot } from '../common/primitives'
+import { PersonalOverview } from './PersonalOverview'
+import { fetchMe } from '../../data/api'
+import { isLive } from '../../data/source'
 import { SignalsDonut } from '../common/SignalsDonut'
 import { SignalsFeed } from '../common/SignalsFeed'
 import { AccountView } from '../common/AccountView'
@@ -21,8 +24,19 @@ import { weeklyReports } from '../../data/crm'
 // Client Partner dashboard, per client feedback.
 type View = 'overview' | 'signals' | 'weekly'
 
-export function Delivery() {
+export function Delivery({ personaOverride }: { personaOverride?: string } = {}) {
   const [view, setView] = useState<View>('overview')
+  // The personalised layer (Kiera's ask, 21 Aug): scoped users see THEIR day as
+  // the overview; admins keep the classic full-delivery view (and can preview a
+  // person's layer via the landing card, which passes personaOverride).
+  const [meName, setMeName] = useState<string | null>(null)
+  useEffect(() => {
+    if (personaOverride || !isLive) return
+    fetchMe().then((m) => {
+      if (m && m.role === 'delivery' && m.scope !== 'all' && m.name) setMeName(m.name)
+    }).catch(() => {})
+  }, [personaOverride])
+  const personaName = personaOverride ?? meName
   const [sel, setSel] = useState<string | null>(null)
   const [selProject, setSelProject] = useState<string | null>(null)
   // Set when navigation came from a specific signal - the destination view opens
@@ -51,7 +65,7 @@ export function Delivery() {
 
   return (
     <DashboardShell
-      role="Delivery" persona="Every delivery and its signals" active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+      role="Delivery" persona={personaName ? `${personaName.split(' ')[0]}'s day · scoped to their accounts` : 'Every delivery and its signals'} active={view} onSelect={goTab} todos onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
       sections={[
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'signals', label: 'Signals', icon: Radio, count: open.length },
@@ -65,7 +79,10 @@ export function Delivery() {
           <AccountView accountId={sel} focusSignalId={focusSignal ?? undefined} onBack={() => { setSel(null); setFocusSignal(null) }} onOpenProject={(id) => setSelProject(id)} backLabel="Back" commercial={false} />
         ) : (
           <>
-            {view === 'overview' && (
+            {view === 'overview' && personaName && (
+              <PersonalOverview personaName={personaName} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} />
+            )}
+            {view === 'overview' && !personaName && (
               <>
                 <h3 className="text-[15px] font-semibold">Delivery, live</h3>
                 <p className="mt-0.5 text-[13px] text-muted">A live read of what the Second Brain is hearing across every delivery today.</p>

@@ -1,6 +1,10 @@
-import { ClipboardList, Briefcase, BarChart3, ShieldCheck, GitBranch, ArrowRight, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ClipboardList, Briefcase, BarChart3, ShieldCheck, GitBranch, ArrowRight, Sparkles, UserRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { TnMark } from './common/Brand'
+import { fetchMe } from '../data/api'
+import { isLive } from '../data/source'
+import { authEnabled } from '../data/auth'
 
 type Card = { hash: string; role: string; persona: string; blurb: string; icon: LucideIcon }
 
@@ -12,6 +16,17 @@ const DASHBOARDS: Card[] = [
 ]
 
 export function Landing() {
+  // Admin-only preview: see exactly what Kiera's personalised Delivery view
+  // renders, without giving up the classic full-delivery dashboard. Shown in
+  // dev/token mode and to admins; ordinary scope-all users never see it.
+  const [showPreview, setShowPreview] = useState(!authEnabled)
+  useEffect(() => {
+    if (!authEnabled || !isLive) return
+    fetchMe().then((m) => setShowPreview(m?.role === 'admin')).catch(() => {})
+  }, [])
+  const cards: Card[] = showPreview
+    ? [...DASHBOARDS, { hash: '#/kiera', role: "Kiera's day (preview)", persona: 'Admin preview · her personalised Delivery view', blurb: 'What Kiera sees when she opens Delivery: her accounts, her top actions.', icon: UserRound }]
+    : DASHBOARDS
   return (
     <div className="app-bg min-h-screen w-full overflow-y-auto">
       <div className="mx-auto max-w-[1040px] px-6 py-14">
@@ -21,7 +36,7 @@ export function Landing() {
         <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-muted">Every client call is read, classified into four signals, and routed to the right person. Pick a dashboard to see what each role gets - all on real Tecknuovo accounts, with mock signals.</p>
 
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {DASHBOARDS.map((d) => {
+          {cards.map((d) => {
             const Icon = d.icon
             return (
               <a key={d.hash} href={d.hash} className="group rounded-2xl border border-line bg-surface p-5 transition-all hover:-translate-y-0.5 hover:border-[var(--line-2)]">

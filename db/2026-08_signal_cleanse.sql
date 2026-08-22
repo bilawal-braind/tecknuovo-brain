@@ -45,3 +45,10 @@ WHERE call_type IS NULL;
 -- of each fully-dead risk/people/opportunity cluster was restored (9 signals,
 -- marked details.cleanse_restored). Routine update clusters stay dismissed.
 -- Ran via scripts/restore-clusters.mjs. Open signals: 292 -> 301.
+
+-- 22 Aug (Kiera scoping, from the 21 Aug call): her people row had no email so
+-- assignment scoping resolved to nothing. Applied live:
+--   UPDATE people SET email = 'kiera.battersby@tecknuovo.com' WHERE name = 'Kiera Battersby';
+--   UPDATE app_users SET scope = 'assigned' WHERE email = 'kiera.battersby@tecknuovo.com';
+-- scope 'assigned' = full dashboard navigation, data filtered to her accounts
+-- (Cabinet Office, DEFRA, DVSA, KPMG x Higher Education). VodafoneThree gone.
