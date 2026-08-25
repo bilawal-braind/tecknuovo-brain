@@ -20,6 +20,7 @@ import { useSignal } from '../common/SignalLayer'
 import { calls, callForSignal } from '../../data/calls'
 import { accounts, accountName, pods, personName, podName } from '../../data/org'
 import { weeklyTrend } from '../../data/trends'
+import { registerRisks } from '../../data/crm'
 import { fetchBrief, generateBrief, fetchMe } from '../../data/api'
 import type { ApiBrief } from '../../data/api'
 import type { Signal, Severity, Trend, Account, Health } from '../../data/types'
@@ -180,6 +181,15 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
     return { opps, periodCalls, needsYou, onTrack, watching, atRisk, people: speakers.size, quiet, impact, podCards, roster, signalCount: period.length }
   }, [days, statusOf])
 
+  // Chloe's escalation-ladder rule (25 Aug): any OPEN register item at
+  // Level 4 or higher goes to Katie, regardless of what the calls said.
+  // The register has only ever held Level 1-2, so this lane is usually empty -
+  // it exists so the rule is live the day TN raises one.
+  const escalatedRegister = useMemo(() => {
+    const levelOf = (e: string | null) => { const m = /(\d+)/.exec(e || ''); return m ? Number(m[1]) : 0 }
+    return registerRisks.filter((r) => levelOf(r.escalation) >= 4)
+  }, [])
+
   const sortedImpact = useMemo(() => {
     const arr = [...d.impact]
     if (sortBy === 'newest') arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -246,7 +256,28 @@ export function LeadershipHome({ onOpenAccount, onOpenSignal }: { onOpenAccount:
             </select>
           </label>
         </div>
-        {sortedImpact.length === 0 ? (
+        {escalatedRegister.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {escalatedRegister.map((r) => (
+              <button key={r.id} onClick={() => r.account_id && onOpenAccount(r.account_id)}
+                className="flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition-all hover:-translate-y-0.5"
+                style={{ borderColor: 'color-mix(in srgb, var(--risk) 40%, var(--line))', background: 'color-mix(in srgb, var(--risk) 5%, var(--surface))' }}>
+                <span className="mt-0.5 shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--risk)', background: 'color-mix(in srgb, var(--risk) 12%, transparent)' }}>
+                  {r.escalation} · register
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-semibold leading-snug">{r.name}</span>
+                  <span className="mt-1 block text-[12px] text-muted">
+                    {[r.account_name, r.impact_level ? `${r.impact_level} impact` : null, r.status, r.responsible].filter(Boolean).join(' · ')}
+                  </span>
+                  {r.treatment_plan && <span className="mt-1.5 block text-[12px] leading-relaxed text-muted-2">{String(r.treatment_plan).slice(0, 200)}</span>}
+                </span>
+                <ArrowRight size={15} className="mt-1 shrink-0 text-muted-2" />
+              </button>
+            ))}
+          </div>
+        )}
+        {sortedImpact.length === 0 && escalatedRegister.length === 0 ? (
           <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-5 text-[14px]">
             <CheckCircle2 size={18} style={{ color: 'var(--opp)' }} />
             <span><span className="font-semibold">You are clear for now.</span> <span className="text-muted">tnAI is monitoring {accounts.length} accounts and will surface the next action the moment a signal crosses your line.</span></span>

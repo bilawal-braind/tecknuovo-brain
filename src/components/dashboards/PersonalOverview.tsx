@@ -19,13 +19,12 @@ const DAY = 86_400_000
 const SEV_W: Record<Severity, number> = { critical: 3, high: 2, medium: 1, low: 0 }
 const ageDays = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / DAY)
 
-// Accounts this person is on: client director, client partner, or DM on a project.
+// Accounts this person is on as CLIENT PARTNER or CLIENT DIRECTOR only
+// (Bilawal, 25 Aug: Kiera sees exactly the accounts she is CP or CD on).
 export function accountsForPersona(name: string) {
   return accounts.filter((a) =>
     personName(a.clientDirector) === name ||
-    personName(a.clientPartner) === name ||
-    (a.deliveryManager && personName(a.deliveryManager) === name) ||
-    projects.some((p) => p.accountId === a.id && p.deliveryManager && personName(p.deliveryManager) === name))
+    personName(a.clientPartner) === name)
 }
 
 // The head-of-delivery gate - one notch wider than Katie's: she owns delivery,
