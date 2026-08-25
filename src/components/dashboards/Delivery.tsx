@@ -80,7 +80,10 @@ export function Delivery({ personaOverride }: { personaOverride?: string } = {})
         ) : (
           <>
             {view === 'overview' && personaName && (
-              <PersonalOverview personaName={personaName} onOpenAccount={(id) => { setSelProject(null); setSel(id) }} />
+              <PersonalOverview personaName={personaName}
+                onOpenAccount={(id) => { setSelProject(null); setSel(id) }}
+                onOpenSignal={openSignal}
+                onOpenSignals={() => setView('signals')} />
             )}
             {view === 'overview' && !personaName && (
               <>
