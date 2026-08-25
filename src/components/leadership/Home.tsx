@@ -26,7 +26,7 @@ import type { Signal, Severity, Trend, Account, Health } from '../../data/types'
 import { SIGNAL_META, HEALTH_COLOR, HEALTH_LABEL } from '../../data/types'
 import { BarChart3 } from 'lucide-react'
 
-type Days = 7 | 14 | 30
+export type Days = 7 | 14 | 30
 type SortBy = 'impact' | 'newest'
 type Lens = 'needs-you' | 'watch' | 'on-track'
 const DAY = 86_400_000
@@ -389,7 +389,7 @@ function Donut({ title, sub, data, palette }: { title: string; sub: string; data
 // ── "Your tnAI brief": the generated overview of everything, on demand.
 //    Fresh briefs (<24h) show instantly; otherwise workflow 13 regenerates over
 //    exactly this window while we animate. ──
-function BriefModal({ days, onClose, onOpenAccount }: { days: Days; onClose: () => void; onOpenAccount: (id: string) => void }) {
+export function BriefModal({ days, onClose, onOpenAccount }: { days: Days; onClose: () => void; onOpenAccount: (id: string) => void }) {
   const [brief, setBrief] = useState<ApiBrief | null>(null)
   const [generating, setGenerating] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -537,7 +537,7 @@ function Prose({ text, onOpenAccount }: { text: string; onOpenAccount: (id: stri
 }
 
 // ── Search: accounts and signals, straight from the header ──
-function SearchBox({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
+export function SearchBox({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const [q, setQ] = useState('')
   const [focus, setFocus] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -587,7 +587,7 @@ function SearchBox({ onOpenAccount, onOpenSignal }: { onOpenAccount: (id: string
 
 // ── Building blocks ──
 
-function Metric({ icon, label, value, sub, tip }: { icon: ReactNode; label: string; value: string; sub: string; tip: string }) {
+export function Metric({ icon, label, value, sub, tip }: { icon: ReactNode; label: string; value: string; sub: string; tip: string }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-5" title={tip} tabIndex={0}>
       <div className="flex items-center gap-2">
@@ -600,7 +600,7 @@ function Metric({ icon, label, value, sub, tip }: { icon: ReactNode; label: stri
   )
 }
 
-function SectionHead({ title, sub }: { title: string; sub: string }) {
+export function SectionHead({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <h2 className="text-[19px] font-semibold tracking-[-0.01em]">{title}</h2>
@@ -623,7 +623,7 @@ function ScoreRing({ value, color }: { value: number; color: string }) {
   )
 }
 
-function ImpactCard({ s, rank, onOpenAccount, onOpenSignal }: { s: Signal; rank: number; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
+export function ImpactCard({ s, rank, onOpenAccount, onOpenSignal }: { s: Signal; rank: number; onOpenAccount: (id: string) => void; onOpenSignal?: (s: Signal) => void }) {
   const isRisk = s.type === 'risk'
   const color = isRisk ? 'var(--risk)' : 'var(--opp)'
   const tag = isRisk ? (s.severity === 'critical' ? 'Critical risk' : 'Escalated to you') : 'Opportunity'
@@ -727,7 +727,7 @@ function SourcePill({ icon, label }: { icon?: ReactNode; label: string }) {
   )
 }
 
-function Pulse({ value, label, warn }: { value: string; label: string; warn?: boolean }) {
+export function Pulse({ value, label, warn }: { value: string; label: string; warn?: boolean }) {
   return (
     <div>
       <div className="metric-num" style={{ fontSize: 30, lineHeight: '32px', color: warn ? 'var(--people)' : undefined }}>{value}</div>
