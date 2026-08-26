@@ -727,7 +727,7 @@ router.get('/learning', async (req, res, next) => {
        FROM feedback f JOIN accounts a ON a.id = f.account_id
        GROUP BY a.name ORDER BY 2 DESC LIMIT 12`)).rows;
     const recent = (await q(
-      `SELECT f.verdict, f.correct_type, f.reason, COALESCE(f.given_by,'unknown') AS given_by,
+      `SELECT f.signal_id, f.verdict, f.correct_type, f.reason, COALESCE(f.given_by,'unknown') AS given_by,
               f.created_at, a.name AS account, s.summary,
               s.type AS signal_type, s.subtype, s.quote, s.suggested_action,
               s.details, s.created_at AS signal_at, p.name AS project
@@ -745,7 +745,9 @@ router.get('/learning', async (req, res, next) => {
     const totals = (await q(
       `SELECT count(*)::int AS total, count(reason)::int AS with_reason,
               count(DISTINCT signal_id)::int AS signals_reviewed,
-              (SELECT count(*)::int FROM signals) AS signals_total
+              (SELECT count(*)::int FROM signals) AS signals_total,
+              (SELECT count(*)::int FROM signals WHERE NOT (details ? 'auto_cleanse')) AS signals_real,
+              (SELECT count(*)::int FROM signals WHERE status = 'new') AS signals_open
        FROM feedback`)).rows[0];
     res.json({ weekly, reviewers, accounts, recent, lessons, totals });
   } catch (e) { next(e); }

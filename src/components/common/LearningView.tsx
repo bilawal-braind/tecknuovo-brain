@@ -4,7 +4,7 @@
 // lesson the brain wrote from it. Lessons are editable; a hand-edited lesson
 // pauses auto-learning for that account until resumed.
 import { useEffect, useMemo, useState } from 'react'
-import { GraduationCap, Users, ListChecks, Lightbulb, MessageSquare, Pencil, RotateCcw, Check, ArrowLeft, ArrowRight } from 'lucide-react'
+import { GraduationCap, Users, Radio, Lightbulb, MessageSquare, Pencil, RotateCcw, Check, ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchLearning, saveLesson, resumeLessonAuto } from '../../data/api'
 import type { Learning } from '../../data/api'
 import { isLive } from '../../data/source'
@@ -96,7 +96,6 @@ export function LearningView() {
   if (selected) return <AccountPage account={selected} onBack={() => open(null)} />
 
   const t = data.totals
-  const coverage = t.signals_total ? Math.round((100 * t.signals_reviewed) / t.signals_total) : 0
   const reasonRate = t.total ? Math.round((100 * t.with_reason) / t.total) : 0
 
   return (
@@ -118,11 +117,13 @@ export function LearningView() {
         <span className="text-muted"><b className="text-text">every future call is classified with those lessons</b> - so the same mistake stops repeating</span>
       </div>
 
-      {/* headline numbers */}
+      {/* headline numbers - ONE unit everywhere: signals. A signal can carry
+          several reviews (two people can judge the same one), so reviews only
+          ever appear as the small sub-line, never as a headline. */}
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={ListChecks} label="Feedback given" value={`${t.total}`} sub={`${t.signals_reviewed} signals reviewed`} />
-        <Stat icon={GraduationCap} label="Signals reviewed" value={`${t.signals_reviewed}/${t.signals_total}`} sub={`${coverage}% of everything the brain has flagged`} />
-        <Stat icon={MessageSquare} label="With a reason" value={`${reasonRate}%`} sub="reasons teach far more than bare clicks" />
+        <Stat icon={Radio} label="Open signals" value={`${t.signals_open ?? '-'}`} sub="live on the dashboards right now" />
+        <Stat icon={GraduationCap} label="Signals reviewed" value={`${t.signals_reviewed} of ${t.signals_real ?? t.signals_total}`} sub={`via ${t.total} reviews · noise the system removed itself is excluded`} />
+        <Stat icon={MessageSquare} label="Reviews with a reason" value={`${reasonRate}%`} sub="a tapped reason teaches far more than a bare click" />
         <Stat icon={Lightbulb} label="Lessons written" value={`${data.lessons.length}`} sub="live in the classifier on every new call" />
       </div>
 
@@ -138,6 +139,7 @@ export function LearningView() {
           {accounts.map((a) => {
             const people = [...new Set(a.feedback.map((f) => f.given_by))]
             const last = a.feedback[0]?.created_at
+            const sigCount = new Set(a.feedback.map((f, i) => f.signal_id ?? `row-${i}`)).size
             return (
               <button key={a.name} onClick={() => open(a.name)}
                 className="group rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_20px_-8px_rgba(0,0,0,0.18)]">
@@ -146,7 +148,8 @@ export function LearningView() {
                   <ArrowRight size={14} className="mt-0.5 shrink-0 text-muted-2 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--accent-d)' }} />
                 </div>
                 <p className="mt-1 text-[11.5px] text-muted">
-                  <b className="num text-text">{a.lesson?.feedback_count ?? a.feedback.length}</b> piece{(a.lesson?.feedback_count ?? a.feedback.length) !== 1 ? 's' : ''} of feedback
+                  <b className="num text-text">{sigCount}</b> signal{sigCount !== 1 ? 's' : ''} reviewed
+                  {a.feedback.length > sigCount && <span className="text-muted-2"> ({a.feedback.length} reviews)</span>}
                   {last && <span className="text-muted-2"> · last {String(last).slice(0, 10)}</span>}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-1">

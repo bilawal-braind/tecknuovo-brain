@@ -249,12 +249,13 @@ export type Learning = {
   reviewers: { name: string; total: number; with_reason: number; correct: number; incorrect: number; relabel: number }[]
   accounts: { name: string; total: number; incorrect: number }[]
   recent: {
+    signal_id?: string | null
     verdict: string; correct_type: string | null; reason: string | null; given_by: string; created_at: string; account: string | null; summary: string | null
     signal_type?: string | null; subtype?: string | null; quote?: string | null; suggested_action?: string | null
     details?: Record<string, unknown> | null; signal_at?: string | null; project?: string | null
   }[]
   lessons: { account_id: string; account: string; summary: string; manual: boolean; feedback_count: number }[]
-  totals: { total: number; with_reason: number; signals_reviewed: number; signals_total: number }
+  totals: { total: number; with_reason: number; signals_reviewed: number; signals_total: number; signals_real?: number; signals_open?: number }
 }
 export const fetchLearning = () => get<Learning>('/api/learning')
 // Hand-edit an account's lesson (pauses auto-learning for it) or resume auto.
