@@ -1,0 +1,204 @@
+[
+  {
+    "id": "tnAiSlackReply24",
+    "name": "TN Brain · 24 · Slack reply handler (Events API, needs TN_SLACK_BOT_TOKEN + public URL)",
+    "nodes": [
+      {
+        "id": "r1",
+        "name": "Slack events",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "e7c2a9d4-5b31-4f8e-9a6c-2d8f0b1e4a77",
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tnai-slack-events",
+          "responseMode": "responseNode",
+          "options": {}
+        }
+      },
+      {
+        "id": "r2",
+        "name": "Parse reply",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || {};\n// Slack URL verification handshake\nif (body.type === 'url_verification') return [{ json: { respond: body.challenge, act: false } }];\nconst ev = body.event || {};\n// only direct messages from humans (no bot echoes)\nif (ev.type !== 'message' || ev.channel_type !== 'im' || ev.bot_id || !ev.text) return [{ json: { respond: 'ok', act: false } }];\nconst m = String(ev.text).trim().match(/^(done|not a risk|not risk|dismiss)\\s+(\\d)/i);\nif (!m) return [{ json: { respond: 'ok', act: false, unknown: true, user: ev.user, channel: ev.channel, text: String(ev.text).slice(0, 200) } }];\nconst action = /done/i.test(m[1]) ? 'done' : 'not_a_risk';\nreturn [{ json: { respond: 'ok', act: true, action, item_no: Number(m[2]), user: ev.user, channel: ev.channel } }];"
+        }
+      },
+      {
+        "id": "r3",
+        "name": "Respond fast",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          440,
+          -140
+        ],
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ $json.respond }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "r4",
+        "name": "Load brief mapping",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "credentials": {
+          "postgres": {
+            "id": "tv0yKxg1fyTfyh8x",
+            "name": "TN Azure DB"
+          }
+        },
+        "position": [
+          440,
+          60
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT item_no, signal_id FROM brief_items WHERE recipient = '{{ $json.user }}' AND sent_at > now() - interval '3 days'",
+          "options": {}
+        }
+      },
+      {
+        "id": "r5",
+        "name": "Decide action",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          60
+        ],
+        "parameters": {
+          "jsCode": "const p = $('Parse reply').first().json;\nconst rows = $input.all().map((x) => x.json);\nif (!p.act) return [{ json: { message: null } }];\nconst hit = rows.find((r) => Number(r.item_no) === Number(p.item_no));\nif (!hit || !hit.signal_id) return [{ json: { channel: p.channel, message: 'I could not find item ' + p.item_no + ' from your latest brief - it may have been superseded by a newer one.' } }];\nconst e = (s) => String(s).split(\"'\").join(\"''\");\nconst sql = p.action === 'done'\n  ? \"UPDATE signals SET status = 'actioned' WHERE id = '\" + e(hit.signal_id) + \"';\"\n  : \"INSERT INTO feedback (signal_id, account_id, verdict, reason, given_by) SELECT id, account_id, 'incorrect', 'Marked not a risk from the Slack brief', 'Kiera Battersby' FROM signals WHERE id = '\" + e(hit.signal_id) + \"'; UPDATE signals SET status = 'dismissed' WHERE id = '\" + e(hit.signal_id) + \"';\";\nconst message = p.action === 'done'\n  ? ':white_check_mark: Marked item ' + p.item_no + ' as actioned - it moves to the Resolved panel.'\n  : ':x: Removed item ' + p.item_no + ' and taught the brain it was not a risk.';\nreturn [{ json: { channel: p.channel, sql, message } }];"
+        }
+      },
+      {
+        "id": "r6",
+        "name": "Apply to signal",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "credentials": {
+          "postgres": {
+            "id": "tv0yKxg1fyTfyh8x",
+            "name": "TN Azure DB"
+          }
+        },
+        "position": [
+          880,
+          60
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql || 'SELECT 1' }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "r7",
+        "name": "Confirm in DM",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1100,
+          60
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://slack.com/api/chat.postMessage",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.TN_SLACK_BOT_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ channel: $('Decide action').first().json.channel, text: $('Decide action').first().json.message || 'Noted.' }) }}",
+          "options": {}
+        }
+      }
+    ],
+    "connections": {
+      "Slack events": {
+        "main": [
+          [
+            {
+              "node": "Parse reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse reply": {
+        "main": [
+          [
+            {
+              "node": "Respond fast",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Load brief mapping",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Load brief mapping": {
+        "main": [
+          [
+            {
+              "node": "Decide action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decide action": {
+        "main": [
+          [
+            {
+              "node": "Apply to signal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply to signal": {
+        "main": [
+          [
+            {
+              "node": "Confirm in DM",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]

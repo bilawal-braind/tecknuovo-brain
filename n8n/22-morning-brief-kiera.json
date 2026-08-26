@@ -1,0 +1,234 @@
+[
+  {
+    "id": "tnAiBriefKiera22",
+    "name": "TN Brain · 22 · Morning brief - Kiera (weekdays 08:00, needs TN_SLACK_BOT_TOKEN)",
+    "nodes": [
+      {
+        "id": "k1",
+        "name": "Weekdays 08:00",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 8 * * 1-5"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "k2",
+        "name": "Priorities query",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "credentials": {
+          "postgres": {
+            "id": "tv0yKxg1fyTfyh8x",
+            "name": "TN Azure DB"
+          }
+        },
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH mine AS (\n  SELECT a.id, a.name FROM accounts a JOIN people pe ON pe.id IN (a.client_partner, a.client_director)\n  WHERE lower(pe.email) = 'kiera.battersby@tecknuovo.com')\nSELECT jsonb_build_object(\n 'risks', COALESCE((SELECT jsonb_agg(x) FROM (\n    SELECT s.id, s.summary, s.suggested_action, m.name AS account, s.details->>'band' AS band\n    FROM signals s JOIN mine m ON m.id = s.account_id\n    WHERE s.status = 'new' AND s.type = 'risk' AND s.details->>'band' IN ('Critical','High')\n    ORDER BY CASE s.details->>'band' WHEN 'Critical' THEN 0 ELSE 1 END, s.created_at DESC LIMIT 3) x), '[]'::jsonb),\n 'opps', COALESCE((SELECT jsonb_agg(y) FROM (\n    SELECT s.id, s.summary, m.name AS account FROM signals s JOIN mine m ON m.id = s.account_id\n    WHERE s.status = 'new' AND s.type = 'opportunity' ORDER BY s.created_at DESC LIMIT 2) y), '[]'::jsonb),\n 'new_count', (SELECT count(*) FROM signals s JOIN mine m ON m.id = s.account_id\n    WHERE s.status = 'new' AND s.created_at > now() - interval '1 day')\n) AS ctx;",
+          "options": {}
+        }
+      },
+      {
+        "id": "k3",
+        "name": "Build brief",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const ctx = $input.first().json.ctx;\nconst email = 'kiera.battersby@tecknuovo.com';\nconst items = [];\nfor (const r of (ctx.risks || [])) items.push({ icon: ':red_circle:', kind: 'risk', ...r });\nfor (const o of (ctx.opps || [])) { if (items.length >= 3) break; items.push({ icon: ':bulb:', kind: 'opportunity', ...o }); }\nif (!items.length) {\n  return [{ json: { email, text: ':sunrise: *Morning Kiera - nothing needs you today.* All accounts steady; new signals will land here as calls come in.', mappingSql: null } }];\n}\nconst lines = [':sunrise: *Morning Kiera - your ' + (items.length === 1 ? 'priority' : items.length + ' priorities') + ' for today*'];\nitems.forEach((it, i) => {\n  lines.push(it.icon + ' *' + (i + 1) + '. ' + it.summary + '*' + (it.account ? '  _(' + it.account + ')_' : ''));\n  if (it.suggested_action) lines.push('     ' + it.suggested_action);\n});\nif (Number(ctx.new_count) > 0) lines.push(':memo: ' + ctx.new_count + ' new signal' + (Number(ctx.new_count) === 1 ? '' : 's') + ' since yesterday await a quick review.');\nlines.push('_Reply \"done 1\", \"not a risk 2\" - or ask me anything about your accounts._');\nconst e = (s) => String(s).split(\"'\").join(\"''\");\nconst values = items.map((it, i) => \"((SELECT COALESCE((SELECT slack_user_id FROM slack_users WHERE lower(email)='\" + email + \"'), '\" + email + \"')), \" + (i + 1) + \", '\" + e(it.id) + \"')\").join(',');\nconst mappingSql = 'DELETE FROM brief_items WHERE recipient IN (SELECT COALESCE((SELECT slack_user_id FROM slack_users WHERE lower(email)=\\'' + email + '\\'), \\'' + email + '\\')); INSERT INTO brief_items (recipient, item_no, signal_id) VALUES ' + values + ';';\nreturn [{ json: { email, text: lines.join('\\n'), mappingSql } }];"
+        }
+      },
+      {
+        "id": "k4",
+        "name": "Save reply mapping",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "credentials": {
+          "postgres": {
+            "id": "tv0yKxg1fyTfyh8x",
+            "name": "TN Azure DB"
+          }
+        },
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.mappingSql || 'SELECT 1' }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "k5",
+        "name": "Find Slack user",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://slack.com/api/users.lookupByEmail?email={{ $('Build brief').first().json.email }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.TN_SLACK_BOT_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "k6",
+        "name": "DM the brief",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1100,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://slack.com/api/chat.postMessage",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.TN_SLACK_BOT_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ channel: $json.user.id, text: $('Build brief').first().json.text, unfurl_links: false }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "k7",
+        "name": "Remember Slack id",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "credentials": {
+          "postgres": {
+            "id": "tv0yKxg1fyTfyh8x",
+            "name": "TN Azure DB"
+          }
+        },
+        "position": [
+          1320,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=INSERT INTO slack_users (email, slack_user_id) VALUES ('{{ $('Build brief').first().json.email }}', '{{ $('Find Slack user').first().json.user.id }}') ON CONFLICT (email) DO UPDATE SET slack_user_id = EXCLUDED.slack_user_id; UPDATE brief_items SET recipient = '{{ $('Find Slack user').first().json.user.id }}' WHERE recipient = '{{ $('Build brief').first().json.email }}';",
+          "options": {}
+        }
+      }
+    ],
+    "connections": {
+      "Weekdays 08:00": {
+        "main": [
+          [
+            {
+              "node": "Priorities query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Priorities query": {
+        "main": [
+          [
+            {
+              "node": "Build brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build brief": {
+        "main": [
+          [
+            {
+              "node": "Save reply mapping",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Save reply mapping": {
+        "main": [
+          [
+            {
+              "node": "Find Slack user",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find Slack user": {
+        "main": [
+          [
+            {
+              "node": "DM the brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DM the brief": {
+        "main": [
+          [
+            {
+              "node": "Remember Slack id",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]
