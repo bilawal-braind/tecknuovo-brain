@@ -4,7 +4,7 @@
 // lesson the brain wrote from it. Lessons are editable; a hand-edited lesson
 // pauses auto-learning for that account until resumed.
 import { useEffect, useMemo, useState } from 'react'
-import { GraduationCap, Users, Radio, Lightbulb, MessageSquare, Pencil, RotateCcw, Check, ArrowLeft, ArrowRight } from 'lucide-react'
+import { GraduationCap, Users, Lightbulb, MessageSquare, Pencil, RotateCcw, Check, ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchLearning, saveLesson, resumeLessonAuto } from '../../data/api'
 import type { Learning } from '../../data/api'
 import { isLive } from '../../data/source'
@@ -120,8 +120,7 @@ export function LearningView() {
       {/* headline numbers - ONE unit everywhere: signals. A signal can carry
           several reviews (two people can judge the same one), so reviews only
           ever appear as the small sub-line, never as a headline. */}
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Radio} label="Open signals" value={`${t.signals_open ?? '-'}`} sub="live on the dashboards right now" />
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Stat icon={GraduationCap} label="Signals reviewed" value={`${t.signals_reviewed} of ${t.signals_real ?? t.signals_total}`} sub={`via ${t.total} reviews · noise the system removed itself is excluded`} />
         <Stat icon={MessageSquare} label="Reviews with a reason" value={`${reasonRate}%`} sub="a tapped reason teaches far more than a bare click" />
         <Stat icon={Lightbulb} label="Lessons written" value={`${data.lessons.length}`} sub="live in the classifier on every new call" />
