@@ -76,9 +76,10 @@ export function LearningView() {
     const byName = new Map<string, AccountLearning>()
     for (const l of data.lessons) byName.set(l.account, { name: l.account, lesson: l, feedback: [] })
     for (const f of data.recent) {
-      if (!f.account) continue
-      if (!byName.has(f.account)) byName.set(f.account, { name: f.account, lesson: null, feedback: [] })
-      byName.get(f.account)!.feedback.push(f)
+      // unattributed feedback still counts - otherwise the cards sum below the tile
+      const key = f.account ?? '(no account)'
+      if (!byName.has(key)) byName.set(key, { name: key, lesson: null, feedback: [] })
+      byName.get(key)!.feedback.push(f)
     }
     return [...byName.values()].sort((a, b) => b.feedback.length - a.feedback.length)
   }, [data])
