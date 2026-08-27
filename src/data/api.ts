@@ -82,6 +82,8 @@ export type ApiSignal = {
   account_id: string | null
   project_id: string | null
   call_id: string | null
+  review_verdict?: string | null
+  reviewed_by?: string | null
 }
 
 export type ApiCall = {

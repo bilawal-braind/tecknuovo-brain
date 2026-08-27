@@ -81,6 +81,8 @@ export type Signal = {
   callId?: string
   // Monday risk-register item created from this signal (push-to-register)
   registerItemId?: string
+  reviewVerdict?: 'correct' | 'incorrect' | 'relabel'
+  reviewedBy?: string
   likelihood?: number
   impact?: number
   networksTotal?: number

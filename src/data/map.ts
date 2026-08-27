@@ -130,6 +130,8 @@ export const mapSignal = (s: ApiSignal): Signal => {
     lastSeen: typeof d.last_seen === 'string' ? d.last_seen.slice(0, 10) : undefined,
     callId: s.call_id ?? undefined,
     registerItemId: typeof d.register_item_id === 'string' ? d.register_item_id : undefined,
+    reviewVerdict: s.review_verdict === 'correct' || s.review_verdict === 'incorrect' || s.review_verdict === 'relabel' ? s.review_verdict : undefined,
+    reviewedBy: s.reviewed_by ?? undefined,
     likelihood: asNum(d.likelihood),
     impact: asNum(d.impact),
     networksTotal: asNum(d.networks_total),

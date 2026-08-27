@@ -185,7 +185,10 @@ router.get('/calls', async (req, res, next) => {
     const allowed = await allowedAccounts(req);
     const params: unknown[] = [];
     const conds: string[] = [];
-    if (allowed !== null) { params.push(allowed); conds.push(`account_id = ANY($${params.length}::uuid[])`); }
+    if (allowed !== null) {
+      params.push(allowed);
+      conds.push(`(account_id = ANY($${params.length}::uuid[]) OR (account_id IS NULL AND EXISTS (SELECT 1 FROM signals s WHERE s.call_id = calls.id AND s.account_id = ANY($${params.length}::uuid[]))))`);
+    }
     if (!(await leadershipVisible(req))) conds.push(`COALESCE(visibility, 'all') <> 'leadership'`);
     const filter = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const r = await q(
@@ -207,7 +210,13 @@ router.get('/calls/:id/transcript', async (req, res, next) => {
     if (!r.rows.length) return res.status(404).json({ error: 'not found' });
     const allowed = await allowedAccounts(req);
     if (allowed !== null && !(r.rows[0].account_id && allowed.includes(String(r.rows[0].account_id)))) {
-      return res.status(403).json({ error: 'forbidden' });
+      // Multi-client calls (pod stand-ups) carry no single account. A scoped
+      // user may still read the transcript when any of the call's SIGNALS sit
+      // on their accounts - that is exactly the evidence they are reviewing.
+      const viaSignal = await q(
+        `SELECT 1 FROM signals s WHERE s.call_id = $1 AND s.account_id = ANY($2::uuid[]) LIMIT 1`,
+        [req.params.id, allowed]);
+      if (!viaSignal.rows.length) return res.status(403).json({ error: 'forbidden' });
     }
     if (r.rows[0].visibility === 'leadership' && !(await leadershipVisible(req))) {
       return res.status(403).json({ error: 'forbidden' });
@@ -310,8 +319,10 @@ router.get('/signals', async (req, res, next) => {
     const r = await q(
       `SELECT s.id, s.type, s.subtype, s.summary, s.quote, s.suggested_action, s.confidence, s.status, s.details, s.created_at,
               s.account_id, s.project_id, s.call_id,
-              a.name AS account, p.name AS project
+              a.name AS account, p.name AS project,
+              fb.verdict AS review_verdict, fb.given_by AS reviewed_by
        FROM signals s
+       LEFT JOIN LATERAL (SELECT verdict, given_by FROM feedback f WHERE f.signal_id = s.id ORDER BY f.created_at DESC LIMIT 1) fb ON true
        LEFT JOIN accounts a ON a.id = s.account_id
        LEFT JOIN projects p ON p.id = s.project_id
        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -674,6 +685,9 @@ router.post('/feedback', async (req, res, next) => {
     // Meesha (12 Aug): marking a signal INCORRECT removes it from every dashboard
     // immediately - the feedback row still teaches the classifier.
     if (verdict === 'incorrect') await q(`UPDATE signals SET status='dismissed' WHERE id = $1`, [signal_id]);
+    // Flipping back to correct (Adam, 26 Aug): if an earlier incorrect dismissed
+    // the signal, a correct verdict reinstates it.
+    if (verdict === 'correct') await q(`UPDATE signals SET status='new' WHERE id = $1 AND status = 'dismissed'`, [signal_id]);
     res.status(201).json({ id: r.rows[0].id });
   } catch (e) { next(e); }
 });

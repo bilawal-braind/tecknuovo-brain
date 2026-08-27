@@ -67,7 +67,11 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
     return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const [verdict, setVerdict] = useState<Verdict | null>(null)
+  // Verdicts persist (Adam, 26 Aug): the card seeds from the latest stored
+  // review, so a mark survives navigation and reloads instead of vanishing.
+  const [verdict, setVerdict] = useState<Verdict | null>(
+    signal.reviewVerdict ? { kind: signal.reviewVerdict } : null,
+  )
   const { statusOf, setStatus } = useSignal()
   const m = SIGNAL_META[signal.type]
   const status = statusOf(signal)
@@ -179,7 +183,13 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
             </span>
           )}
           {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
-          <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
+          {signal.type === 'risk' && signal.likelihood && signal.impact ? (
+            <span className="num hidden text-[11px] font-semibold text-muted md:inline" title={`Framework score: likelihood ${signal.likelihood} x impact ${signal.impact} = ${signal.likelihood * signal.impact} of 25 (${signal.band ?? ''})`}>
+              {signal.likelihood * signal.impact}/25
+            </span>
+          ) : (
+            <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
+          )}
           {done ? (
             <span className="flex items-center gap-1.5">
               <span className="text-[10px] font-semibold capitalize" style={{ color: status === 'dismissed' ? 'var(--muted)' : 'var(--opp)' }}>{status}</span>
@@ -189,7 +199,7 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
                 className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-semibold text-muted transition-colors hover:text-text">Undo</button>
             </span>
           ) : (
-            <FeedbackControl verdict={verdict} onVote={logFeedback} onRelabel={() => setOpen(true)} onUndo={undoIncorrect} />
+            <FeedbackControl verdict={verdict} reviewedBy={signal.reviewedBy} onVote={logFeedback} onRelabel={() => setOpen(true)} onUndo={undoIncorrect} />
           )}
           <button onClick={() => setOpen((o) => !o)} aria-label="Expand" className="rounded-md p-0.5 text-muted-2 transition-colors hover:text-text"><ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} /></button>
         </div>
@@ -578,15 +588,24 @@ function NotesSection({ signalId }: { signalId: string }) {
 // Always-visible feedback control on every signal row, on every dashboard - so anyone
 // (not just people with the Observability dashboard) can mark a signal Correct / Incorrect
 // or open it to relabel. Once given, it shows the logged verdict.
-function FeedbackControl({ verdict, onVote, onRelabel, onUndo }: { verdict: Verdict | null; onVote: (v: Verdict) => void; onRelabel: () => void; onUndo?: () => void }) {
+function FeedbackControl({ verdict, reviewedBy, onVote, onRelabel, onUndo }: { verdict: Verdict | null; reviewedBy?: string; onVote: (v: Verdict) => void; onRelabel: () => void; onUndo?: () => void }) {
   if (verdict) {
     const label = verdict.kind === 'correct' ? 'Correct' : verdict.kind === 'incorrect' ? 'Removing' : 'Relabelled'
     const color = verdict.kind === 'correct' ? 'var(--opp)' : verdict.kind === 'incorrect' ? 'var(--risk)' : 'var(--people)'
+    // A verdict can be changed later (Adam, 26 Aug): the chip carries a small
+    // flip control - correct <-> incorrect - which files fresh feedback.
+    const flip: Verdict = { kind: verdict.kind === 'correct' ? 'incorrect' : 'correct' }
     return (
-      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}
+        title={reviewedBy ? `Reviewed by ${reviewedBy}` : undefined}>
         {verdict.kind === 'correct' ? <Check size={11} /> : verdict.kind === 'incorrect' ? <X size={11} /> : <RefreshCw size={10} />} {label}
+        {reviewedBy && <span className="hidden font-medium opacity-80 sm:inline">· {reviewedBy.split(' ')[0]}</span>}
         {verdict.kind === 'incorrect' && onUndo && (
           <button onClick={(e) => { e.stopPropagation(); onUndo() }} className="ml-0.5 rounded-full border border-current px-1.5 text-[9.5px] font-bold">Undo</button>
+        )}
+        {verdict.kind !== 'relabel' && (
+          <button onClick={(e) => { e.stopPropagation(); onVote(flip) }} title={`Change to ${flip.kind}`}
+            className="ml-0.5 rounded-full border border-current px-1.5 text-[9.5px] font-bold opacity-70 hover:opacity-100">Change</button>
         )}
       </span>
     )

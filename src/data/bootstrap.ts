@@ -130,7 +130,8 @@ function hydrate({ aRows, pRows, sRows, cRows, asRows }: Rows): BootResult['coun
   // Consultants per account straight off the Assigned Associates board - the
   // number the portfolio's Team & scope column shows (board truth, not inference).
   const consPerAccount = new Map<string, number>()
-  asRows.forEach((as) => { if (as.account_id) consPerAccount.set(as.account_id, (consPerAccount.get(as.account_id) || 0) + 1) })
+  // Alumni stay on the board for history but are not current consultants (Adam, 26 Aug).
+  asRows.forEach((as) => { if (as.account_id && !/alumni/i.test(as.placement_status || '')) consPerAccount.set(as.account_id, (consPerAccount.get(as.account_id) || 0) + 1) })
   liveAccounts.forEach((a) => { const n = consPerAccount.get(a.id); if (n) a.consultantCount = n })
   asRows.forEach((as) => {
     const pop = (as.project_or_programme || '').toLowerCase()
