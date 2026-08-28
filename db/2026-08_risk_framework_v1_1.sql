@@ -21,3 +21,10 @@ WHERE key = 'risk_framework';
 -- anti-default rule, a required scoring_basis sentence in every risk's details
 -- justifying both numbers against the framework anchors, and speaker gating
 -- (a TN person recapping context is never a new opportunity or lead - Will).
+
+-- 28 Aug backlog re-score (Bilawal: the display fix alone left 37 risks at
+-- 12/25): every OPEN risk re-scored against framework v1.1 by the calibrated
+-- model, temperature 0, with a written scoring_basis each. 70 of 85 changed.
+-- Distribution after: 20:1, 12:9, 9:27, 8:1, 6:44, 4:3 (was 37 at exactly 12).
+-- Old numbers preserved per signal in details.rescored_from; marker
+-- details.rescored = '2026-08-28'. Ran via scripts/rescore-risks.mjs.
