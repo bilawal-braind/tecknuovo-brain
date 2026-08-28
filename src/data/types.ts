@@ -83,6 +83,7 @@ export type Signal = {
   registerItemId?: string
   reviewVerdict?: 'correct' | 'incorrect' | 'relabel'
   reviewedBy?: string
+  scoringBasis?: string
   likelihood?: number
   impact?: number
   networksTotal?: number

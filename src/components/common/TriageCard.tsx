@@ -8,7 +8,7 @@ import { riskScope } from '../../data/signals'
 import { submitFeedback, undoFeedback, pushToHubspot, pushToRegister, addSignalNote, reassignSignal, addTodo } from '../../data/api'
 import { isLive as isLiveData } from '../../data/source'
 import { signalNotes, notesForSignal } from '../../data/crm'
-import { SignalBadge, SeverityTag, ConfidenceBar } from './primitives'
+import { SignalBadge, SeverityTag } from './primitives'
 import { QAReview } from './QAReview'
 import type { Verdict } from './QAReview'
 import { useSignal, fmt } from './SignalLayer'
@@ -183,12 +183,13 @@ export function TriageCard({ signal, onOpenAccount, showAccount = false, initial
             </span>
           )}
           {signal.value && <span className="hidden text-[11px] text-muted sm:inline">{signal.value}</span>}
-          {signal.type === 'risk' && signal.likelihood && signal.impact ? (
-            <span className="num hidden text-[11px] font-semibold text-muted md:inline" title={`Framework score: likelihood ${signal.likelihood} x impact ${signal.impact} = ${signal.likelihood * signal.impact} of 25 (${signal.band ?? ''})`}>
-              {signal.likelihood * signal.impact}/25
+          {signal.type === 'risk' && signal.likelihood && signal.impact && (
+            <span className="num hidden items-center gap-1 text-[11px] font-semibold text-muted md:inline-flex">
+              {signal.likelihood}x{signal.impact} = {signal.likelihood * signal.impact}/25
             </span>
-          ) : (
-            <span className="hidden md:inline"><ConfidenceBar value={signal.confidence} /></span>
+          )}
+          {signal.type === 'opportunity' && signal.networksTotal != null && (
+            <span className="num hidden text-[11px] font-semibold text-muted md:inline">{signal.networksTotal}/40</span>
           )}
           {done ? (
             <span className="flex items-center gap-1.5">
@@ -298,11 +299,13 @@ function FrameworkScore({ signal }: { signal: Signal }) {
   if (signal.type === 'opportunity' && signal.networksTotal != null) {
     title = 'NETWORKS qualification score'
     scoreLine = `${signal.networksTotal}/40${signal.band ? ` · ${signal.band}` : ''}`
-    explain = `Scored against Tecknuovo's NETWORKS framework (Need, Effort, Time, Who, Originality, Resources, Kompetition, Sign-off). Confidence ${signal.confidence}% = ${signal.networksTotal} out of 40.`
+    explain = `Scored against Tecknuovo's NETWORKS framework (Need, Effort, Time, Who, Originality, Resources, Kompetition, Sign-off): ${signal.networksTotal} out of 40.`
   } else if (signal.type === 'risk' && signal.likelihood != null && signal.impact != null) {
-    title = '5x5 risk score'
-    scoreLine = `${signal.likelihood} x ${signal.impact} = ${signal.likelihood * signal.impact}/25${signal.band ? ` · ${signal.band}` : ''}`
-    explain = `Scored on Tecknuovo's 5x5 risk matrix (likelihood x impact). Confidence ${signal.confidence}% = ${signal.likelihood * signal.impact} out of 25.`
+    title = "Tecknuovo 5x5 risk framework"
+    scoreLine = `L${signal.likelihood} x I${signal.impact} = ${signal.likelihood * signal.impact}/25${signal.band ? ` · ${signal.band}` : ''}`
+    explain = signal.scoringBasis
+      ? `Why these numbers: ${signal.scoringBasis}`
+      : `Likelihood ${signal.likelihood} x impact ${signal.impact} on the client's 5x5 matrix. Newer signals carry a written justification of both numbers; this one predates that and will gain one when re-reviewed.`
   } else {
     return null
   }

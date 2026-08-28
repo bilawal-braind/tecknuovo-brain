@@ -132,6 +132,7 @@ export const mapSignal = (s: ApiSignal): Signal => {
     registerItemId: typeof d.register_item_id === 'string' ? d.register_item_id : undefined,
     reviewVerdict: s.review_verdict === 'correct' || s.review_verdict === 'incorrect' || s.review_verdict === 'relabel' ? s.review_verdict : undefined,
     reviewedBy: s.reviewed_by ?? undefined,
+    scoringBasis: typeof d.scoring_basis === 'string' && d.scoring_basis ? d.scoring_basis : undefined,
     likelihood: asNum(d.likelihood),
     impact: asNum(d.impact),
     networksTotal: asNum(d.networks_total),
