@@ -52,3 +52,13 @@ WHERE call_type IS NULL;
 --   UPDATE app_users SET scope = 'assigned' WHERE email = 'kiera.battersby@tecknuovo.com';
 -- scope 'assigned' = full dashboard navigation, data filtered to her accounts
 -- (Cabinet Office, DEFRA, DVSA, KPMG x Higher Education). VodafoneThree gone.
+
+-- 29 Aug source corrections (Chloe's provenance check): the three "Cabinet
+-- Office projects" were ghosts auto-created by the weekly-report sync from
+-- inconsistent SharePoint report titles (wr: prefix), never Monday rows - 8
+-- such legacy ghosts retired (wf9's newer dupe guard prevents recurrence).
+-- The client directory was polluted by HubSpot DEAL-name prefixes (Chloe:
+-- "those exist as Deals, not Companies") - 54 dead deal-title artifacts purged
+-- (account aliases like CNWL kept), wf10 now only takes prefixes from OPEN
+-- deals, and the phantom "KPMG x Higher Education" account was removed with
+-- its call/signals reassigned to DFE. Ran via scripts/fix-sources.mjs.
