@@ -36,6 +36,9 @@ export async function login(): Promise<void> {
   const state = randString(16)
   sessionStorage.setItem('tn_pkce', verifier)
   sessionStorage.setItem('tn_state', state)
+  // Deep links (the Slack briefs land on #/delivery?signal=...) must survive the
+  // Microsoft round trip - the redirect_uri is the bare origin, so stash the hash.
+  if (window.location.hash) sessionStorage.setItem('tn_return', window.location.hash)
   const params = new URLSearchParams({
     client_id: ENTRA_CLIENT_ID,
     response_type: 'code',
@@ -80,7 +83,12 @@ export async function handleRedirect(): Promise<void> {
   url.searchParams.delete('code')
   url.searchParams.delete('state')
   url.searchParams.delete('session_state')
-  window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+  // Restore the deep link stashed by login() - this runs before the app mounts,
+  // so the routers and the dashboards' ?signal= readers see the right hash.
+  const ret = sessionStorage.getItem('tn_return')
+  sessionStorage.removeItem('tn_return')
+  const hash = url.hash && url.hash !== '#/' ? url.hash : ret || url.hash
+  window.history.replaceState({}, '', url.pathname + url.search + hash)
 }
 
 export function logout(): void {

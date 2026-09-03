@@ -1,6 +1,47 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "leadership", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev:leadership"], "port": 3032 }
+    {
+      "name": "leadership",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:leadership"
+      ],
+      "port": 3032
+    },
+    {
+      "name": "observability-live",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_DATA_SOURCE=live",
+        "VITE_API_URL=http://localhost:4001",
+        "VITE_API_TOKEN=5138146a1ae5f9ed28c3c9ec5ffa9f8cee7826868247aa1e",
+        "VITE_AUTH=",
+        "VITE_DASH=observability",
+        "npx",
+        "vite",
+        "--port",
+        "3030",
+        "--host"
+      ],
+      "port": 3030
+    },
+    {
+      "name": "deeplink-live",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "VITE_DATA_SOURCE=live",
+        "VITE_API_URL=http://localhost:4001",
+        "VITE_API_TOKEN=5138146a1ae5f9ed28c3c9ec5ffa9f8cee7826868247aa1e",
+        "VITE_AUTH=",
+        "npx",
+        "vite",
+        "--port",
+        "3030",
+        "--host"
+      ],
+      "port": 3030
+    }
   ]
 }

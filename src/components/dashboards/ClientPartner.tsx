@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { hashParam } from '../../data/deeplink'
 import { LayoutDashboard, Radio, Building2, PoundSterling, ArrowRight, Search } from 'lucide-react'
 import { DashboardShell } from '../shell/DashboardShell'
-import { accounts, projectsForAccount } from '../../data/org'
+import { accounts, projects, projectsForAccount } from '../../data/org'
 import { useOpenSignals } from '../common/SignalLayer'
 import { signals, rankByImpact, topByImpact, riskScope } from '../../data/signals'
 import { RagDot, CoverageBadge } from '../common/primitives'
@@ -33,8 +34,20 @@ export function ClientPartner() {
   const openSignal = (s: { id: string; accountId: string; projectId?: string }) => {
     setFocusSignal(s.id)
     setSel(s.accountId)
-    setSelProject(s.projectId ?? null)
+    // Older signals can reference a retired project (the 29 Aug ghost cleanup) -
+    // fall back to the account view rather than an empty project page.
+    setSelProject(s.projectId && projects.some((p) => p.id === s.projectId) ? s.projectId : null)
   }
+
+  // Deep links from the Slack briefs: ?signal=<id> opens that exact card,
+  // ?account=<id> opens the account view.
+  useEffect(() => {
+    const sid = hashParam('signal')
+    if (sid) { const s = signals.find((x) => x.id === sid); if (s) { openSignal(s); return } }
+    const aid = hashParam('account')
+    if (aid && signals.some((x) => x.accountId === aid)) { setSelProject(null); setSel(aid) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const underMgmt = useMemo(() => accounts.reduce((s, a) => s + a.sowValue, 0), [])
 
   const goTab = (v: string) => { setView(v as View); setSel(null); setSelProject(null); setFocusSignal(null) }

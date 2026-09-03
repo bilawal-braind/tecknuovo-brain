@@ -17,7 +17,8 @@ import type { Me } from './data/api'
 // dashboard is chosen from the URL hash (#/delivery). When AUTH is on, the signed-in
 // user's role decides what they can open (enforced server-side by the API too).
 const ENV_DASH = (import.meta as { env?: Record<string, string> }).env?.VITE_DASH
-const routeFromHash = () => window.location.hash.replace(/^#\/?/, '').trim()
+// The hash can carry deep-link params (#/delivery?signal=...) - route is the part before '?'.
+const routeFromHash = () => window.location.hash.replace(/^#\/?/, '').split('?')[0].trim()
 
 function renderDash(route: string) {
   if (route === 'flow') return <SecondBrainFlow />
